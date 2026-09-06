@@ -1,17 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  getTableColumns,
-  ilike,
-  inArray,
-  isNull,
-  ne,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
@@ -106,7 +93,6 @@ export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 type SnapshotRecord = Record<string, unknown>;
 
 type MutableEntityConfig = {
-  entityType: string;
   resource: ActionHistoryResource;
   table?:
     | typeof adCosts
@@ -126,7 +112,6 @@ type MutableEntityConfig = {
     | typeof roleDefinitions
     | typeof userAccessGrants;
   label: (row: SnapshotRecord) => string;
-  timestampKeys: string[];
   reversible?: boolean;
   fetchState?: (tx: Database | Transaction, entityId: number) => Promise<SnapshotRecord | null>;
   insertState?: (tx: Transaction, snapshot: SnapshotRecord) => Promise<void>;
@@ -257,18 +242,9 @@ async function restoreBulletinRows(
     const rows = snapshot[key];
     if (!Array.isArray(rows) || !rows.length) continue;
     const table = bulletinRelatedTables[key];
-    const allowedKeys = new Set(Object.keys(getTableColumns(table)));
     await tx
       .insert(table)
-      .values(
-        rows.map(
-          (row) =>
-            cleanSnapshot(
-              reviveSnapshot(row as SnapshotRecord, ['createdAt', 'updatedAt']),
-              allowedKeys,
-            ) as never,
-        ),
-      );
+      .values(rows.map((row) => snapshotValues(table, row as SnapshotRecord)) as never);
   }
 }
 
@@ -316,17 +292,14 @@ async function fetchBulletinPostState(tx: Database | Transaction, entityId: numb
 
 const entityConfigs: Record<string, MutableEntityConfig> = {
   products: {
-    entityType: 'products',
     resource: 'products',
     table: products,
     label: (row) => String(row.title ?? row.slug ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt', 'publishedAt', 'archivedAt'],
     fetchState: fetchProductState,
     insertState: insertProductState,
     updateState: updateProductState,
   },
   orders: {
-    entityType: 'orders',
     resource: 'orders',
     table: orders,
     label: (row) =>
@@ -334,61 +307,40 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
         ([row.firstName, row.lastName].filter(Boolean).join(' ') || row.phoneNumber1) ??
           `#${row.id ?? 'unknown'}`,
       ),
-    timestampKeys: [
-      'createdAt',
-      'updatedAt',
-      'confirmedAt',
-      'ecotrackStatusLastUpdate',
-      'publicTokenExpiresAt',
-    ],
     fetchState: fetchOrderState,
     insertState: insertOrderState,
     updateState: updateOrderState,
   },
   assets: {
-    entityType: 'assets',
     resource: 'assets',
     table: importBatches,
     label: (row) => String(row.fileName ?? row.batchId ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt', 'importedAt'],
   },
   assetBanners: {
-    entityType: 'assetBanners',
     resource: 'assets',
     table: assetBanners,
     label: (row) => String(row.title ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   featuredProductGroups: {
-    entityType: 'featuredProductGroups',
     resource: 'assets',
     table: featuredProductGroups,
     label: (row) => String(row.name ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
     fetchState: fetchFeaturedGroupState,
     insertState: insertFeaturedGroupState,
     updateState: updateFeaturedGroupState,
   },
   productCards: {
-    entityType: 'productCards',
     resource: 'assets',
     table: productCards,
     label: (row) => String(row.titleFr ?? row.titleAr ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   bulletinPosts: {
-    entityType: 'bulletinPosts',
     resource: 'bulletin',
     table: bulletinPosts,
     label: (row) => String(row.title ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
     fetchState: fetchBulletinPostState,
     insertState: async (tx, snapshot) => {
-      await tx
-        .insert(bulletinPosts)
-        .values(
-          cleanSnapshot(snapshot, new Set(Object.keys(getTableColumns(bulletinPosts)))) as never,
-        );
+      await tx.insert(bulletinPosts).values(snapshotValues(bulletinPosts, snapshot));
       await restoreBulletinRows(tx, snapshot, [
         'tags',
         'attachments',
@@ -400,7 +352,7 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     updateState: async (tx, entityId, snapshot) => {
       await tx
         .update(bulletinPosts)
-        .set(cleanSnapshot(snapshot, new Set(Object.keys(getTableColumns(bulletinPosts)))) as never)
+        .set(snapshotValues(bulletinPosts, snapshot))
         .where(eq(bulletinPosts.id, entityId));
       // Post edits own tags and attachments. Replies and reactions may have been
       // added independently since that edit and must not be replaced by undo.
@@ -416,11 +368,9 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     },
   },
   bulletinReplies: {
-    entityType: 'bulletinReplies',
     resource: 'bulletin',
     table: bulletinReplies,
     label: (row) => String(row.body ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
     fetchState: async (tx, entityId) => {
       const [reply] = await tx
         .select()
@@ -436,78 +386,53 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
       return { ...reply, replyReactions };
     },
     insertState: async (tx, snapshot) => {
-      await tx
-        .insert(bulletinReplies)
-        .values(
-          cleanSnapshot(snapshot, new Set(Object.keys(getTableColumns(bulletinReplies)))) as never,
-        );
+      await tx.insert(bulletinReplies).values(snapshotValues(bulletinReplies, snapshot));
       await restoreBulletinRows(tx, snapshot, ['replyReactions']);
     },
   },
   bulletinPostReactions: {
-    entityType: 'bulletinPostReactions',
     resource: 'bulletin',
     table: bulletinPostReactions,
     label: (row) =>
       String(
         `${row.emoji ?? 'reaction'} ${row.userName ?? row.userEmail ?? `#${row.id ?? 'unknown'}`}`,
       ),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   bulletinReplyReactions: {
-    entityType: 'bulletinReplyReactions',
     resource: 'bulletin',
     table: bulletinReplyReactions,
     label: (row) =>
       String(
         `${row.emoji ?? 'reaction'} ${row.userName ?? row.userEmail ?? `#${row.id ?? 'unknown'}`}`,
       ),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   brandsCategories: {
-    entityType: 'brandsCategories',
     resource: 'brandsCategories',
     table: brands,
     label: (row) => String(row.name ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   brands: {
-    entityType: 'brands',
     resource: 'brandsCategories',
     table: brands,
     label: (row) => String(row.name ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   categories: {
-    entityType: 'categories',
     resource: 'brandsCategories',
     table: categories,
     label: (row) => String(row.name ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   statsAdCosts: {
-    entityType: 'statsAdCosts',
     resource: 'stats',
     table: adCosts,
     label: (row) =>
       String(
         row.campaignName ?? `${row.platform ?? 'ad'} ${row.date ?? `#${row.id ?? 'unknown'}`}`,
       ),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   statsManualOrders: {
-    entityType: 'statsManualOrders',
     resource: 'stats',
     table: processedOrders,
     label: (row) => String(row.tracking ?? row.orderId ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: [
-      'createdAt',
-      'updatedAt',
-      'deliveredAt',
-      'orderCreatedAt',
-      'encaissedAt',
-      'importedAt',
-    ],
     fetchState: async (tx, entityId) => {
       const [order] = await tx
         .select()
@@ -532,26 +457,23 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     },
     insertState: async (tx, snapshot) => {
       const { products: productSnapshot, ...orderSnapshot } = snapshot;
-      const allowedKeys = new Set(Object.keys(getTableColumns(processedOrders)));
-      await tx.insert(processedOrders).values(cleanSnapshot(orderSnapshot, allowedKeys) as never);
+      await tx.insert(processedOrders).values(snapshotValues(processedOrders, orderSnapshot));
 
       if (Array.isArray(productSnapshot) && productSnapshot.length > 0) {
-        const productKeys = new Set(Object.keys(getTableColumns(processedOrderProducts)));
         await tx
           .insert(processedOrderProducts)
           .values(
-            productSnapshot.map(
-              (product) => cleanSnapshot(product as SnapshotRecord, productKeys) as never,
+            productSnapshot.map((product) =>
+              snapshotValues(processedOrderProducts, product as SnapshotRecord),
             ),
           );
       }
     },
     updateState: async (tx, entityId, snapshot) => {
       const { products: productSnapshot, ...orderSnapshot } = snapshot;
-      const allowedKeys = new Set(Object.keys(getTableColumns(processedOrders)));
       await tx
         .update(processedOrders)
-        .set(cleanSnapshot(orderSnapshot, allowedKeys) as never)
+        .set(snapshotValues(processedOrders, orderSnapshot))
         .where(eq(processedOrders.id, entityId));
 
       await tx
@@ -559,26 +481,20 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
         .where(eq(processedOrderProducts.processedOrderId, entityId));
 
       if (Array.isArray(productSnapshot) && productSnapshot.length > 0) {
-        const productKeys = new Set(Object.keys(getTableColumns(processedOrderProducts)));
         await tx
           .insert(processedOrderProducts)
           .values(
-            productSnapshot.map(
-              (product) => cleanSnapshot(product as SnapshotRecord, productKeys) as never,
+            productSnapshot.map((product) =>
+              snapshotValues(processedOrderProducts, product as SnapshotRecord),
             ),
           );
       }
     },
-    deleteState: async (tx, entityId) => {
-      await tx.delete(processedOrders).where(eq(processedOrders.id, entityId));
-    },
   },
   roleDefinitions: {
-    entityType: 'roleDefinitions',
     resource: 'settings',
     table: roleDefinitions,
     label: (row) => String(row.name ?? row.slug ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
     fetchState: async (tx, entityId) => {
       const [role] = await tx
         .select()
@@ -603,8 +519,7 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     },
     insertState: async (tx, snapshot) => {
       const { permissions, ...roleSnapshot } = snapshot;
-      const allowedKeys = new Set(Object.keys(getTableColumns(roleDefinitions)));
-      await tx.insert(roleDefinitions).values(cleanSnapshot(roleSnapshot, allowedKeys) as never);
+      await tx.insert(roleDefinitions).values(snapshotValues(roleDefinitions, roleSnapshot));
 
       const normalizedPermissions = normalizePermissions(permissions);
       if (normalizedPermissions.length > 0) {
@@ -618,10 +533,9 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     },
     updateState: async (tx, entityId, snapshot) => {
       const { permissions, ...roleSnapshot } = snapshot;
-      const allowedKeys = new Set(Object.keys(getTableColumns(roleDefinitions)));
       await tx
         .update(roleDefinitions)
-        .set(cleanSnapshot(roleSnapshot, allowedKeys) as never)
+        .set(snapshotValues(roleDefinitions, roleSnapshot))
         .where(eq(roleDefinitions.id, entityId));
 
       await tx
@@ -638,19 +552,13 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
         );
       }
     },
-    deleteState: async (tx, entityId) => {
-      await tx.delete(roleDefinitions).where(eq(roleDefinitions.id, entityId));
-    },
   },
   userAccessGrants: {
-    entityType: 'userAccessGrants',
     resource: 'settings',
     table: userAccessGrants,
     label: (row) => String(row.email ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt'],
   },
   ecotrackShipments: {
-    entityType: 'ecotrackShipments',
     resource: 'ecotrack',
     reversible: false,
     label: (row) =>
@@ -660,18 +568,8 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
           row.entityLabel ??
           `Order #${row.orderId ?? row.id ?? 'unknown'}`,
       ),
-    timestampKeys: [
-      'createdAt',
-      'updatedAt',
-      'lastStatusSyncedAt',
-      'lastTrackingSyncedAt',
-      'lastMajSyncedAt',
-      'lastActionAt',
-      'deletedAt',
-    ],
   },
   ecotrackShipmentMajSync: {
-    entityType: 'ecotrackShipmentMajSync',
     resource: 'ecotrack',
     reversible: false,
     label: (row) =>
@@ -680,10 +578,8 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
           row.entityLabel ??
           `Order #${row.orderId ?? row.id ?? 'unknown'} MAJ sync`,
       ),
-    timestampKeys: ['latestRemoteCreatedAt'],
   },
   ecotrackShipmentTrackingSync: {
-    entityType: 'ecotrackShipmentTrackingSync',
     resource: 'ecotrack',
     reversible: false,
     label: (row) =>
@@ -692,15 +588,12 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
           row.entityLabel ??
           `Order #${row.orderId ?? row.id ?? 'unknown'} tracking sync`,
       ),
-    timestampKeys: ['latestEventAt'],
   },
   ecotrackCatalogSyncRuns: {
-    entityType: 'ecotrackCatalogSyncRuns',
     resource: 'ecotrack',
     reversible: false,
     label: (row) =>
       String(row.trigger ?? row.entityLabel ?? `ECOTRACK sync #${row.id ?? 'unknown'}`),
-    timestampKeys: ['startedAt', 'finishedAt', 'previousSuccessfulFinishedAt'],
   },
 };
 
@@ -727,41 +620,6 @@ function serializeSnapshot(value: unknown): unknown {
     );
   }
   return value;
-}
-
-function reviveSnapshot(snapshot: SnapshotRecord | null | undefined, timestampKeys: string[]) {
-  if (!snapshot) {
-    return null;
-  }
-
-  const revived: SnapshotRecord = {};
-
-  for (const [key, value] of Object.entries(snapshot)) {
-    if (value === undefined) {
-      continue;
-    }
-
-    if (timestampKeys.includes(key) && typeof value === 'string') {
-      revived[key] = new Date(value);
-      continue;
-    }
-
-    revived[key] = value;
-  }
-
-  return revived;
-}
-
-function cleanSnapshot(snapshot: SnapshotRecord | null | undefined, allowedKeys?: Set<string>) {
-  if (!snapshot) {
-    return null;
-  }
-
-  return Object.fromEntries(
-    Object.entries(snapshot).filter(
-      ([key, value]) => value !== undefined && (!allowedKeys || allowedKeys.has(key)),
-    ),
-  );
 }
 
 function areValuesEqual(left: unknown, right: unknown) {
@@ -986,40 +844,6 @@ async function deleteEntity(tx: Transaction, entityType: string, entityId: numbe
   await tx.delete(config.table).where(eq(config.table.id, entityId));
 }
 
-async function recordActionLog(
-  tx: Transaction,
-  params: {
-    entityType: string;
-    entityId: number;
-    operation: ActionOperation;
-    beforeState?: SnapshotRecord | null;
-    afterState?: SnapshotRecord | null;
-    actor?: ActionActor;
-    isReversible?: boolean;
-  },
-) {
-  const config = getActionEntityConfig(params.entityType);
-
-  if (!config) {
-    throw new Error(`Unsupported entity type: ${params.entityType}`);
-  }
-
-  const labelSource = params.afterState ?? params.beforeState ?? { id: params.entityId };
-
-  await tx.insert(actionLogs).values({
-    resource: config.resource,
-    entityType: params.entityType,
-    entityId: params.entityId,
-    entityLabel: config.label(labelSource),
-    operation: params.operation,
-    beforeState: serializeSnapshot(params.beforeState ?? null),
-    afterState: serializeSnapshot(params.afterState ?? null),
-    createdBy: params.actor?.email ?? null,
-    createdByName: params.actor?.name ?? null,
-    isReversible: params.isReversible ?? config.reversible ?? true,
-  });
-}
-
 export async function recordExplicitActionLog(
   tx: Transaction,
   params: {
@@ -1086,13 +910,16 @@ export async function mutateEntityWithHistoryTransaction<T>(
 ) {
   const entityTable = getActionEntityConfig(params.entityType)?.table;
   if (entityTable && params.entityId) {
-    await tx.execute(
-      sql`select ${entityTable.id} from ${entityTable} where ${entityTable.id} = ${params.entityId} for update`,
-    );
+    if (isTaxonomyEntity(params.entityType)) {
+      await lockTaxonomyHistory(tx, params.entityType, params.entityId);
+    } else {
+      await tx.execute(
+        sql`select ${entityTable.id} from ${entityTable} where ${entityTable.id} = ${params.entityId} for update`,
+      );
+    }
   }
   const taxonomyDelete =
     isTaxonomyEntity(params.entityType) && params.operation === 'delete' && params.entityId;
-  if (taxonomyDelete) await lockTaxonomyHistory(tx, params.entityType, taxonomyDelete);
   const taxonomyRelations = taxonomyDelete
     ? await readTaxonomyRelations(tx, params.entityType, taxonomyDelete)
     : undefined;
@@ -1113,7 +940,7 @@ export async function mutateEntityWithHistoryTransaction<T>(
     params.operation === 'delete' ? null : await fetchEntity(tx, params.entityType, entityId);
 
   const historyVersion = params.entityType === 'products' ? { stockHistoryVersion: 1 } : {};
-  await recordActionLog(tx, {
+  await recordExplicitActionLog(tx, {
     entityType: params.entityType,
     entityId,
     operation: params.operation,
@@ -1327,14 +1154,8 @@ export async function applyHistoryAction(
         }
       }
 
-      const beforeState = reviveSnapshot(
-        entry.beforeState as SnapshotRecord | null,
-        config.timestampKeys,
-      );
-      const afterState = reviveSnapshot(
-        entry.afterState as SnapshotRecord | null,
-        config.timestampKeys,
-      );
+      const beforeState = entry.beforeState as SnapshotRecord | null;
+      const afterState = entry.afterState as SnapshotRecord | null;
 
       if (params.direction === 'undo') {
         if (entry.operation === 'create') {

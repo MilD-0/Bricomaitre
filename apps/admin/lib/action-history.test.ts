@@ -4,7 +4,6 @@ import { snapshotValues } from './action-history-state';
 
 import {
   applyHistoryAction,
-  getActionEntityConfig,
   getActionHistoryChanges,
   recordExplicitActionLog,
   resolveActionHistoryRecovery,
@@ -32,21 +31,6 @@ function createHistoryListSelectBuilder(historyRows: Array<{ id: number; isUndon
 }
 
 describe('action-history helpers', () => {
-  it('registers bulletin posts as a tracked entity', () => {
-    expect(getActionEntityConfig('bulletinPosts')).toMatchObject({
-      entityType: 'bulletinPosts',
-      resource: 'bulletin',
-    });
-  });
-
-  it('registers ecotrack shipments as a non-reversible tracked entity', () => {
-    expect(getActionEntityConfig('ecotrackShipments')).toMatchObject({
-      entityType: 'ecotrackShipments',
-      resource: 'ecotrack',
-      reversible: false,
-    });
-  });
-
   it('records explicit non-reversible action logs', async () => {
     const actionLogValues = vi.fn().mockResolvedValue(undefined);
     const tx = {

@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { getDb, getPool } from '@bric/db/client';
 import {
   actionLogs,
   assetBanners,
+  categories,
   featuredProductGroups,
   featuredProductGroupProducts,
   landingPages,
@@ -19,6 +20,7 @@ import { insertCanonicalOrder, updateCanonicalOrder } from '@bric/storefront-cor
 import {
   applyHistoryAction,
   mutateEntityWithHistory,
+  mutateEntityWithHistoryTransaction,
   ActionHistoryEntityNotFoundError,
 } from '../lib/action-history';
 import { replaceProductThroughCanonicalWorkflow } from '../lib/product-update-workflow';
@@ -62,6 +64,61 @@ async function recover(entityType: string, entityId: number, direction: 'undo' |
 }
 
 describe('aggregate action recovery', () => {
+  it('waits for the hierarchy lock before taking category row locks', async () => {
+    const [category] = await db
+      .insert(categories)
+      .values({ name: 'Lock ordering', slug: randomUUID() })
+      .returning();
+    let mutation: Promise<unknown> | undefined;
+    try {
+      await db.transaction(async (holder) => {
+        await holder.execute(sql`select pg_advisory_xact_lock(42716421)`);
+        const current = await holder.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+        let signalStarted!: (pid: number) => void;
+        const started = new Promise<number>((resolve) => {
+          signalStarted = resolve;
+        });
+        mutation = db.transaction(async (tx) => {
+          await tx.execute(sql`set local lock_timeout = '5s'`);
+          const backend = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+          signalStarted(backend.rows[0]!.pid);
+          return mutateEntityWithHistoryTransaction(tx, {
+            entityType: 'categories',
+            entityId: category!.id,
+            operation: 'update',
+            actor,
+            execute: (executor) =>
+              executor
+                .update(categories)
+                .set({ name: 'After lock' })
+                .where(eq(categories.id, category!.id)),
+          });
+        });
+        // Observe the mutation waiting on our hierarchy lock before testing its
+        // row ownership. This avoids relying on relative query timing.
+        const pending = mutation;
+        pending.catch(() => undefined);
+        const mutationPid = await started;
+        await vi.waitFor(async () => {
+          const blockers = await holder.execute<{ pids: number[] }>(
+            sql`select pg_blocking_pids(${mutationPid}) as pids`,
+          );
+          expect(blockers.rows[0]!.pids).toContain(current.rows[0]!.pid);
+        });
+        await holder.execute(
+          sql`select id from ${categories} where id = ${category!.id} for update nowait`,
+        );
+      });
+      await mutation;
+      expect(
+        (await db.select().from(categories).where(eq(categories.id, category!.id)))[0]!.name,
+      ).toBe('After lock');
+    } finally {
+      await mutation?.catch(() => undefined);
+      await db.delete(categories).where(eq(categories.id, category!.id));
+    }
+  });
+
   it('restores commercial lines, status history and timestamp fields across edit and creation Undo/Redo', async () => {
     const first = await product();
     const second = await product();
