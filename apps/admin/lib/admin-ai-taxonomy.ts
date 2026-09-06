@@ -1,3 +1,4 @@
+import { ActionHistoryEntityNotFoundError } from './action-history-state';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
@@ -12,7 +13,6 @@ import {
   createCategoryThroughCanonicalWorkflow,
   deleteBrandThroughCanonicalWorkflow,
   deleteCategoryThroughCanonicalWorkflow,
-  TaxonomyMutationNotFoundError,
   updateBrandThroughCanonicalWorkflow,
   updateCategoryThroughCanonicalWorkflow,
 } from './taxonomy-mutations';
@@ -59,7 +59,7 @@ export const adminAiTaxonomyMutationSchema = z.discriminatedUnion('operation', [
 ]);
 
 function taxonomyFailure(error: unknown) {
-  if (error instanceof TaxonomyMutationNotFoundError) {
+  if (error instanceof ActionHistoryEntityNotFoundError) {
     return { code: 'taxonomy_not_found', message: error.message };
   }
   if (error instanceof CategoryHierarchyError) {

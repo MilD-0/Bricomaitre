@@ -26,7 +26,7 @@ vi.mock('./storefront-revalidate', () => ({
 
 import { manageAdminAiTaxonomy } from './admin-ai-taxonomy';
 import { CategoryHierarchyError } from './category-hierarchy';
-import { TaxonomyMutationNotFoundError } from './taxonomy-mutations';
+import { ActionHistoryEntityNotFoundError } from './action-history-state';
 
 describe('admin AI taxonomy operations', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -84,7 +84,7 @@ describe('admin AI taxonomy operations', () => {
   });
 
   it('reports missing deletes and hierarchy conflicts without claiming persistence', async () => {
-    mocks.deleteBrand.mockRejectedValue(new TaxonomyMutationNotFoundError('brand', 99));
+    mocks.deleteBrand.mockRejectedValue(new ActionHistoryEntityNotFoundError('brands', 99));
     mocks.updateCategory.mockRejectedValue(
       new CategoryHierarchyError('A category cannot be its own parent.', 'self_parent'),
     );

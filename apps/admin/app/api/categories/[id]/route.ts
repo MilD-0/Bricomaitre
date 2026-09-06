@@ -1,3 +1,4 @@
+import { ActionHistoryEntityNotFoundError } from '../../../../lib/action-history-state';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
@@ -10,7 +11,6 @@ import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
 import {
   deleteCategoryThroughCanonicalWorkflow,
-  TaxonomyMutationNotFoundError,
   updateCategoryThroughCanonicalWorkflow,
 } from '../../../../lib/taxonomy-mutations';
 
@@ -68,7 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (error instanceof CategoryHierarchyError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
     }
-    if (error instanceof TaxonomyMutationNotFoundError) {
+    if (error instanceof ActionHistoryEntityNotFoundError) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     throw error;
@@ -102,7 +102,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   try {
     await deleteCategoryThroughCanonicalWorkflow(db, numericId, actor);
   } catch (error) {
-    if (error instanceof TaxonomyMutationNotFoundError) {
+    if (error instanceof ActionHistoryEntityNotFoundError) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     throw error;

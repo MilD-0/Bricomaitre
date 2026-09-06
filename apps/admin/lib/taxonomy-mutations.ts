@@ -4,12 +4,7 @@ import { z } from 'zod';
 import type { getDb } from '@bric/db/client';
 import { brands, categories } from '@bric/db/schema';
 import { mutateEntityWithHistory, type ActionActor } from './action-history';
-import {
-  readBrand,
-  readCategory,
-  resolveBrandSlug,
-  resolveCategorySlug,
-} from './brands-categories-api';
+import { resolveBrandSlug, resolveCategorySlug } from './brands-categories-api';
 import {
   brandFormSchema,
   brandUpdateSchema,
@@ -26,16 +21,6 @@ export const brandCreateSchema = brandFormSchema.extend({
 export const categoryCreateSchema = categoryFormSchema.extend({
   status: z.enum(['active', 'draft']).default('active'),
 });
-
-export class TaxonomyMutationNotFoundError extends Error {
-  constructor(
-    readonly kind: 'brand' | 'category',
-    readonly id: number,
-  ) {
-    super(`${kind === 'brand' ? 'Brand' : 'Category'} ${id} was not found.`);
-    this.name = 'TaxonomyMutationNotFoundError';
-  }
-}
 
 export async function createBrandThroughCanonicalWorkflow(
   db: Database,
@@ -74,7 +59,6 @@ export async function updateBrandThroughCanonicalWorkflow(
   actor?: ActionActor,
 ) {
   const data = brandUpdateSchema.parse(input);
-  if (!(await readBrand(id))) throw new TaxonomyMutationNotFoundError('brand', id);
   let slug: string | undefined;
   await mutateEntityWithHistory(db, {
     entityType: 'brands',
@@ -105,7 +89,6 @@ export async function deleteBrandThroughCanonicalWorkflow(
   id: number,
   actor?: ActionActor,
 ) {
-  if (!(await readBrand(id))) throw new TaxonomyMutationNotFoundError('brand', id);
   await mutateEntityWithHistory(db, {
     entityType: 'brands',
     entityId: id,
@@ -157,7 +140,6 @@ export async function updateCategoryThroughCanonicalWorkflow(
   actor?: ActionActor,
 ) {
   const data = categoryUpdateSchema.parse(input);
-  if (!(await readCategory(id))) throw new TaxonomyMutationNotFoundError('category', id);
   let slug: string | undefined;
   await mutateEntityWithHistory(db, {
     entityType: 'categories',
@@ -193,7 +175,6 @@ export async function deleteCategoryThroughCanonicalWorkflow(
   id: number,
   actor?: ActionActor,
 ) {
-  if (!(await readCategory(id))) throw new TaxonomyMutationNotFoundError('category', id);
   await mutateEntityWithHistory(db, {
     entityType: 'categories',
     entityId: id,

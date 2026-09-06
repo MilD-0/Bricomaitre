@@ -108,7 +108,7 @@ describe('app/api/categories/[id]/route', () => {
       { params: Promise.resolve({ id: '10' }) },
     );
 
-    expect(readCategoryMock).toHaveBeenCalledWith(10);
+    expect(readCategoryMock).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(revalidateStorefrontProductMetaMock).toHaveBeenCalledOnce();
     await expect(response.json()).resolves.toEqual({ ok: true });
@@ -122,7 +122,7 @@ describe('app/api/categories/[id]/route', () => {
       },
     );
 
-    expect(readCategoryMock).toHaveBeenCalledWith(10);
+    expect(readCategoryMock).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
