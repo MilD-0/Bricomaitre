@@ -123,9 +123,10 @@ export async function startProductExportJob(
   };
 }
 
-const PRODUCT_CATALOG_FEED_OWNER_KEY = 'catalog-feed';
 const PRODUCT_CATALOG_FEED_FILE_NAME = 'meta-catalog-feed.csv';
 export const PRODUCT_CATALOG_FEED_OBJECT_KEY = 'exports/products/catalog-feed/latest.csv';
+const CATALOG_FEED_REQUESTED_REVISION = `bric:${ADMIN_PRODUCT_CATALOG_FEED_QUEUE}:requested-revision`;
+const CATALOG_FEED_COMPLETED_REVISION = `bric:${ADMIN_PRODUCT_CATALOG_FEED_QUEUE}:completed-revision`;
 
 function getProductCatalogFeedDebounceMs() {
   const configured = Number(process.env.PRODUCT_CATALOG_FEED_DEBOUNCE_MS ?? 120_000);
@@ -137,32 +138,22 @@ export async function startProductCatalogFeedRefreshJob(
   requestId?: string,
   taskContext: AiTaskContext = {},
 ) {
-  const latest = await getLatestOwnedJob(
-    ADMIN_PRODUCT_CATALOG_FEED_QUEUE,
-    PRODUCT_CATALOG_FEED_OWNER_KEY,
-  );
-  if (latest) {
-    const isActive = latest.status === 'queued' || latest.status === 'running';
-    const withinDebounce =
-      Date.now() - Date.parse(latest.updatedAt) < getProductCatalogFeedDebounceMs();
-
-    if (isActive || withinDebounce) {
-      return {
-        kind: 'existing' as const,
-        job: toClientJob(latest, PRODUCT_CATALOG_FEED_FILE_NAME),
-      };
-    }
-  }
-
+  const revision = await getRedis().incr(CATALOG_FEED_REQUESTED_REVISION);
+  // Keep a successor for edits made during an export, including across workers.
+  await getQueue(ADMIN_PRODUCT_CATALOG_FEED_QUEUE).setGlobalConcurrency(1);
   const result = await startOwnedJob<ProductCatalogFeedPayload>({
     queueName: ADMIN_PRODUCT_CATALOG_FEED_QUEUE,
     kind: 'product-catalog-feed-refresh',
-    ownerKey: PRODUCT_CATALOG_FEED_OWNER_KEY,
+    ownerKey: `catalog-feed-${revision}`,
     origin: assistantJobOrigin(taskContext),
     conversationId: taskContext.conversationId,
     requestId,
-    data: { trigger, ...taskContext } as ProductCatalogFeedPayload,
-    activeScope: 'global',
+    data: { trigger, revision, ...taskContext } as ProductCatalogFeedPayload,
+    queueOptions: {
+      delay: getProductCatalogFeedDebounceMs(),
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5_000 },
+    },
   });
 
   return {
@@ -413,6 +404,12 @@ export async function runProductCatalogFeedRefreshJob(
     throwIfCancelled: () => Promise<void>;
   },
 ) {
+  const redis = getRedis();
+  const completedRevision = Number((await redis.get(CATALOG_FEED_COMPLETED_REVISION)) ?? 0);
+  if (payload.revision !== undefined && completedRevision >= payload.revision) {
+    return { revision: payload.revision, coalesced: true as const };
+  }
+  const throughRevision = Number((await redis.get(CATALOG_FEED_REQUESTED_REVISION)) ?? 0);
   const db = getDb();
   const batchSize = Math.max(Number(process.env.PRODUCT_EXPORT_BATCH_SIZE ?? 250), 1);
 
@@ -456,18 +453,18 @@ export async function runProductCatalogFeedRefreshJob(
     current: totalProducts,
     total: totalProducts,
   });
-  await helpers.updateSummary({
+  const summary = {
     fileName: PRODUCT_CATALOG_FEED_FILE_NAME,
     totalProducts: rows.length,
     sourceProductCount: totalProducts,
     trigger: payload.trigger,
     updatedAt: new Date().toISOString(),
-  });
-
-  return {
-    fileName: PRODUCT_CATALOG_FEED_FILE_NAME,
-    totalProducts: rows.length,
+    revision: throughRevision,
+    coalesced: false as const,
   };
+  await helpers.updateSummary(summary);
+  await redis.set(CATALOG_FEED_COMPLETED_REVISION, String(throughRevision));
+  return summary;
 }
 
 export async function runOrderExportJob(
@@ -512,19 +509,15 @@ export async function runOrderExportJob(
   await helpers.setDownloadUrl(
     `/api/orders/export/download?jobId=${encodeURIComponent(payload.__jobMeta.id)}`,
   );
-  await helpers.updateSummary({
+  const summary = {
     fileName,
     mode: payload.mode,
     totalOrders: exportOrders.length,
     artifactKey: artifact.key,
     artifactExpiresAt: artifact.expiresAt.toISOString(),
-  });
-
-  return {
-    fileName,
-    mode: payload.mode,
-    totalOrders: exportOrders.length,
   };
+  await helpers.updateSummary(summary);
+  return summary;
 }
 
 export async function runOrderEcotrackJob(

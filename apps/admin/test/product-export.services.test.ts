@@ -1,11 +1,21 @@
 import { getDb, getPool } from '@bric/db/client';
 import { products } from '@bric/db/schema';
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
+import { createQueueWorker, getJobSnapshot, getQueue } from '@bric/runtime/jobs';
+import { closeRedisConnections, getRedis } from '@bric/runtime/redis';
 
-const artifacts = vi.hoisted(() => ({ export: vi.fn(), feed: vi.fn() }));
+const artifacts = vi.hoisted(() => ({
+  export: vi.fn(),
+  feed: vi.fn(),
+  queue: `catalog-feed-${crypto.randomUUID()}`,
+}));
+vi.mock('../lib/background-job-contract', async (original) => ({
+  ...(await original<typeof import('../lib/background-job-contract')>()),
+  ADMIN_PRODUCT_CATALOG_FEED_QUEUE: artifacts.queue,
+}));
 vi.mock('../lib/export-artifacts', async (original) => ({
   ...(await original<typeof import('../lib/export-artifacts')>()),
   uploadExportArtifact: artifacts.export,
@@ -14,9 +24,24 @@ vi.mock('../lib/export-artifacts', async (original) => ({
 import {
   runProductCatalogFeedRefreshJob,
   runProductExportJob,
+  startProductCatalogFeedRefreshJob,
 } from '../lib/background-jobs-commerce';
+import type { ProductCatalogFeedPayload } from '../lib/background-job-contract';
+
+const workers: ReturnType<typeof createQueueWorker<ProductCatalogFeedPayload>>[] = [];
 
 afterAll(async () => {
+  await Promise.all(workers.map((worker) => worker.close()));
+  await getQueue(artifacts.queue).obliterate({ force: true });
+  await getQueue(artifacts.queue).close();
+  const redis = getRedis();
+  let cursor = '0';
+  do {
+    const [next, keys] = await redis.scan(cursor, 'MATCH', `*${artifacts.queue}*`, 'COUNT', 100);
+    cursor = next;
+    if (keys.length) await redis.unlink(...keys);
+  } while (cursor !== '0');
+  await closeRedisConnections();
   await getPool().end();
 });
 
@@ -100,7 +125,7 @@ it('exports original product images to workbook and filtered feed with job traff
       expect(helpers.throwIfCancelled.mock.calls.length).toBeLessThanOrEqual(
         Math.ceil(sourceCount / 250) + 1,
       );
-      expect(result.totalProducts).toBe(rows.length);
+      expect(result).toMatchObject({ totalProducts: rows.length });
     }
     artifacts.export.mockClear();
     helpers.throwIfCancelled.mockRejectedValueOnce(new Error('Cancelled'));
@@ -113,3 +138,88 @@ it('exports original product images to workbook and filtered feed with job traff
     await db.delete(products).where(inArray(products.id, ids));
   }
 });
+
+it('exports edits made during and just after a feed pass, coalesces covered requests and retries failed uploads', async () => {
+  const db = getDb();
+  const [product] = await db
+    .insert(products)
+    .values({
+      title: 'Feed refresh',
+      slug: randomUUID(),
+      price: '80',
+      images: [],
+    })
+    .returning();
+  vi.stubEnv('PRODUCT_CATALOG_FEED_DEBOUNCE_MS', '200');
+  let releaseFirst!: () => void;
+  const firstHeld = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  artifacts.feed.mockReset();
+  artifacts.feed.mockResolvedValue('https://exports.example.invalid/catalog.csv');
+  artifacts.feed.mockImplementationOnce(async () => {
+    await firstHeld;
+    return 'https://exports.example.invalid/catalog.csv';
+  });
+  const waitCompleted = async (id: string) =>
+    vi.waitFor(
+      async () => {
+        const snapshot = await getJobSnapshot(artifacts.queue, id);
+        expect(snapshot?.status).toBe('completed');
+      },
+      { timeout: 15_000 },
+    );
+  const exportedPrice = (body: Buffer) => {
+    const workbook = XLSX.read(body, { type: 'buffer' });
+    return XLSX.utils
+      .sheet_to_json<{ id: number; price: string }>(workbook.Sheets[workbook.SheetNames[0]!]!)
+      .find((row) => Number(row.id) === product!.id)?.price;
+  };
+  try {
+    const first = await startProductCatalogFeedRefreshJob('first');
+    workers.push(
+      createQueueWorker<ProductCatalogFeedPayload>(
+        artifacts.queue,
+        runProductCatalogFeedRefreshJob,
+      ),
+      createQueueWorker<ProductCatalogFeedPayload>(
+        artifacts.queue,
+        runProductCatalogFeedRefreshJob,
+      ),
+    );
+    await vi.waitFor(() => expect(artifacts.feed).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    await db.update(products).set({ price: '90' }).where(eq(products.id, product!.id));
+    const second = await startProductCatalogFeedRefreshJob('edit-during-export');
+    await db.update(products).set({ price: '100' }).where(eq(products.id, product!.id));
+    const third = await startProductCatalogFeedRefreshJob('another-edit');
+    expect(second.kind).toBe('started');
+    expect(third.kind).toBe('started');
+    // Both successors become runnable while the first worker still owns the export.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(await getQueue(artifacts.queue).getActiveCount()).toBe(1);
+    expect(artifacts.feed).toHaveBeenCalledOnce();
+    releaseFirst();
+    await Promise.all([first, second, third].map((result) => waitCompleted(result.job!.id)));
+    expect(artifacts.feed).toHaveBeenCalledTimes(2);
+    expect(exportedPrice(artifacts.feed.mock.calls[0]![0].body)).toBe('80 DZD');
+    expect(exportedPrice(artifacts.feed.mock.calls[1]![0].body)).toBe('100 DZD');
+    expect((await getJobSnapshot(artifacts.queue, third.job!.id))?.resultSummary).toMatchObject({
+      coalesced: true,
+    });
+
+    await db.update(products).set({ price: '110' }).where(eq(products.id, product!.id));
+    artifacts.feed.mockRejectedValueOnce(new Error('Object storage unavailable'));
+    const afterCompletion = await startProductCatalogFeedRefreshJob('edit-after-completion');
+    expect(afterCompletion.kind).toBe('started');
+    await waitCompleted(afterCompletion.job!.id);
+    expect(artifacts.feed).toHaveBeenCalledTimes(4);
+    expect(exportedPrice(artifacts.feed.mock.lastCall![0].body)).toBe('110 DZD');
+    expect((await getQueue(artifacts.queue).getJob(afterCompletion.job!.id))?.attemptsMade).toBe(2);
+  } finally {
+    releaseFirst();
+    await Promise.all(workers.map((worker) => worker.close()));
+    workers.length = 0;
+    vi.unstubAllEnvs();
+    await db.delete(products).where(eq(products.id, product!.id));
+  }
+}, 30_000);

@@ -54,6 +54,7 @@ export type ProductExportPayload = QueueJobMeta & AiTaskContext;
 export type ProductCatalogFeedPayload = QueueJobMeta &
   AiTaskContext & {
     trigger: string;
+    revision?: number;
   };
 export type OrderExportPayload = QueueJobMeta &
   AiTaskContext & {
