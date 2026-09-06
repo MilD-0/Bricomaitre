@@ -117,12 +117,6 @@ export function hasPermission(access: Role | readonly PermissionKey[], permissio
   return resolvePermissionSet(access).includes(permission);
 }
 
-export const canManageAnalytics = (access: Role | readonly PermissionKey[]) =>
-  hasPermission(access, 'analytics_manage');
-
-export const canManageSettings = (access: Role | readonly PermissionKey[]) =>
-  hasPermission(access, 'settings_manage');
-
 export function canExportAllProducts(role: unknown) {
   const normalizedRole = normalizeRole(role);
   return normalizedRole === 'admin' || normalizedRole === 'developer';

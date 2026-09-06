@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canExportAllProducts,
-  canManageAnalytics,
-  canManageSettings,
   canViewProfitStats,
   getPermissionsForRole,
   permissionKeySchema,
@@ -38,11 +36,6 @@ describe('permissions role matrix', () => {
     expect(getPermissionsForRole('campaign-manager')).toEqual([]);
   });
 
-  it('keeps settings-specific access separate from generic edit access', () => {
-    expect(canManageSettings(['settings_manage'])).toBe(true);
-    expect(canManageSettings(['ops_view'])).toBe(false);
-  });
-
   it('limits full product exports to admin and developer roles', () => {
     expect(canExportAllProducts('viewer')).toBe(false);
     expect(canExportAllProducts('employee')).toBe(false);
@@ -51,8 +44,6 @@ describe('permissions role matrix', () => {
   });
 
   it('uses the analytics permission for dashboards and profit data', () => {
-    expect(canManageAnalytics(['analytics_manage'])).toBe(true);
-    expect(canManageAnalytics(['ops_view'])).toBe(false);
     expect(canViewProfitStats('viewer')).toBe(false);
     expect(canViewProfitStats('employee')).toBe(false);
     expect(canViewProfitStats('admin')).toBe(true);
