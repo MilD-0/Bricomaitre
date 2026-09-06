@@ -27,29 +27,6 @@ function promoDate(value: Date | null) {
   return value?.toISOString() ?? null;
 }
 
-export async function readProductMutationPayload(
-  db: Database,
-  productId: number,
-): Promise<ProductPayload> {
-  const product = await db.query.products.findFirst({
-    where: eq(products.id, productId),
-  });
-  if (!product || product.archivedAt) throw new ProductMutationNotFoundError(productId);
-  return readProductPayload(db, productId, product);
-}
-
-async function readProductPayload(
-  db: Database,
-  productId: number,
-  product: typeof products.$inferSelect,
-): Promise<ProductPayload> {
-  const promoCodes = await db
-    .select()
-    .from(productPromoCodes)
-    .where(eq(productPromoCodes.productId, productId));
-  return productMutationPayload(product, promoCodes);
-}
-
 export function productMutationPayload(
   product: typeof products.$inferSelect,
   promoCodes: (typeof productPromoCodes.$inferSelect)[],
@@ -64,17 +41,6 @@ export function productMutationPayload(
       endsAt: promoDate(promo.endsAt),
     })),
   });
-}
-
-export async function readArchivedProductMutationPayload(db: Database, productId: number) {
-  const product = await db.query.products.findFirst({
-    where: eq(products.id, productId),
-  });
-  if (!product?.archivedAt) throw new ProductMutationNotFoundError(productId);
-  return {
-    product: await readProductPayload(db, productId, product),
-    archivedAt: product.archivedAt.toISOString(),
-  };
 }
 
 export async function replaceProductThroughCanonicalWorkflow(

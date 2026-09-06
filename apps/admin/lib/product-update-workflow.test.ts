@@ -21,7 +21,6 @@ import {
   archiveProductThroughCanonicalWorkflow,
   createProductThroughCanonicalWorkflow,
   ProductMutationNotFoundError,
-  readArchivedProductMutationPayload,
   restoreProductThroughCanonicalWorkflow,
 } from './product-update-workflow';
 
@@ -126,60 +125,6 @@ describe('canonical product lifecycle workflow', () => {
       'database',
       expect.objectContaining({ entityId: 21, operation: 'update' }),
     );
-  });
-
-  it('reads the retained payload and timestamp for an exact archived product', async () => {
-    const archivedAt = new Date('2026-08-28T05:00:00.000Z');
-    const database = {
-      query: {
-        products: {
-          findFirst: vi.fn().mockResolvedValue({
-            id: 21,
-            title: 'Archived drill',
-            slug: 'archived-drill',
-            titleAr: null,
-            description: null,
-            descriptionAr: null,
-            sku: 'OLD-21',
-            barcode: null,
-            price: '9000.00',
-            oldPrice: null,
-            purchasePrice: '5000.00',
-            active: false,
-            inStock: false,
-            availabilityStatus: 'out_of_stock',
-            inventoryQuantity: 3,
-            brandId: 2,
-            categoryId: 3,
-            images: [],
-            archivedAt,
-          }),
-        },
-      },
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn().mockResolvedValue([
-            {
-              code: 'OLD',
-              promoPrice: '8000.00',
-              active: false,
-              startsAt: null,
-              endsAt: archivedAt,
-            },
-          ]),
-        })),
-      })),
-    };
-
-    await expect(readArchivedProductMutationPayload(database as never, 21)).resolves.toEqual({
-      archivedAt: archivedAt.toISOString(),
-      product: expect.objectContaining({
-        title: 'Archived drill',
-        price: 9_000,
-        inventoryQuantity: 3,
-        promoCodes: [expect.objectContaining({ code: 'OLD', promoPrice: 8_000, active: false })],
-      }),
-    });
   });
 
   it('reports a missing archive target', async () => {
