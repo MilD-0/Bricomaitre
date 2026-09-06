@@ -60,12 +60,10 @@ const relatedProduct = {
 
 describe('SimilarProducts', () => {
   beforeEach(() => {
-    mocks.catalog
-      .mockReset()
-      .mockResolvedValue({
-        items: [{ ...relatedProduct, id: 12, slug: 'current-product' }, relatedProduct],
-        total: 2,
-      });
+    mocks.catalog.mockReset().mockResolvedValue({
+      items: [{ ...relatedProduct, id: 12, slug: 'current-product' }, relatedProduct],
+      total: 2,
+    });
     mocks.meta.mockReset().mockResolvedValue({
       brands: [{ id: 2, name: 'Bric' }],
       categories: [{ id: 3, name: 'Lighting', nameAr: 'إضاءة' }],
