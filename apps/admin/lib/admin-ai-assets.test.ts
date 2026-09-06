@@ -6,17 +6,15 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   remove: vi.fn(),
   reorder: vi.fn(),
-  updateStates: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
 vi.mock('./admin-assets-data', () => ({ loadAssetsData: mocks.load }));
 vi.mock('./asset-mutations', () => ({
   createAdminAsset: mocks.create,
-  replaceAdminAsset: mocks.replace,
+  patchAdminAsset: mocks.replace,
   deleteAdminAsset: mocks.remove,
   reorderAdminAssets: mocks.reorder,
-  updateAdminAssetStates: mocks.updateStates,
 }));
 
 import {
@@ -111,9 +109,14 @@ describe('Admin AI assets', () => {
     });
   });
 
-  it('updates only named fields and keeps the legacy banner image coherent', async () => {
+  it('forwards named fields and reports the canonical mutation receipt', async () => {
     const actor = { email: 'admin@example.com', name: 'Admin' };
-    mocks.replace.mockImplementation(async (_db, kind, id, data) => ({ kind, id, data }));
+    mocks.replace.mockImplementation(async (_db, kind, id, data) => ({
+      kind,
+      id,
+      data,
+      previous: { title: 'Operator title' },
+    }));
 
     const result = await manageAdminAiAsset(
       {
@@ -136,26 +139,24 @@ describe('Admin AI assets', () => {
       1,
       {
         title: 'Nouvel atelier',
-        titleAr: 'ورشة',
-        imageUrl: 'https://cdn.example.com/new-wide.jpg',
         imageUrlLandscape: 'https://cdn.example.com/new-wide.jpg',
-        imageUrlPortrait: 'https://cdn.example.com/tall.jpg',
-        productId: null,
-        active: true,
       },
       actor,
     );
     expect(result).toMatchObject({
       ok: true,
       operation: 'update',
-      previous: { title: 'Atelier' },
+      previous: { title: 'Operator title' },
       data: { title: 'Nouvel atelier' },
     });
   });
 
   it('does not materialize defaults or clear selections in a one-field update', async () => {
     const actor = { email: 'admin@example.com', name: 'Admin' };
-    mocks.updateStates.mockResolvedValue({ ok: true });
+    mocks.replace.mockResolvedValue({
+      previous: { categoryIds: [3], active: true },
+      data: { categoryIds: [3], active: true, prioritizeRecommendations: false },
+    });
     const input = {
       operation: 'update' as const,
       asset: {
@@ -171,62 +172,24 @@ describe('Admin AI assets', () => {
       previous: { categoryIds: [3], active: true },
       data: { categoryIds: [3], active: true, prioritizeRecommendations: false },
     });
-    expect(mocks.updateStates).toHaveBeenCalledWith(
+    expect(mocks.replace).toHaveBeenCalledWith(
       'database',
-      { items: [{ kind: 'featured-group', id: 7, prioritizeRecommendations: false }] },
+      'featured-group',
+      7,
+      { prioritizeRecommendations: false },
       actor,
     );
-    expect(mocks.replace).not.toHaveBeenCalled();
-  });
-
-  it('changes active state without forcing legacy banner image migration', async () => {
-    mocks.updateStates.mockResolvedValue({ ok: true });
-    mocks.load.mockResolvedValue({
-      ...assets,
-      banners: [
-        {
-          ...assets.banners[0],
-          imageUrlLandscape: null,
-          imageUrlPortrait: null,
-        },
-      ],
-    });
-
-    await expect(
-      manageAdminAiAsset({
-        operation: 'update',
-        asset: { kind: 'banner', id: 1, changes: { active: false } },
-      }),
-    ).resolves.toMatchObject({ ok: true, data: { active: false } });
-    expect(mocks.updateStates).toHaveBeenCalledWith(
-      'database',
-      { items: [{ kind: 'banner', id: 1, active: false }] },
-      undefined,
-    );
-    expect(mocks.replace).not.toHaveBeenCalled();
-  });
-
-  it('rejects update and delete targets that do not exist', async () => {
-    await expect(
-      manageAdminAiAsset({
-        operation: 'update',
-        asset: { kind: 'product-card', id: 404, changes: { active: false } },
-      }),
-    ).rejects.toThrow('does not exist');
-    await expect(
-      manageAdminAiAsset({
-        operation: 'delete',
-        asset: { kind: 'featured-group', id: 404 },
-      }),
-    ).rejects.toThrow('does not exist');
-    expect(mocks.replace).not.toHaveBeenCalled();
-    expect(mocks.remove).not.toHaveBeenCalled();
   });
 
   it('creates and deletes through canonical asset mutations', async () => {
     const actor = { email: 'admin@example.com', name: 'Admin' };
     mocks.create.mockResolvedValue({ kind: 'featured-group', id: 8, sortOrder: 1 });
-    mocks.remove.mockResolvedValue({ kind: 'product-card', id: 9, deleted: true });
+    mocks.remove.mockResolvedValue({
+      kind: 'product-card',
+      id: 9,
+      deleted: true,
+      previous: { productId: 12 },
+    });
 
     await expect(
       manageAdminAiAsset(
@@ -259,7 +222,7 @@ describe('Admin AI assets', () => {
   });
 
   it('derives canonical sort orders from a complete ordered ID list', async () => {
-    mocks.reorder.mockResolvedValue({ ok: true });
+    mocks.reorder.mockResolvedValue({ ok: true, before: [1, 2] });
 
     await expect(reorderAdminAiAssets({ kind: 'banner', orderedIds: [2, 1] })).resolves.toEqual({
       ok: true,
@@ -267,22 +230,17 @@ describe('Admin AI assets', () => {
       before: [1, 2],
       after: [2, 1],
     });
-    expect(mocks.reorder).toHaveBeenCalledWith('database', {
-      kind: 'banner',
-      items: [
-        { id: 2, sortOrder: 0 },
-        { id: 1, sortOrder: 1 },
-      ],
-    });
-  });
-
-  it('rejects incomplete or unknown reorder lists before writing', async () => {
-    await expect(reorderAdminAiAssets({ kind: 'banner', orderedIds: [1] })).rejects.toThrow(
-      'Missing: 2',
+    expect(mocks.reorder).toHaveBeenCalledWith(
+      'database',
+      {
+        kind: 'banner',
+        items: [
+          { id: 2, sortOrder: 0 },
+          { id: 1, sortOrder: 1 },
+        ],
+      },
+      undefined,
+      true,
     );
-    await expect(reorderAdminAiAssets({ kind: 'banner', orderedIds: [1, 99] })).rejects.toThrow(
-      'Unknown: 99',
-    );
-    expect(mocks.reorder).not.toHaveBeenCalled();
   });
 });

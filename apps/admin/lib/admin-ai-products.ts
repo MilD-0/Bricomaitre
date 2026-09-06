@@ -1,13 +1,13 @@
 import { z } from 'zod';
 
+import { ActionHistoryEntityNotFoundError } from './action-history-state';
 import { getDb } from '@bric/db/client';
 import { startProductCatalogFeedRefreshJob } from './background-jobs';
 import {
   archiveProductThroughCanonicalWorkflow,
   createProductThroughCanonicalWorkflow,
   ProductMutationNotFoundError,
-  readProductMutationPayload,
-  replaceProductThroughCanonicalWorkflow,
+  patchProductThroughCanonicalWorkflow,
   restoreProductThroughCanonicalWorkflow,
   type ProductMutationActor,
 } from './product-update-workflow';
@@ -73,20 +73,6 @@ export const adminAiProductRestoreSchema = z
   .object({ productIds: z.array(z.number().int().positive()).min(1).max(20) })
   .strict();
 
-function mergedProductPayload(
-  current: Awaited<ReturnType<typeof readProductMutationPayload>>,
-  changes: z.output<typeof adminAiProductChangesSchema>,
-) {
-  const merged = { ...current, ...changes };
-  if (changes.inStock !== undefined && changes.availabilityStatus === undefined) {
-    merged.availabilityStatus = changes.inStock ? 'in_stock' : 'out_of_stock';
-  }
-  if (changes.availabilityStatus !== undefined && changes.inStock === undefined) {
-    merged.inStock = changes.availabilityStatus === 'in_stock';
-  }
-  return productPayloadSchema.parse(merged);
-}
-
 function failureDetails(error: unknown) {
   if (error instanceof z.ZodError) {
     return {
@@ -106,11 +92,20 @@ async function refreshAdminAiProductSurfaces(input: {
   productIds: number[];
   revalidateLandingPages?: boolean;
 }) {
-  revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-  await Promise.all([
-    revalidateStorefrontProducts(),
-    ...(input.revalidateLandingPages ? [revalidateStorefrontLandingPages()] : []),
-  ]);
+  try {
+    revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+    await Promise.all([
+      revalidateStorefrontProducts(),
+      ...(input.revalidateLandingPages ? [revalidateStorefrontLandingPages()] : []),
+    ]);
+  } catch (error) {
+    captureAdminException(error, {
+      requestId: getRequestId(),
+      operation: 'product-cache-refresh',
+      route: '/api/ai/chat',
+      context: { trigger: input.trigger, productIds: input.productIds },
+    });
+  }
   try {
     await startProductCatalogFeedRefreshJob(input.trigger, getRequestId());
     return 'queued' as const;
@@ -155,7 +150,8 @@ export async function archiveAdminAiProducts(
     } catch (error) {
       failed.push({
         productId,
-        ...(error instanceof ProductMutationNotFoundError
+        ...(error instanceof ProductMutationNotFoundError ||
+        error instanceof ActionHistoryEntityNotFoundError
           ? { code: 'product_not_found', message: error.message }
           : failureDetails(error)),
       });
@@ -192,7 +188,8 @@ export async function restoreAdminAiProducts(
     } catch (error) {
       failed.push({
         productId,
-        ...(error instanceof ProductMutationNotFoundError
+        ...(error instanceof ProductMutationNotFoundError ||
+        error instanceof ActionHistoryEntityNotFoundError
           ? { code: 'archived_product_not_found', message: error.message }
           : failureDetails(error)),
       });
@@ -227,10 +224,13 @@ export async function updateAdminAiProducts(
 
   for (const item of input.items) {
     try {
-      const current = await readProductMutationPayload(db, item.productId);
-      const changes = adminAiProductChangesSchema.parse(item.changes);
-      const next = mergedProductPayload(current, changes);
-      const result = await replaceProductThroughCanonicalWorkflow(db, item.productId, next, actor);
+      const changes = item.changes;
+      const { previous: current, ...result } = await patchProductThroughCanonicalWorkflow(
+        db,
+        item.productId,
+        changes,
+        actor,
+      );
       updated.push({
         ...result,
         changedFields: Object.keys(changes),

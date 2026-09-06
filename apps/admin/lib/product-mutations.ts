@@ -2,7 +2,7 @@ import type { getDb } from '@bric/db/client';
 import { normalizePromoCode, productPayloadSchema, type ProductPromoCodePayload } from './products';
 import { resolveUniqueSlug } from './slug';
 
-type Database = ReturnType<typeof getDb>;
+type Database = Pick<ReturnType<typeof getDb>, 'query'>;
 
 async function resolveProductSlug(
   db: Database,

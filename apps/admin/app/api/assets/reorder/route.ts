@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { auth } from '../../../../lib/auth';
+import {
+  ActionHistoryConflictError,
+  ActionHistoryEntityNotFoundError,
+} from '../../../../lib/action-history-state';
 import { getDb, hasDb } from '@bric/db/client';
 import { reorderAdminAssets } from '../../../../lib/asset-mutations';
 import { assetReorderSchema } from '../../../../lib/assets';
@@ -21,6 +26,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  await reorderAdminAssets(getDb(), parsed.data);
+  const session = await auth();
+  try {
+    await reorderAdminAssets(getDb(), parsed.data, {
+      email: session?.user?.email,
+      name: session?.user?.name,
+    });
+  } catch (error) {
+    if (error instanceof ActionHistoryEntityNotFoundError)
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    if (error instanceof ActionHistoryConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
   return NextResponse.json({ ok: true });
 }

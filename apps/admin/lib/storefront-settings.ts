@@ -61,16 +61,26 @@ export function normalizeStorefrontAiModels(
   };
 }
 
-export async function saveStorefrontSettings(input: StorefrontSettingsInput) {
+export async function saveStorefrontSettings(input: Partial<StorefrontSettingsInput>) {
   if (!hasDb()) throw new Error('DATABASE_URL is not configured');
 
-  const values = { ...storefrontSettingsInputSchema.parse(input), phoneEnabled: true };
+  const parsed = storefrontSettingsInputSchema.partial().strict().parse(input);
+  // Defaults belong to new records. An omitted field must never become an update.
+  const changes = Object.fromEntries(
+    Object.entries(parsed).filter(
+      ([key]) => input[key as keyof StorefrontSettingsInput] !== undefined,
+    ),
+  );
+  const values = storefrontSettingsInputSchema.parse({
+    ...DEFAULT_STOREFRONT_SETTINGS,
+    ...changes,
+  });
   const [stored] = await getDb()
     .insert(storefrontSettings)
-    .values({ id: 1, ...values, updatedAt: new Date() })
+    .values({ id: 1, ...values, phoneEnabled: true, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: storefrontSettings.id,
-      set: { ...values, updatedAt: new Date() },
+      set: { ...changes, phoneEnabled: true, updatedAt: new Date() },
     })
     .returning({
       contactPhone: storefrontSettings.contactPhone,

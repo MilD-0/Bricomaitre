@@ -886,7 +886,7 @@ export async function mutateEntityWithHistory<T>(
     operation: ActionOperation;
     actor?: ActionActor;
     entityId?: number;
-    execute: (tx: Transaction) => Promise<T>;
+    execute: (tx: Transaction, beforeState: SnapshotRecord | null) => Promise<T>;
     resolveEntityId?: (result: T) => number;
     isReversible?: boolean;
     snapshotFields?: { before?: SnapshotRecord; after?: SnapshotRecord };
@@ -902,7 +902,7 @@ export async function mutateEntityWithHistoryTransaction<T>(
     operation: ActionOperation;
     actor?: ActionActor;
     entityId?: number;
-    execute: (tx: Transaction) => Promise<T>;
+    execute: (tx: Transaction, beforeState: SnapshotRecord | null) => Promise<T>;
     resolveEntityId?: (result: T) => number;
     isReversible?: boolean;
     snapshotFields?: { before?: SnapshotRecord; after?: SnapshotRecord };
@@ -929,7 +929,7 @@ export async function mutateEntityWithHistoryTransaction<T>(
   if (params.operation !== 'create' && !beforeState && params.entityId) {
     throw new ActionHistoryEntityNotFoundError(params.entityType, params.entityId);
   }
-  const result = await params.execute(tx);
+  const result = await params.execute(tx, beforeState);
   const entityId = params.resolveEntityId?.(result) ?? params.entityId;
 
   if (!entityId) {

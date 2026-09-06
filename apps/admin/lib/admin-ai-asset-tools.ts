@@ -53,7 +53,9 @@ export function buildAdminAiAssetTools({ permissions, runtime }: AdminAiToolBuil
       description: ADMIN_AI_REORDER_ASSETS_TOOL_DESCRIPTION,
       inputSchema: adminAiAssetReorderSchema,
       execute: (input) =>
-        executeAdminAiToolForRuntime(runtime, input, () => reorderAdminAiAssets(input)),
+        executeAdminAiToolForRuntime(runtime, input, ({ actor }) =>
+          reorderAdminAiAssets(input, actor),
+        ),
     }),
     inspect_landing_pages: tool({
       description: ADMIN_AI_INSPECT_LANDING_PAGES_TOOL_DESCRIPTION,

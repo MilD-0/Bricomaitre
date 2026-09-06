@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  read: vi.fn(),
   create: vi.fn(),
   replace: vi.fn(),
   archive: vi.fn(),
@@ -17,9 +16,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
 vi.mock('./product-update-workflow', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./product-update-workflow')>()),
-  readProductMutationPayload: mocks.read,
   createProductThroughCanonicalWorkflow: mocks.create,
-  replaceProductThroughCanonicalWorkflow: mocks.replace,
+  patchProductThroughCanonicalWorkflow: mocks.replace,
   archiveProductThroughCanonicalWorkflow: mocks.archive,
   restoreProductThroughCanonicalWorkflow: mocks.restore,
 }));
@@ -48,6 +46,7 @@ import {
   restoreAdminAiProducts,
   updateAdminAiProducts,
 } from './admin-ai-products';
+import { productPayloadSchema } from './products';
 import { ProductMutationNotFoundError } from './product-update-workflow';
 
 const current = {
@@ -82,20 +81,7 @@ const current = {
 describe('admin AI direct product updates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.read.mockResolvedValue(current);
-    mocks.replace.mockImplementation(async (_db, id, next) => ({
-      id,
-      slug: next.slug,
-      title: next.title,
-      price: next.price.toFixed(2),
-      purchasePrice: next.purchasePrice?.toFixed(2) ?? null,
-      active: next.active,
-      inStock: next.inStock,
-      availabilityStatus: next.availabilityStatus,
-      brandId: next.brandId,
-      categoryId: next.categoryId,
-      promoCodeCount: next.promoCodes.length,
-    }));
+    mocks.replace.mockResolvedValue({ id: 12, title: current.title, previous: current });
     mocks.startFeed.mockResolvedValue({ kind: 'started' });
     mocks.create.mockResolvedValue({
       id: 21,
@@ -171,7 +157,7 @@ describe('admin AI direct product updates', () => {
     expect(mocks.startFeed).toHaveBeenCalledWith('product:ai-create', 'request-1');
   });
 
-  it('merges only requested fields, aligns availability, and refreshes all consumers once', async () => {
+  it('forwards named fields and reports canonical previous values with one refresh', async () => {
     const actor = { email: 'admin@example.com', name: 'Admin' };
     const result = await updateAdminAiProducts(
       {
@@ -188,16 +174,7 @@ describe('admin AI direct product updates', () => {
     expect(mocks.replace).toHaveBeenCalledWith(
       'database',
       12,
-      expect.objectContaining({
-        title: 'Perceuse',
-        titleAr: 'مثقاب',
-        price: 100,
-        purchasePrice: 62,
-        inStock: false,
-        availabilityStatus: 'out_of_stock',
-        inventoryQuantity: 8,
-        promoCodes: current.promoCodes,
-      }),
+      { titleAr: 'مثقاب', purchasePrice: 62, inStock: false },
       actor,
     );
     expect(result).toMatchObject({
@@ -220,6 +197,10 @@ describe('admin AI direct product updates', () => {
   });
 
   it('reports invalid merged promo economics without hiding successful sibling updates', async () => {
+    const invalid = productPayloadSchema.safeParse({ ...current, price: 80 });
+    mocks.replace
+      .mockResolvedValueOnce({ id: 12, previous: current })
+      .mockRejectedValueOnce(invalid.error);
     const result = await updateAdminAiProducts(
       {
         items: [
@@ -243,18 +224,33 @@ describe('admin AI direct product updates', () => {
         },
       ],
     });
-    expect(mocks.replace).toHaveBeenCalledTimes(1);
+    expect(mocks.replace).toHaveBeenCalledTimes(2);
     expect(mocks.startFeed).toHaveBeenCalledOnce();
   });
 
   it('does not refresh storefront or catalog feeds when every update is rejected', async () => {
+    mocks.replace.mockRejectedValueOnce(
+      productPayloadSchema.safeParse({ ...current, price: 80 }).error,
+    );
     await updateAdminAiProducts(
       { items: [{ productId: 12, changes: { price: 80 } }] },
       { email: 'admin@example.com', name: 'Admin' },
     );
-    expect(mocks.replace).not.toHaveBeenCalled();
     expect(mocks.revalidateProducts).not.toHaveBeenCalled();
     expect(mocks.startFeed).not.toHaveBeenCalled();
+  });
+
+  it('keeps committed product creation successful when cache invalidation fails', async () => {
+    mocks.revalidateTags.mockImplementationOnce(() => {
+      throw new Error('Cache unavailable');
+    });
+    const result = await createAdminAiProduct({ product: { title: 'Drill', price: 100 } }, {});
+    expect(result).toMatchObject({ ok: true, created: { id: 21 }, catalogFeedRefresh: 'queued' });
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.capture).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ operation: 'product-cache-refresh' }),
+    );
   });
 
   it('archives exact products with partial missing-product reporting and one refresh', async () => {

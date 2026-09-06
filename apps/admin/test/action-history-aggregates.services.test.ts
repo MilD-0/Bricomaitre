@@ -24,7 +24,6 @@ import {
   ActionHistoryEntityNotFoundError,
 } from '../lib/action-history';
 import { replaceProductThroughCanonicalWorkflow } from '../lib/product-update-workflow';
-import { reorderAdminAssets } from '../lib/asset-mutations';
 import { createLandingPage } from '../lib/landing-pages';
 vi.mock('../lib/storefront-revalidate', () => ({ revalidateStorefrontAssets: vi.fn() }));
 const actor = { email: `recovery-${randomUUID()}@example.invalid` };
@@ -272,7 +271,7 @@ describe('aggregate action recovery', () => {
       execute: (tx) =>
         tx.update(assetBanners).set({ title: 'After' }).where(eq(assetBanners.id, banner!.id)),
     });
-    await reorderAdminAssets(db, { kind: 'banner', items: [{ id: banner!.id, sortOrder: 9 }] });
+    await db.update(assetBanners).set({ sortOrder: 9 }).where(eq(assetBanners.id, banner!.id));
     await recover('assetBanners', banner!.id, 'undo');
     expect(
       (await db.select().from(assetBanners).where(eq(assetBanners.id, banner!.id)))[0],

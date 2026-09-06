@@ -309,17 +309,10 @@ describe('app/api/products/[id]/route', () => {
     const updateMock = vi.fn().mockReturnValue({ set: setMock });
     const deleteWhereMock = vi.fn().mockResolvedValue(undefined);
     const deleteMock = vi.fn().mockReturnValue({ where: deleteWhereMock });
-    await execute({
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn(() => ({
-            limit: vi.fn().mockResolvedValue([{ slug: 'updated-product' }]),
-          })),
-        })),
-      })),
-      update: updateMock,
-      delete: deleteMock,
-    });
+    await execute(
+      { query: db.query, update: updateMock, delete: deleteMock },
+      { slug: 'updated-product' },
+    );
 
     expect(setMock).toHaveBeenCalledWith(
       expect.objectContaining({

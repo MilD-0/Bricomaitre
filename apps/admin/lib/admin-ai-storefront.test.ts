@@ -54,7 +54,7 @@ describe('admin AI storefront operations', () => {
       active: true,
     });
     mocks.modelOptions.mockReturnValue(['openai/gpt-5.6-luna', 'deepseek/deepseek-v4-flash']);
-    mocks.saveSettings.mockImplementation(async (value) => value);
+    mocks.saveSettings.mockImplementation(async (value) => ({ ...settings, ...value }));
     mocks.saveAnnouncement.mockImplementation(async (value) => value);
   });
 
@@ -66,7 +66,7 @@ describe('admin AI storefront operations', () => {
     });
   });
 
-  it('merges and persists an explicit partial setting update before revalidating storefronts', async () => {
+  it('persists only named settings before revalidating storefronts', async () => {
     await expect(
       updateAdminStorefrontSettings({ contactEmail: 'sales@bricomaitre.com' }),
     ).resolves.toMatchObject({
@@ -74,10 +74,17 @@ describe('admin AI storefront operations', () => {
       settings: { contactEmail: 'sales@bricomaitre.com', aiModel: 'openai/gpt-5.6-luna' },
     });
     expect(mocks.saveSettings).toHaveBeenCalledWith({
-      ...settings,
       contactEmail: 'sales@bricomaitre.com',
     });
     expect(mocks.revalidate).toHaveBeenCalledOnce();
+  });
+
+  it('can update contact details without rewriting unconfigured existing models', async () => {
+    mocks.modelOptions.mockReturnValue([]);
+    await expect(
+      updateAdminStorefrontSettings({ address: 'New shop address' }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(mocks.saveSettings).toHaveBeenCalledWith({ address: 'New shop address' });
   });
 
   it('refuses an unavailable model without persisting a partial configuration', async () => {
@@ -110,7 +117,6 @@ describe('admin AI storefront operations', () => {
       },
     });
     expect(mocks.saveSettings).toHaveBeenCalledWith({
-      ...settings,
       address: '12 rue des Outils',
       facebookUrl: null,
       aiAssistantEnabled: false,

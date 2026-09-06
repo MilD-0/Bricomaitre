@@ -1,4 +1,7 @@
-import { storefrontSettingsInputSchema } from '@bric/storefront-core/settings';
+import {
+  storefrontSettingsInputSchema,
+  type StorefrontSettingsInput,
+} from '@bric/storefront-core/settings';
 import { z } from 'zod';
 
 import {
@@ -12,10 +15,6 @@ import {
   loadStorefrontSettings,
   saveStorefrontSettings,
 } from './storefront-settings';
-
-export const storefrontSettingsPatchSchema = storefrontSettingsInputSchema
-  .partial()
-  .refine((changes) => Object.keys(changes).length > 0, 'At least one setting is required.');
 
 const storefrontSettingOperationSchema = z.discriminatedUnion('field', [
   z.object({ field: z.literal('contactPhone'), value: z.string().trim().min(1).max(50) }).strict(),
@@ -62,17 +61,17 @@ export async function inspectAdminStorefrontConfiguration() {
   };
 }
 
-export async function updateAdminStorefrontSettings(
-  input: z.input<typeof storefrontSettingsPatchSchema>,
-) {
-  const changes = storefrontSettingsPatchSchema.parse(input);
-  const current = await loadStorefrontSettings();
-  const next = storefrontSettingsInputSchema.parse({ ...current, ...changes });
+export async function updateAdminStorefrontSettings(input: Partial<StorefrontSettingsInput>) {
+  const changes = storefrontSettingsInputSchema.partial().strict().parse(input);
+  if (!Object.values(input).some((value) => value !== undefined)) {
+    throw new Error('At least one setting is required.');
+  }
   const modelOptions = getStorefrontAiModelOptions();
   if (
-    modelOptions.length === 0 ||
-    !modelOptions.includes(next.aiModel) ||
-    (next.aiFallbackModel && !modelOptions.includes(next.aiFallbackModel))
+    (input.aiModel !== undefined && !modelOptions.includes(changes.aiModel!)) ||
+    (input.aiFallbackModel != null &&
+      changes.aiFallbackModel &&
+      !modelOptions.includes(changes.aiFallbackModel))
   ) {
     return {
       error: 'Select storefront AI models configured by the environment.',
@@ -80,7 +79,7 @@ export async function updateAdminStorefrontSettings(
     };
   }
 
-  const settings = await saveStorefrontSettings(next);
+  const settings = await saveStorefrontSettings(input);
   await revalidateStorefrontSettings();
   return { ok: true as const, settings };
 }

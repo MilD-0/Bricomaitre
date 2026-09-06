@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  ActionHistoryConflictError,
+  ActionHistoryEntityNotFoundError,
+} from '../../../../lib/action-history-state';
 import { POST } from './route';
 
-const {
-  hasDbMock,
-  getDbMock,
-  requireMutationAccessMock,
-  authMock,
-  revalidateStorefrontAssetsMock,
-} = vi.hoisted(() => ({
-  hasDbMock: vi.fn(),
-  getDbMock: vi.fn(),
-  requireMutationAccessMock: vi.fn(),
-  authMock: vi.fn(),
-  revalidateStorefrontAssetsMock: vi.fn(),
-}));
+const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, reorderMock } = vi.hoisted(
+  () => ({
+    hasDbMock: vi.fn(),
+    getDbMock: vi.fn(),
+    requireMutationAccessMock: vi.fn(),
+    authMock: vi.fn(),
+    reorderMock: vi.fn(),
+  }),
+);
 
 vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
@@ -30,9 +30,7 @@ vi.mock('../../../../lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/storefront-revalidate', () => ({
-  revalidateStorefrontAssets: revalidateStorefrontAssetsMock,
-}));
+vi.mock('../../../../lib/asset-mutations', () => ({ reorderAdminAssets: reorderMock }));
 
 describe('app/api/assets/reorder/route', () => {
   beforeEach(() => {
@@ -42,8 +40,8 @@ describe('app/api/assets/reorder/route', () => {
     requireMutationAccessMock.mockResolvedValue(null);
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
-    revalidateStorefrontAssetsMock.mockReset();
-    revalidateStorefrontAssetsMock.mockResolvedValue(undefined);
+    reorderMock.mockReset();
+    reorderMock.mockResolvedValue(undefined);
   });
 
   it('returns 400 for invalid reorder payloads', async () => {
@@ -85,18 +83,7 @@ describe('app/api/assets/reorder/route', () => {
   it('updates banner sort orders with assets RBAC enforced', async () => {
     hasDbMock.mockReturnValue(true);
 
-    const whereMock = vi
-      .fn()
-      .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 2 }]) });
-    const setMock = vi.fn().mockReturnValue({ where: whereMock });
-    const updateMock = vi.fn().mockReturnValue({ set: setMock });
-    const transactionMock = vi.fn(
-      async (callback: (tx: { update: typeof updateMock }) => Promise<void>) => {
-        await callback({ update: updateMock });
-      },
-    );
-
-    getDbMock.mockReturnValue({ transaction: transactionMock });
+    getDbMock.mockReturnValue('database');
 
     const req = new NextRequest('http://localhost/api/assets/reorder', {
       method: 'POST',
@@ -113,19 +100,34 @@ describe('app/api/assets/reorder/route', () => {
     const res = await POST(req);
 
     expect(requireMutationAccessMock).toHaveBeenCalledWith('assets');
-    expect(transactionMock).toHaveBeenCalledOnce();
-    expect(updateMock).toHaveBeenCalledTimes(2);
-    expect(setMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ sortOrder: 1, updatedAt: expect.any(Date) }),
+    expect(reorderMock).toHaveBeenCalledWith(
+      'database',
+      {
+        kind: 'banner',
+        items: [
+          { id: 8, sortOrder: 0 },
+          { id: 2, sortOrder: 1 },
+        ],
+      },
+      { email: 'admin@example.com', name: 'Admin' },
     );
-    expect(setMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ sortOrder: 0, updatedAt: expect.any(Date) }),
-    );
-    expect(revalidateStorefrontAssetsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
+  });
+
+  it.each([
+    [new ActionHistoryConflictError('Stale order'), 409],
+    [new ActionHistoryEntityNotFoundError('assetBanners', 1), 404],
+  ])('reports canonical reorder conflicts without claiming success', async (error, status) => {
+    hasDbMock.mockReturnValue(true);
+    reorderMock.mockRejectedValueOnce(error);
+    const response = await POST(
+      new NextRequest('http://localhost/api/assets/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ kind: 'banner', items: [{ id: 1, sortOrder: 0 }] }),
+      }),
+    );
+    expect(response.status).toBe(status);
   });
 
   it('returns 401 when reorder access is denied', async () => {

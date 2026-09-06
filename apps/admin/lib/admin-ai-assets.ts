@@ -6,8 +6,7 @@ import {
   createAdminAsset,
   deleteAdminAsset,
   reorderAdminAssets,
-  replaceAdminAsset,
-  updateAdminAssetStates,
+  patchAdminAsset,
 } from './asset-mutations';
 import {
   assetBannerInputSchema,
@@ -15,12 +14,6 @@ import {
   featuredProductGroupInputSchema,
   featuredProductGroupSchema,
   productCardSchema,
-  type AssetBannerPayload,
-  type AssetBannerRecord,
-  type FeaturedProductGroupPayload,
-  type FeaturedProductGroupRecord,
-  type ProductCardPayload,
-  type ProductCardRecord,
 } from './assets';
 import type { ActionActor } from './action-history';
 
@@ -229,64 +222,6 @@ export async function inspectAdminAiAssets(rawInput: z.input<typeof adminAiAsset
   };
 }
 
-function bannerPayload(record: AssetBannerRecord): AssetBannerPayload {
-  return {
-    title: record.title,
-    titleAr: record.titleAr,
-    imageUrl: record.imageUrl,
-    imageUrlPortrait: record.imageUrlPortrait,
-    imageUrlLandscape: record.imageUrlLandscape,
-    productId: record.productId,
-    active: record.active,
-  };
-}
-
-function featuredGroupPayload(record: FeaturedProductGroupRecord): FeaturedProductGroupPayload {
-  return {
-    name: record.name,
-    nameAr: record.nameAr,
-    cta: record.cta,
-    ctaAr: record.ctaAr,
-    link: record.link,
-    productIds: record.productIds,
-    brandIds: record.brandIds,
-    categoryIds: record.categoryIds,
-    prioritizeRecommendations: record.prioritizeRecommendations,
-    active: record.active,
-  };
-}
-
-function productCardPayload(record: ProductCardRecord): ProductCardPayload {
-  return {
-    productId: record.productId,
-    titleAr: record.titleAr,
-    titleFr: record.titleFr,
-    descriptionAr: record.descriptionAr,
-    descriptionFr: record.descriptionFr,
-    characteristicsAr: record.characteristicsAr,
-    characteristicsFr: record.characteristicsFr,
-    active: record.active,
-  };
-}
-
-function payloadForRecord(
-  kind: z.infer<typeof assetKindSchema>,
-  record: AssetBannerRecord | FeaturedProductGroupRecord | ProductCardRecord,
-) {
-  if (kind === 'banner') return bannerPayload(record as AssetBannerRecord);
-  if (kind === 'featured-group') {
-    return featuredGroupPayload(record as FeaturedProductGroupRecord);
-  }
-  return productCardPayload(record as ProductCardRecord);
-}
-
-async function loadExactAsset(kind: z.infer<typeof assetKindSchema>, id: number) {
-  const data = await loadAssetsData();
-  const record = recordsForKind(data, kind).find((candidate) => candidate.id === id);
-  if (!record) throw new Error(`Asset ${kind} #${id} does not exist.`);
-  return record;
-}
-
 export async function manageAdminAiAsset(
   rawInput: z.input<typeof adminAiAssetCrudSchema>,
   actor?: ActionActor,
@@ -304,97 +239,19 @@ export async function manageAdminAiAsset(
     return { ok: true, operation: input.operation, ...created };
   }
 
-  const previousRecord = await loadExactAsset(input.asset.kind, input.asset.id);
-  const previous = payloadForRecord(input.asset.kind, previousRecord);
-  if (input.operation === 'delete') {
-    const deleted = await deleteAdminAsset(db, input.asset.kind, input.asset.id, actor);
-    return { ok: true, operation: input.operation, previous, ...deleted };
-  }
-
-  const merged = { ...previous, ...input.asset.changes };
-  const stateFields = Object.keys(input.asset.changes);
-  const stateOnly =
-    stateFields.every((field) =>
-      input.asset.kind === 'featured-group'
-        ? field === 'active' || field === 'prioritizeRecommendations'
-        : field === 'active',
-    ) && stateFields.length > 0;
-  if (stateOnly) {
-    await updateAdminAssetStates(
-      db,
-      {
-        items: [
-          {
-            kind: input.asset.kind,
-            id: input.asset.id,
-            ...(input.asset.changes.active !== undefined
-              ? { active: input.asset.changes.active }
-              : {}),
-            ...(input.asset.kind === 'featured-group' &&
-            input.asset.changes.prioritizeRecommendations !== undefined
-              ? {
-                  prioritizeRecommendations: input.asset.changes.prioritizeRecommendations,
-                }
-              : {}),
-          },
-        ],
-      },
-      actor,
-    );
-    return {
-      ok: true,
-      operation: input.operation,
-      kind: input.asset.kind,
-      id: input.asset.id,
-      previous,
-      data: merged,
-    };
-  }
-
-  const data =
-    input.asset.kind === 'banner'
-      ? assetBannerSchema.parse({
-          ...merged,
-          imageUrlLandscape:
-            (merged as AssetBannerPayload).imageUrlLandscape ??
-            (previous as AssetBannerPayload).imageUrl,
-          imageUrlPortrait:
-            (merged as AssetBannerPayload).imageUrlPortrait ??
-            (previous as AssetBannerPayload).imageUrl,
-          ...(input.asset.changes.imageUrlLandscape !== undefined
-            ? { imageUrl: input.asset.changes.imageUrlLandscape }
-            : {}),
-        })
-      : input.asset.kind === 'featured-group'
-        ? featuredProductGroupSchema.parse(merged)
-        : productCardSchema.parse(merged);
-  const updated = await replaceAdminAsset(db, input.asset.kind, input.asset.id, data, actor);
-  return { ok: true, operation: input.operation, previous, ...updated };
+  const result =
+    input.operation === 'delete'
+      ? await deleteAdminAsset(db, input.asset.kind, input.asset.id, actor)
+      : await patchAdminAsset(db, input.asset.kind, input.asset.id, input.asset.changes, actor);
+  return { ok: true, operation: input.operation, ...result };
 }
 
-export async function reorderAdminAiAssets(rawInput: z.input<typeof adminAiAssetReorderSchema>) {
+export async function reorderAdminAiAssets(
+  rawInput: z.input<typeof adminAiAssetReorderSchema>,
+  actor?: ActionActor,
+) {
   const input = adminAiAssetReorderSchema.parse(rawInput);
-  const data = await loadAssetsData();
-  const current = recordsForKind(data, input.kind).map(({ id }) => id);
-  const currentSet = new Set(current);
-  const missingIds = current.filter((id) => !input.orderedIds.includes(id));
-  const unknownIds = input.orderedIds.filter((id) => !currentSet.has(id));
-  if (
-    missingIds.length > 0 ||
-    unknownIds.length > 0 ||
-    current.length !== input.orderedIds.length
-  ) {
-    throw new Error(
-      `Reorder must contain every current ${input.kind} ID exactly once. Missing: ${missingIds.join(', ') || 'none'}. Unknown: ${unknownIds.join(', ') || 'none'}.`,
-    );
-  }
-
   const items = input.orderedIds.map((id, sortOrder) => ({ id, sortOrder }));
-  await reorderAdminAssets(getDb(), { kind: input.kind, items });
-  return {
-    ok: true,
-    kind: input.kind,
-    before: current,
-    after: input.orderedIds,
-  };
+  const { before } = await reorderAdminAssets(getDb(), { kind: input.kind, items }, actor, true);
+  return { ok: true, kind: input.kind, before, after: input.orderedIds };
 }
