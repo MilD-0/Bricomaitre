@@ -433,6 +433,70 @@ describe('BulletinBoard', () => {
     });
   });
 
+  it('keeps a failed reply available for retry', async () => {
+    server.use(
+      http.post('/api/bulletin/:id/replies', () =>
+        HttpResponse.json({ error: 'Unavailable' }, { status: 503 }),
+      ),
+    );
+    renderBoard();
+    await screen.findByText('Pinned issue');
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    await userEvent.type(screen.getByPlaceholderText('Reply'), 'Keep these handoff details.');
+    await userEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send reply' })).toBeEnabled());
+    expect(screen.getByPlaceholderText('Reply')).toHaveValue('Keep these handoff details.');
+  });
+
+  it('rolls back a failed reaction in its original tag view after navigation', async () => {
+    additionalPostCount = 1;
+    let finish!: () => void;
+    const response = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    server.use(
+      http.post('/api/bulletin/:id/reactions', async () => {
+        await response;
+        return HttpResponse.json({ error: 'Unavailable' }, { status: 503 });
+      }),
+    );
+    renderBoard();
+    await screen.findByText('Packing reminder 1');
+    try {
+      await userEvent.click(screen.getAllByRole('button', { name: '👍1' })[0]);
+      await userEvent.click(screen.getByRole('button', { name: 'urgent' }));
+      await waitFor(() => expect(screen.queryByText('Packing reminder 1')).not.toBeInTheDocument());
+      finish();
+      await waitFor(() => expect(screen.getByRole('button', { name: '👍1' })).toBeEnabled());
+      expect(screen.queryByText('Packing reminder 1')).not.toBeInTheDocument();
+    } finally {
+      finish();
+    }
+  });
+
+  it('lets operators compose when browser draft storage is blocked', async () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('Blocked');
+    });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Full');
+    });
+    const remove = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('Blocked');
+    });
+    try {
+      renderBoard();
+      await screen.findByText('Pinned issue');
+      await userEvent.click(screen.getByRole('button', { name: 'New post' }));
+      await userEvent.type(screen.getByPlaceholderText('Post title'), 'Available composer');
+      expect(screen.getByPlaceholderText('Post title')).toHaveValue('Available composer');
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
   it('confirms before deleting a reply', async () => {
     renderBoard();
 

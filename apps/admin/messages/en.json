@@ -52,7 +52,8 @@
     "deleteImageTitle": "Delete image?",
     "deleteImageDescription": "This image will be removed from the form.",
     "deleteAttachmentTitle": "Delete attachment?",
-    "deleteAttachmentDescription": "This file will be removed from the draft."
+    "deleteAttachmentDescription": "This file will be removed from the draft.",
+    "attachmentLimit": "Keep up to 8 attachments, 20 MB per file and 40 MB combined."
   },
   "productArchive": {
     "title": "Archived products",

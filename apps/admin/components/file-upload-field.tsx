@@ -23,7 +23,7 @@ import {
   MAX_BULLETIN_UPLOAD_FILES,
   MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
 } from '../lib/upload-limits';
-import { Button } from './ui/button';
+import { Button, buttonVariants } from './ui/button';
 import {
   Dialog,
   DialogContent,
@@ -41,15 +41,7 @@ type FileUploadFieldProps = {
   disabled?: boolean;
   value: BulletinAttachment[];
   onChange: (files: BulletinAttachment[]) => void;
-  onUploadStart?: () => void;
   onUploadingChange?: (uploading: boolean) => void;
-  onUploaded?: (payload: { file: BulletinAttachment; body: unknown }) => void;
-  extraFields?: Record<string, string>;
-  bundleUploads?: boolean;
-  maxNumberOfFiles?: number;
-  maxFileSize?: number;
-  maxTotalFileSize?: number;
-  allowedFileTypes?: string[];
 };
 
 type UploadState = {
@@ -82,24 +74,16 @@ export function FileUploadField({
   disabled = false,
   value,
   onChange,
-  onUploadStart,
   onUploadingChange,
-  onUploaded,
-  extraFields,
-  bundleUploads = false,
-  maxNumberOfFiles = MAX_BULLETIN_UPLOAD_FILES,
-  maxFileSize = MAX_BULLETIN_UPLOAD_BYTES,
-  maxTotalFileSize = MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
-  allowedFileTypes = BULLETIN_UPLOAD_EXTENSIONS,
 }: FileUploadFieldProps) {
   const t = useTranslations('uploadFields');
   const [uploads, setUploads] = useState<UploadState[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [previewFile, setPreviewFile] = useState<{ src: string; alt: string } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const uppyRef = useRef<Uppy<{ files: BulletinAttachment[] }, Record<string, never>> | null>(null);
   const onChangeRef = useRef(onChange);
-  const onUploadedRef = useRef(onUploaded);
   const valueRef = useRef(value);
   const onUploadingChangeRef = useRef(onUploadingChange);
   const uploadingRef = useRef(false);
@@ -112,19 +96,18 @@ export function FileUploadField({
 
   useEffect(() => {
     onChangeRef.current = onChange;
-    onUploadedRef.current = onUploaded;
     valueRef.current = value;
     onUploadingChangeRef.current = onUploadingChange;
-  }, [onChange, onUploaded, onUploadingChange, value]);
+  }, [onChange, onUploadingChange, value]);
 
   useEffect(() => {
     const uppy = new Uppy<{ files: BulletinAttachment[] }, Record<string, never>>({
       autoProceed: false,
       restrictions: {
-        maxFileSize,
-        maxTotalFileSize,
-        maxNumberOfFiles,
-        allowedFileTypes,
+        maxFileSize: MAX_BULLETIN_UPLOAD_BYTES,
+        maxTotalFileSize: MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
+        maxNumberOfFiles: MAX_BULLETIN_UPLOAD_FILES,
+        allowedFileTypes: BULLETIN_UPLOAD_EXTENSIONS,
       },
     });
 
@@ -132,24 +115,31 @@ export function FileUploadField({
       endpoint: uploadUrl,
       fieldName: 'files',
       formData: true,
-      bundle: bundleUploads,
       limit: 2,
-      headers: {},
     });
 
-    if (extraFields) {
-      uppy.setMeta(extraFields);
-    }
+    const previews = new Map<string, string>();
+    const completionTimers = new Map<string, number>();
+    const releasePreview = (id: string) => {
+      const preview = previews.get(id);
+      if (preview) URL.revokeObjectURL(preview);
+      previews.delete(id);
+      window.clearTimeout(completionTimers.get(id));
+      completionTimers.delete(id);
+    };
 
     uppy.on('file-added', (file) => {
+      releasePreview(file.id);
+      const previewUrl = file.type?.startsWith('image/')
+        ? URL.createObjectURL(file.data as File)
+        : null;
+      if (previewUrl) previews.set(file.id, previewUrl);
       setUploads((current) => [
-        ...current,
+        ...current.filter((upload) => upload.id !== file.id),
         {
           id: file.id,
           fileName: file.name,
-          previewUrl: file.type?.startsWith('image/')
-            ? URL.createObjectURL(file.data as File)
-            : null,
+          previewUrl,
           progress: 0,
           status: 'uploading',
         },
@@ -177,14 +167,11 @@ export function FileUploadField({
       const body = response.body as { files?: BulletinAttachment[] } | undefined;
       const uploadedFiles = body?.files ?? [];
       const uploadedFile = uploadedFiles[0];
-      const uploadedIds = bundleUploads
-        ? Array.from(uppy.getFiles()).map((uppyFile) => uppyFile.id)
-        : [file.id];
 
       if (!uploadedFile) {
         setUploads((current) =>
           current.map((upload) =>
-            uploadedIds.includes(upload.id) ? { ...upload, status: 'error' } : upload,
+            upload.id === file.id ? { ...upload, status: 'error' } : upload,
           ),
         );
         return;
@@ -192,9 +179,7 @@ export function FileUploadField({
 
       setUploads((current) =>
         current.map((upload) =>
-          uploadedIds.includes(upload.id)
-            ? { ...upload, progress: 100, status: 'success' }
-            : upload,
+          upload.id === file.id ? { ...upload, progress: 100, status: 'success' } : upload,
         ),
       );
       const newFiles = uploadedFiles.filter(
@@ -202,20 +187,13 @@ export function FileUploadField({
       );
       valueRef.current = [...valueRef.current, ...newFiles];
       onChangeRef.current(valueRef.current);
-      onUploadedRef.current?.({ file: uploadedFile, body });
-      window.setTimeout(() => {
-        setUploads((current) => {
-          const next = current.filter((upload) => !uploadedIds.includes(upload.id));
-          current
-            .filter((upload) => uploadedIds.includes(upload.id))
-            .forEach((removed) => {
-              if (removed.previewUrl) {
-                URL.revokeObjectURL(removed.previewUrl);
-              }
-            });
-          return next;
-        });
-      }, 800);
+      completionTimers.set(
+        file.id,
+        window.setTimeout(() => {
+          releasePreview(file.id);
+          setUploads((current) => current.filter((upload) => upload.id !== file.id));
+        }, 800),
+      );
     });
 
     uppy.on('upload-error', (file) => {
@@ -231,29 +209,16 @@ export function FileUploadField({
     uppyRef.current = uppy;
 
     return () => {
-      setUploads((current) => {
-        current.forEach((upload) => {
-          if (upload.previewUrl) {
-            URL.revokeObjectURL(upload.previewUrl);
-          }
-        });
-        return [];
-      });
+      for (const id of new Set([...previews.keys(), ...completionTimers.keys()]))
+        releasePreview(id);
+      setUploads([]);
       uploadingRef.current = false;
       setUploading(false);
       onUploadingChangeRef.current?.(false);
       uppy.destroy();
       uppyRef.current = null;
     };
-  }, [
-    allowedFileTypes,
-    bundleUploads,
-    extraFields,
-    maxFileSize,
-    maxNumberOfFiles,
-    maxTotalFileSize,
-    uploadUrl,
-  ]);
+  }, [uploadUrl]);
 
   const openPicker = () => {
     if (inputRef.current) {
@@ -267,11 +232,21 @@ export function FileUploadField({
       return;
     }
 
+    const selected = Array.from(files);
+    if (
+      selected.length + valueRef.current.length > MAX_BULLETIN_UPLOAD_FILES ||
+      selected.some((file) => file.size > MAX_BULLETIN_UPLOAD_BYTES) ||
+      [...selected, ...valueRef.current].reduce((total, file) => total + file.size, 0) >
+        MAX_BULLETIN_UPLOAD_TOTAL_BYTES
+    ) {
+      setError(t('attachmentLimit'));
+      return;
+    }
+    setError(null);
     const uppy = uppyRef.current;
     uploadingRef.current = true;
     setUploading(true);
     onUploadingChangeRef.current?.(true);
-    onUploadStart?.();
 
     const mapped = Array.from(files).map((file) => ({
       name: file.name,
@@ -283,13 +258,15 @@ export function FileUploadField({
     mapped.forEach((file) => {
       try {
         uppy.addFile(file);
-      } catch {
-        // Preserve current state if Uppy rejects a file.
+      } catch (error) {
+        setError(error instanceof Error ? error.message : t('uploadFailed'));
       }
     });
 
     try {
       await uppy.upload();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('uploadFailed'));
     } finally {
       if (uppyRef.current === uppy) {
         uppy.cancelAll();
@@ -314,12 +291,17 @@ export function FileUploadField({
           type="file"
           multiple
           disabled={disabled || uploading}
-          accept={allowedFileTypes.join(',')}
+          accept={BULLETIN_UPLOAD_EXTENSIONS.join(',')}
           className="sr-only"
           onChange={(event) => void addFiles(event.target.files)}
         />
 
         {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
 
         {existingFiles.length > 0 || uploads.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -356,17 +338,16 @@ export function FileUploadField({
                         href={file.fileUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex"
+                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
                       >
-                        <Button type="button" variant="outline" size="sm">
-                          <Download data-icon="inline-start" />
-                          {t('download')}
-                        </Button>
+                        <Download data-icon="inline-start" />
+                        {t('download')}
                       </a>
                       <Button
                         type="button"
                         variant="destructive"
                         size="sm"
+                        disabled={disabled || uploading}
                         onClick={() => setDeleteIndex(file.index)}
                       >
                         <Trash2 data-icon="inline-start" />
@@ -472,6 +453,7 @@ export function FileUploadField({
             <Button
               type="button"
               variant="destructive"
+              disabled={disabled || uploading}
               onClick={() => {
                 if (deleteIndex !== null) {
                   removeFile(deleteIndex);

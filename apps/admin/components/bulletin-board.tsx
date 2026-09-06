@@ -16,12 +16,13 @@ import {
   X,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
 import { bulletinAiSurfaceDetails } from '../lib/admin-ai-live-surface-details';
 import { requestJson as request } from '../lib/admin-api';
 import {
+  bulletinAttachmentSchema,
   bulletinComposerFormSchema,
   bulletinPostSchema,
   formatBulletinTags,
@@ -51,7 +52,7 @@ import {
 import { Field, FieldContent, FieldLabel } from './ui/field';
 import { Input } from './ui/input';
 import { Markdown } from './ui/markdown';
-import { NativeSelect, NativeSelectOption } from './ui/native-select';
+import { NativeSelect } from './ui/native-select';
 import { Textarea } from './ui/textarea';
 import {
   WorkspaceActions,
@@ -108,28 +109,9 @@ function normalizeAttachments(value: unknown): BulletinAttachment[] {
     return [];
   }
 
-  return value.flatMap((attachment): BulletinAttachment[] => {
-    if (
-      attachment &&
-      typeof attachment === 'object' &&
-      typeof attachment.fileName === 'string' &&
-      typeof attachment.fileUrl === 'string' &&
-      typeof attachment.fileKey === 'string' &&
-      typeof attachment.contentType === 'string' &&
-      typeof attachment.size === 'number'
-    ) {
-      return [
-        {
-          fileName: attachment.fileName,
-          fileUrl: attachment.fileUrl,
-          fileKey: attachment.fileKey,
-          contentType: attachment.contentType,
-          size: attachment.size,
-        },
-      ];
-    }
-
-    return [];
+  return value.flatMap((attachment) => {
+    const parsed = bulletinAttachmentSchema.safeParse(attachment);
+    return parsed.success ? [parsed.data] : [];
   });
 }
 
@@ -138,12 +120,9 @@ function readDraft() {
     return null;
   }
 
-  const raw = window.localStorage.getItem(draftStorageKey);
-  if (!raw) {
-    return null;
-  }
-
   try {
+    const raw = window.localStorage.getItem(draftStorageKey);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<BulletinComposerFormValues> | null;
     if (!parsed || typeof parsed !== 'object') {
       return null;
@@ -166,12 +145,12 @@ function writeDraft(value: BulletinComposerFormValues | null) {
     return;
   }
 
-  if (!value) {
-    window.localStorage.removeItem(draftStorageKey);
-    return;
+  try {
+    if (value) window.localStorage.setItem(draftStorageKey, JSON.stringify(value));
+    else window.localStorage.removeItem(draftStorageKey);
+  } catch {
+    // Storage can be blocked or full; the in-memory composer remains usable.
   }
-
-  window.localStorage.setItem(draftStorageKey, JSON.stringify(value));
 }
 
 function hasDraftContent(value: BulletinComposerFormValues) {
@@ -189,6 +168,29 @@ function formatAttachmentSize(size: number) {
   }
 
   return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function toggleReaction(
+  reactions: BulletinReactionRecord[],
+  emoji: string,
+  user: BulletinReactionRecord['users'][number],
+) {
+  const existing = reactions.find((reaction) => reaction.emoji === emoji);
+  if (!existing) return [...reactions, { emoji, count: 1, reacted: true, users: [user] }];
+  return reactions
+    .map((reaction) =>
+      reaction === existing
+        ? {
+            ...reaction,
+            reacted: !reaction.reacted,
+            count: Math.max(0, reaction.count + (reaction.reacted ? -1 : 1)),
+            users: reaction.reacted
+              ? reaction.users.filter((actor) => actor.id !== user.id)
+              : [...reaction.users, user],
+          }
+        : reaction,
+    )
+    .filter((reaction) => reaction.count > 0);
 }
 
 function updateBulletinBoard(
@@ -366,13 +368,14 @@ export function BulletinBoard() {
 
       return {
         snapshot,
+        queryKey: boardQueryKey,
         values,
         toastId: toast.loading(t('notifications.create.loading', { title: values.title })),
       };
     },
     onError: (_error, _values, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(boardQueryKey, context.snapshot);
+        queryClient.setQueryData(context.queryKey, context.snapshot);
       }
       if (context?.values) {
         form.reset(context.values);
@@ -411,8 +414,8 @@ export function BulletinBoard() {
       toast.success(t('notifications.update.success', { title: values.title }), {
         id: context?.toastId,
       });
-      await refreshBoard();
       cancelComposer();
+      await refreshBoard();
     },
   });
 
@@ -424,8 +427,8 @@ export function BulletinBoard() {
     },
     onSuccess: async (_data, _id, context) => {
       toast.success(t('notifications.delete.success'), { id: context?.toastId });
-      await refreshBoard();
       setDeletePost(null);
+      await refreshBoard();
     },
   });
 
@@ -471,47 +474,22 @@ export function BulletinBoard() {
             return post;
           }
 
-          const existing = post.reactions.find((reaction) => reaction.emoji === emoji);
-          const alreadyReacted = existing?.reacted ?? false;
-          let nextReactions = post.reactions.map((reaction) =>
-            reaction.emoji === emoji
-              ? {
-                  ...reaction,
-                  count: Math.max(0, reaction.count + (alreadyReacted ? -1 : 1)),
-                  reacted: !alreadyReacted,
-                  users: alreadyReacted
-                    ? reaction.users.filter((user) => user.id !== currentUserId)
-                    : [...reaction.users, { id: currentUserId, name: currentUserName, email: '' }],
-                }
-              : reaction,
-          );
-
-          if (!existing) {
-            nextReactions = [
-              ...nextReactions,
-              {
-                emoji,
-                count: 1,
-                reacted: true,
-                users: [{ id: currentUserId, name: currentUserName, email: '' }],
-              },
-            ];
-          }
-
-          nextReactions = nextReactions.filter((reaction) => reaction.count > 0);
-
           return {
             ...post,
-            reactions: nextReactions,
+            reactions: toggleReaction(post.reactions, emoji, {
+              id: currentUserId,
+              name: currentUserName,
+              email: '',
+            }),
           };
         }),
       }));
 
-      return { snapshot, toastId: toast.loading(messages.loading) };
+      return { snapshot, queryKey: boardQueryKey, toastId: toast.loading(messages.loading) };
     },
     onError: (_error, variables, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(boardQueryKey, context.snapshot);
+        queryClient.setQueryData(context.queryKey, context.snapshot);
       }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
@@ -562,11 +540,11 @@ export function BulletinBoard() {
         ),
       }));
 
-      return { snapshot, toastId: toast.loading(messages.loading) };
+      return { snapshot, queryKey: boardQueryKey, toastId: toast.loading(messages.loading) };
     },
     onError: (_error, variables, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(boardQueryKey, context.snapshot);
+        queryClient.setQueryData(context.queryKey, context.snapshot);
       }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
@@ -579,15 +557,8 @@ export function BulletinBoard() {
   const replyDeleteMutation = useMutation({
     mutationFn: ({ replyId }: ReplyDeleteVariables) =>
       request(`/api/bulletin/replies/${replyId}`, { method: 'DELETE' }),
-    onMutate: async ({ messages }) => {
-      await queryClient.cancelQueries({ queryKey: ['bulletin-board'] });
-      const snapshot = queryClient.getQueryData<BulletinResponse>(boardQueryKey);
-      return { snapshot, toastId: toast.loading(messages.loading) };
-    },
+    onMutate: ({ messages }) => ({ toastId: toast.loading(messages.loading) }),
     onError: (_error, variables, context) => {
-      if (context?.snapshot) {
-        queryClient.setQueryData(boardQueryKey, context.snapshot);
-      }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
     onSuccess: async (_data, variables, context) => {
@@ -615,51 +586,23 @@ export function BulletinBoard() {
               return reply;
             }
 
-            const existing = reply.reactions.find((reaction) => reaction.emoji === emoji);
-            const alreadyReacted = existing?.reacted ?? false;
-            let nextReactions = reply.reactions.map((reaction) =>
-              reaction.emoji === emoji
-                ? {
-                    ...reaction,
-                    count: Math.max(0, reaction.count + (alreadyReacted ? -1 : 1)),
-                    reacted: !alreadyReacted,
-                    users: alreadyReacted
-                      ? reaction.users.filter((user) => user.id !== currentUserId)
-                      : [
-                          ...reaction.users,
-                          { id: currentUserId, name: currentUserName, email: '' },
-                        ],
-                  }
-                : reaction,
-            );
-
-            if (!existing) {
-              nextReactions = [
-                ...nextReactions,
-                {
-                  emoji,
-                  count: 1,
-                  reacted: true,
-                  users: [{ id: currentUserId, name: currentUserName, email: '' }],
-                },
-              ];
-            }
-
-            nextReactions = nextReactions.filter((reaction) => reaction.count > 0);
-
             return {
               ...reply,
-              reactions: nextReactions,
+              reactions: toggleReaction(reply.reactions, emoji, {
+                id: currentUserId,
+                name: currentUserName,
+                email: '',
+              }),
             };
           }),
         })),
       }));
 
-      return { snapshot, toastId: toast.loading(messages.loading) };
+      return { snapshot, queryKey: boardQueryKey, toastId: toast.loading(messages.loading) };
     },
     onError: (_error, variables, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(boardQueryKey, context.snapshot);
+        queryClient.setQueryData(context.queryKey, context.snapshot);
       }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
@@ -681,18 +624,7 @@ export function BulletinBoard() {
     form.reset(readDraft() ?? defaultValues);
   }
 
-  const pagePosts = useMemo(
-    () =>
-      boardQuery.data.posts.map((post) => ({
-        ...post,
-        reactions: post.reactions ?? [],
-        replies: (post.replies ?? []).map((reply) => ({
-          ...reply,
-          reactions: reply.reactions ?? [],
-        })),
-      })),
-    [boardQuery.data.posts],
-  );
+  const pagePosts = boardQuery.data.posts;
   const totalPages = boardQuery.data.pagination.totalPages;
   const currentPage = boardQuery.data.pagination.page;
   const pinnedPosts = pagePosts.filter((post) => post.pinned);
@@ -715,7 +647,7 @@ export function BulletinBoard() {
       event.preventDefault();
       return;
     }
-    return form.handleSubmit(async (values) => {
+    return form.handleSubmit((values) => {
       if (attachmentsUploadingRef.current) return;
       const payload = {
         title: values.title,
@@ -744,11 +676,11 @@ export function BulletinBoard() {
       }
 
       if (editingPost) {
-        await updateMutation.mutateAsync({ id: editingPost.id, values });
+        updateMutation.mutate({ id: editingPost.id, values });
         return;
       }
 
-      await createMutation.mutateAsync(values);
+      createMutation.mutate(values);
     })(event);
   };
 
@@ -813,7 +745,7 @@ export function BulletinBoard() {
         })
       }
       onReply={(body) =>
-        replyCreateMutation.mutate({
+        replyCreateMutation.mutateAsync({
           postId: post.id,
           body,
           messages: {
@@ -918,13 +850,9 @@ export function BulletinBoard() {
             setPage(1);
           }}
         >
-          <NativeSelectOption value="updated-desc">
-            {t('filters.sortUpdatedDesc')}
-          </NativeSelectOption>
-          <NativeSelectOption value="updated-asc">{t('filters.sortUpdatedAsc')}</NativeSelectOption>
-          <NativeSelectOption value="created-desc">
-            {t('filters.sortCreatedDesc')}
-          </NativeSelectOption>
+          <option value="updated-desc">{t('filters.sortUpdatedDesc')}</option>
+          <option value="updated-asc">{t('filters.sortUpdatedAsc')}</option>
+          <option value="created-desc">{t('filters.sortCreatedDesc')}</option>
         </NativeSelect>
       </WorkspaceToolbar>
 
@@ -1092,7 +1020,7 @@ export function BulletinBoard() {
             </p>
           </div>
 
-          {pagePosts.length === 0 ? (
+          {pagePosts.length === 0 && !boardQuery.isFetching && !boardQuery.isError ? (
             <div className="border-b border-border/60 px-3 py-10 sm:px-4 lg:px-5">
               <p className="text-sm font-medium text-foreground">{t('empty.title')}</p>
               <p className="mt-1 text-sm text-muted-foreground">{t('empty.description')}</p>
@@ -1247,7 +1175,7 @@ function BulletinPostCard({
   onDelete: () => void;
   onTogglePin: () => void;
   onReact: (emoji: string) => void;
-  onReply: (body: string) => void;
+  onReply: (body: string) => Promise<unknown>;
   onDeleteReply: (reply: BulletinReplyRecord) => void;
   onReplyReact: (reply: BulletinReplyRecord, emoji: string) => void;
 }) {
@@ -1380,10 +1308,14 @@ function BulletinPostCard({
                 type="button"
                 size="sm"
                 disabled={busy || replyBody.trim().length === 0}
-                onClick={() => {
-                  void onReply(replyBody.trim());
-                  setReplyBody('');
-                  setReplyOpen(false);
+                onClick={async () => {
+                  try {
+                    await onReply(replyBody.trim());
+                    setReplyBody('');
+                    setReplyOpen(false);
+                  } catch {
+                    // The mutation reports the error; retain the reply for retry.
+                  }
                 }}
               >
                 {labels.sendReply}

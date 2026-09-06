@@ -52,7 +52,8 @@
     "deleteImageTitle": "حذف الصورة؟",
     "deleteImageDescription": "ستُزال هذه الصورة من النموذج.",
     "deleteAttachmentTitle": "حذف المرفق؟",
-    "deleteAttachmentDescription": "سيُزال هذا الملف من المسودة."
+    "deleteAttachmentDescription": "سيُزال هذا الملف من المسودة.",
+    "attachmentLimit": "الحد الأقصى 8 مرفقات، 20 ميغابايت للملف و40 ميغابايت إجمالاً."
   },
   "productArchive": {
     "title": "المنتجات المؤرشفة",

@@ -5,7 +5,6 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BulletinAttachment } from '../lib/bulletin';
-import { MAX_BULLETIN_UPLOAD_BYTES, MAX_BULLETIN_UPLOAD_TOTAL_BYTES } from '../lib/upload-limits';
 import messages from '../messages/en.json';
 import { FileUploadField } from './file-upload-field';
 
@@ -74,6 +73,7 @@ describe('FileUploadField', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
     vi.restoreAllMocks();
@@ -135,44 +135,6 @@ describe('FileUploadField', () => {
     ]);
   });
 
-  it('forwards the upload response payload through onUploaded', async () => {
-    const uploaded = {
-      fileName: 'sheet.xlsx',
-      fileUrl: 'https://cdn.example.com/sheet.xlsx',
-      fileKey: 'stats/sheet.xlsx',
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      size: 1234,
-    } satisfies BulletinAttachment;
-    const onChange = vi.fn();
-    const onUploaded = vi.fn();
-    const listeners = new Map<string, (...args: unknown[]) => void>();
-
-    mockOn.mockImplementation((event, callback) => {
-      listeners.set(event, callback);
-    });
-
-    render(
-      <FileUploadField
-        uploadUrl="/api/uploads/bulletin"
-        label="Attachments"
-        value={[]}
-        onChange={onChange}
-        onUploaded={onUploaded}
-      />,
-    );
-
-    listeners.get('upload-success')?.(
-      { id: 'f1', name: 'sheet.xlsx' },
-      { body: { files: [uploaded], import: { newOrders: 4 } } },
-    );
-
-    expect(onChange).toHaveBeenCalledWith([uploaded]);
-    expect(onUploaded).toHaveBeenCalledWith({
-      file: uploaded,
-      body: { files: [uploaded], import: { newOrders: 4 } },
-    });
-  });
-
   it('retains both parallel upload completions before the parent rerenders', () => {
     const onChange = vi.fn();
     render(
@@ -189,6 +151,33 @@ describe('FileUploadField', () => {
       success({ id: 'two' }, { body: { files: [value[1]] } });
     });
     expect(onChange).toHaveBeenLastCalledWith(value);
+  });
+
+  it('releases previews and pending completion timers when the composer closes', () => {
+    vi.useFakeTimers();
+    const view = render(
+      <FileUploadField
+        uploadUrl="/api/uploads/bulletin"
+        label="Attachments"
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+    const added = mockOn.mock.calls.find(([event]) => event === 'file-added')![1];
+    const success = mockOn.mock.calls.find(([event]) => event === 'upload-success')![1];
+    act(() => {
+      added({
+        id: 'image',
+        name: 'plan.png',
+        type: 'image/png',
+        data: new File(['image'], 'plan.png'),
+      });
+      success({ id: 'image' }, { body: { files: [value[0]] } });
+    });
+    view.unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+    act(() => vi.runOnlyPendingTimers());
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
   });
 
   it('reports pending work until the upload settles', async () => {
@@ -244,40 +233,27 @@ describe('FileUploadField', () => {
     expect(mockDestroy).toHaveBeenCalledOnce();
   });
 
-  it('can bundle uploads and override the file count limit', () => {
-    render(
+  it('counts existing attachments before accepting another batch and reports upload rejection', async () => {
+    const view = render(
       <FileUploadField
-        uploadUrl="/api/uploads/stats"
-        label="Stats imports"
-        value={[]}
+        uploadUrl="/api/uploads/bulletin"
+        label="Attachments"
+        value={Array.from({ length: 8 }, (_, i) => ({
+          ...value[0]!,
+          fileKey: `bulletin/${i}.png`,
+        }))}
         onChange={vi.fn()}
-        bundleUploads
-        maxNumberOfFiles={100}
-        maxFileSize={5 * 1024 * 1024}
-        allowedFileTypes={['.xlsx', '.xls']}
       />,
     );
-
-    expect(mockUppyConstructor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        restrictions: expect.objectContaining({
-          maxFileSize: 5 * 1024 * 1024,
-          maxNumberOfFiles: 100,
-          allowedFileTypes: ['.xlsx', '.xls'],
-        }),
-      }),
+    await userEvent.upload(
+      view.container.querySelector('input[type="file"]')!,
+      new File(['hello'], 'hello.txt', { type: 'text/plain' }),
     );
-    expect(mockUse).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        bundle: true,
-        fieldName: 'files',
-      }),
-    );
-  });
-
-  it('uses the bulletin server limits and allowlist by default', () => {
-    render(
+    expect(screen.getByRole('alert')).toHaveTextContent('8 attachments');
+    expect(mockUpload).not.toHaveBeenCalled();
+    view.unmount();
+    mockUpload.mockRejectedValue(new Error('Connection lost'));
+    const retry = render(
       <FileUploadField
         uploadUrl="/api/uploads/bulletin"
         label="Attachments"
@@ -285,19 +261,11 @@ describe('FileUploadField', () => {
         onChange={vi.fn()}
       />,
     );
-
-    expect(mockUppyConstructor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        restrictions: expect.objectContaining({
-          maxFileSize: MAX_BULLETIN_UPLOAD_BYTES,
-          maxNumberOfFiles: 8,
-          maxTotalFileSize: MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
-        }),
-      }),
+    await userEvent.upload(
+      retry.container.querySelector('input[type="file"]')!,
+      new File(['hello'], 'hello.txt', { type: 'text/plain' }),
     );
-    expect(document.querySelector('input[type="file"]')).toHaveAttribute(
-      'accept',
-      expect.stringContaining('.pdf'),
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Connection lost');
+    expect(screen.getByRole('button', { name: 'Add files' })).toBeEnabled();
   });
 });

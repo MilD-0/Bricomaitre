@@ -52,7 +52,8 @@
     "deleteImageTitle": "Supprimer l’image ?",
     "deleteImageDescription": "Cette image sera retirée du formulaire.",
     "deleteAttachmentTitle": "Supprimer la pièce jointe ?",
-    "deleteAttachmentDescription": "Ce fichier sera retiré du brouillon."
+    "deleteAttachmentDescription": "Ce fichier sera retiré du brouillon.",
+    "attachmentLimit": "Gardez au maximum 8 pièces jointes, 20 Mo par fichier et 40 Mo au total."
   },
   "productArchive": {
     "title": "Produits archivés",

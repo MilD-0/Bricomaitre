@@ -27,7 +27,6 @@ type ImageUploadFieldProps = {
   uploadUrl: string;
   label: string;
   hint?: string;
-  placeholder?: string;
   multiple?: boolean;
   value: string[];
   onChange: (urls: string[]) => void;
