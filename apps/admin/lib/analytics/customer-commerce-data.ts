@@ -14,7 +14,7 @@ import {
 } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from '../analytics-fact-contract';
-import { effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
+import { correctedEcotrackStatusSql, effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
 import type { AnalyticsFilters } from './contract';
 import { ratio } from './metrics';
 import {
@@ -114,7 +114,7 @@ export async function loadOperationalGeography(
           and ${ecotrackOrderStates.currentAmountSource} = 'ecotrack_orders'
       ), 0)::double precision as provider_amount_cod,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.delivered_at - first_posted.posted_at)) / 3600
+        extract(epoch from (lifecycle.delivered_at - (first_posted.posted_at at time zone 'Africa/Algiers'))) / 3600
       ) filter (where lifecycle.delivered_at is not null)::double precision
         as delivery_median_hours,
       count(*) filter (where lifecycle.delivered_at is not null)::int as delivery_samples,
@@ -185,13 +185,13 @@ export async function loadOperationalCommunes(db: Database, filters: AnalyticsFi
       coalesce(nullif(trim(${orders.city}), ''), 'Unknown') as commune_name,
       count(*)::int as posted_orders,
       count(*) filter (
-        where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        where ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('paye_et_archive', 'payed')
       )::int
         as paid_orders,
-      count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int
+      count(*) filter (where ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} = 'retour_archive')::int
         as returned_orders,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.delivered_at - first_posted.posted_at)) / 3600
+        extract(epoch from (lifecycle.delivered_at - (first_posted.posted_at at time zone 'Africa/Algiers'))) / 3600
       ) filter (where lifecycle.delivered_at is not null)::double precision
         as delivery_median_hours,
       avg(lifecycle.attempt_count) filter (
@@ -278,7 +278,7 @@ export async function loadCustomerEconomics(
     ), selected_orders as materialized (
       select ${orders.id}, ${orders.normalizedPhone}, ${orders.phoneNumber1},
         ${orders.firstName}, ${orders.lastName}, ${orders.city}, ${orders.createdAt},
-        ${orders.totalAmount}
+        ${orders.totalAmount}, ${orders.inHouseStatus}
       from ${orders}
       inner join cohort_customers on cohort_customers.customer_key = coalesce(
         nullif(${orders.normalizedPhone}, ''),
@@ -327,7 +327,7 @@ export async function loadCustomerEconomics(
         ${orders.createdAt} as ordered_at,
         (${orders.createdAt} at time zone 'Africa/Algiers')::date as order_day,
         ${orders.totalAmount}::double precision as order_value,
-        case when ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        case when ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('paye_et_archive', 'payed')
           then coalesce(
             ${ecotrackOrderStates.currentAmount}::double precision,
             ${orders.totalAmount}::double precision
@@ -347,7 +347,7 @@ export async function loadCustomerEconomics(
           )
           order by ${orders.createdAt}, ${orders.id}
         ) as previous_order_at,
-        case when ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        case when ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('paye_et_archive', 'payed')
           and coalesce(
             ${ecotrackOrderStates.currentAmount}::double precision,
             ${orders.totalAmount}::double precision
@@ -372,7 +372,7 @@ export async function loadCustomerEconomics(
             ) * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
           ) end
         end end as paid_contribution,
-        case when ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        case when ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('paye_et_archive', 'payed')
           and not coalesce(line_economics.cost_complete, false)
         then 1 else 0 end as paid_contribution_uses_fallback,
         ${orderAcquisitionAttribution.metaAdId} as meta_ad_id

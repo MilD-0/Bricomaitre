@@ -18,6 +18,7 @@ import {
   ANALYTICS_FACT_SEMANTICS_VERSION,
   ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE,
 } from '../analytics-fact-contract';
+import { effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
 import type { AnalyticsEntityLevel, AnalyticsFilters } from './contract';
 import { isMaterializedEconomicsReport } from './economics-data';
 import { ratio } from './metrics';
@@ -361,6 +362,16 @@ export async function loadMetaPerformance(
     sql`, `,
   );
   const useMaterializedFacts = isMaterializedEconomicsReport(economics);
+  const effectiveStatus = effectiveEcotrackStatusSql({
+    localStatus: orders.inHouseStatus,
+    providerStatus: ecotrackOrderStates.currentStatus,
+    latestActivityAt: sql`lifecycle.latest_activity_at`,
+    fallbackActivityAt: sql`coalesce(
+      ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+      first_posted.posted_at at time zone 'Africa/Algiers'
+    )`,
+    referenceAt: sql`${filters.endDate}::date + interval '1 day'`,
+  });
   const [spendResult, outcomeResult] = await Promise.all([
     db.execute(sql`
       select ${metaAdsDailyInsights.day}::text as day,
@@ -462,14 +473,19 @@ export async function loadMetaPerformance(
       : db.execute(sql`
       with first_posted as (
         select distinct on (${orderStatusHistory.orderId})
-          ${orderStatusHistory.orderId} as order_id
+          ${orderStatusHistory.orderId} as order_id,
+          ${orderStatusHistory.changedAt} as posted_at
         from ${orderStatusHistory}
         where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
         order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-      ), delivered as (
-        select distinct ${ecotrackOrderTrackingEvents.orderId} as order_id
+      ), lifecycle as (
+        select ${ecotrackOrderTrackingEvents.orderId} as order_id,
+          bool_or(${ecotrackOrderTrackingEvents.status} = 'livred') as delivered,
+          max(${ecotrackOrderTrackingEvents.eventDate}::timestamp
+            + coalesce(nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time, time '00:00'))
+            as latest_activity_at
         from ${ecotrackOrderTrackingEvents}
-        where ${ecotrackOrderTrackingEvents.status} = 'livred'
+        group by ${ecotrackOrderTrackingEvents.orderId}
       ), line_economics as (
         select ${orderLineItems.orderId} as order_id,
           bool_and(
@@ -496,20 +512,20 @@ export async function loadMetaPerformance(
         count(*) filter (where ${orders.inHouseStatus} in (${confirmedStatuses}))::int
           as confirmed_orders,
         count(first_posted.order_id)::int as posted_orders,
-        count(delivered.order_id)::int as delivered_orders,
+        count(*) filter (where lifecycle.delivered)::int as delivered_orders,
         count(*) filter (
-          where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+          where ${effectiveStatus} in ('paye_et_archive', 'payed')
         )::int
           as paid_orders,
-        count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int
+        count(*) filter (where ${effectiveStatus} = 'retour_archive')::int
           as returned_orders,
         min((${orderAcquisitionAttribution.capturedAt}
           at time zone 'Africa/Algiers')::date)::text as attribution_start_date,
         coalesce(sum(${stateAwareContributionSql({
           grossProfit: sql`line_economics.product_revenue
             - line_economics.estimated_product_cost`,
-          currentStatus: ecotrackOrderStates.currentStatus,
-          deliveredAt: sql`delivered.order_id`,
+          currentStatus: effectiveStatus,
+          deliveredAt: sql`case when lifecycle.delivered then lifecycle.order_id end`,
           planningReturnRatePct: sql`${economics.settings.defaultReturnRate}`,
         })}) filter (
           where first_posted.order_id is not null
@@ -535,7 +551,7 @@ export async function loadMetaPerformance(
             ) * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
           ) end
           ) filter (
-          where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+          where ${effectiveStatus} in ('paye_et_archive', 'payed')
             and coalesce(
               ${ecotrackOrderStates.deliveryTariff},
               ${ecotrackOrderStates.estimatedFee}
@@ -547,7 +563,7 @@ export async function loadMetaPerformance(
       from ${orderAcquisitionAttribution}
       inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
       left join first_posted on first_posted.order_id = ${orders.id}
-      left join delivered on delivered.order_id = ${orders.id}
+      left join lifecycle on lifecycle.order_id = ${orders.id}
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = ${orders.id}
         and ${ecotrackOrderStates.deletedAt} is null

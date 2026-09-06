@@ -13,7 +13,7 @@ import {
   ANALYTICS_FACT_SEMANTICS_VERSION,
   ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE,
 } from '../analytics-fact-contract';
-import { effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
+import { correctedEcotrackStatusSql, effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
 import { addDays } from './date-range';
 import { isMaterializedEconomicsReport } from './economics-data';
 import { ratio, returnRate } from './metrics';
@@ -158,16 +158,17 @@ export async function loadAttemptDistribution(
         count(${ecotrackOrderTrackingEvents.id}) filter (
           where ${ecotrackOrderTrackingEvents.status} = 'attempt_delivery'
         )::int as attempts,
-        ${ecotrackOrderStates.currentStatus} as outcome
+        ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} as outcome
       from first_posted
+      inner join ${orders} on ${orders.id} = first_posted.order_id
       inner join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
       left join ${ecotrackOrderTrackingEvents}
         on ${ecotrackOrderTrackingEvents.orderId} = first_posted.order_id
       where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
-        and ${ecotrackOrderStates.currentStatus} in (${paidShipmentStatusesSql}, 'retour_archive')
-      group by first_posted.order_id, ${ecotrackOrderStates.currentStatus}
+        and ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in (${paidShipmentStatusesSql}, 'retour_archive')
+      group by first_posted.order_id, ${ecotrackOrderStates.currentStatus}, ${orders.inHouseStatus}
     )
     select outcome,
       case when attempts >= 4 then '4+' else attempts::text end as attempt_band,

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { ecotrackOrderStates, orderLineItems, orderStatusHistory } from '@bric/db/schema';
+import { correctedEcotrackStatusSql } from '../ecotrack-status-policy';
+import { ecotrackOrderStates, orderLineItems, orders, orderStatusHistory } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import {
   getLiveWebsiteProductMetrics,
@@ -49,9 +50,10 @@ async function loadCatalogOperationalSummary(db: Database, filters: AnalyticsFil
     )
     select coalesce(sum(${orderLineItems.quantity}), 0)::int as posted_units,
       coalesce(sum(${orderLineItems.quantity}) filter (
-        where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        where ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('paye_et_archive', 'payed')
       ), 0)::int as paid_units
     from first_posted
+    inner join ${orders} on ${orders.id} = first_posted.order_id
     inner join ${orderLineItems} on ${orderLineItems.orderId} = first_posted.order_id
     left join ${ecotrackOrderStates}
       on ${ecotrackOrderStates.orderId} = first_posted.order_id

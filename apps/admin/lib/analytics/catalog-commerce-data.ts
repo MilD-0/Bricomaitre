@@ -15,7 +15,7 @@ import {
 } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from '../analytics-fact-contract';
-import { effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
+import { correctedEcotrackStatusSql, effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
 import type { AnalyticsFilters } from './contract';
 import { ratio } from './metrics';
 import { datePredicate, nullableNumeric, numeric, timestampPredicate } from './query-values';
@@ -153,11 +153,11 @@ export async function loadOperationalProducts(
         where ${orderLineItems.lineTotal} is not null
       )::double precision as projected_contribution,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.delivered_at - first_posted.posted_at)) / 3600
+        extract(epoch from (lifecycle.delivered_at - (first_posted.posted_at at time zone 'Africa/Algiers'))) / 3600
       ) filter (where lifecycle.delivered_at is not null)::double precision
         as delivery_median_hours,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.paid_at - first_posted.posted_at)) / 3600
+        extract(epoch from (lifecycle.paid_at - (first_posted.posted_at at time zone 'Africa/Algiers'))) / 3600
       ) filter (where lifecycle.paid_at is not null)::double precision
         as payment_median_hours,
       count(distinct ${orderLineItems.orderId}) filter (
@@ -231,7 +231,7 @@ export async function loadProductMetaAssociations(
         ${orderAcquisitionAttribution.metaAdId} as ad_id,
         count(distinct ${orders.id})::int as attributed_orders,
         count(distinct ${orders.id}) filter (
-          where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+          where ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('paye_et_archive', 'payed')
         )::int as paid_orders
       from ${orderAcquisitionAttribution}
       inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}

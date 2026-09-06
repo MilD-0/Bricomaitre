@@ -1,7 +1,7 @@
 import { desc, eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { getDb, getPool } from '@bric/db/client';
+import { createDb, getDb, getPool } from '@bric/db/client';
 import {
   aiConversations,
   aiMessages,
@@ -17,6 +17,9 @@ import {
   orders,
   orderStatusHistory,
   orderLineItems,
+  ecotrackOrderStates,
+  ecotrackOrderTrackingEvents,
+  orderAcquisitionAttribution,
   analyticsJourneys,
   analyticsEvents,
   analyticsDailyRollups,
@@ -34,6 +37,18 @@ import {
   loadEconomicsPair,
   loadMaterializedEconomicsReport,
 } from '../lib/analytics/economics-data';
+import { loadMetaPerformance } from '../lib/analytics/acquisition-data';
+import {
+  loadOperationalProducts,
+  loadProductMetaAssociations,
+} from '../lib/analytics/catalog-commerce-data';
+import {
+  loadOperationalGeography,
+  loadOperationalCommunes,
+  loadCustomerEconomics,
+} from '../lib/analytics/customer-commerce-data';
+import { loadCatalogView } from '../lib/analytics/catalog-view';
+import { loadAttemptDistribution } from '../lib/analytics/fulfillment-cohorts';
 import { loadAssumptionsView } from '../lib/analytics/assumptions-search-views';
 import { loadFulfillmentView } from '../lib/analytics/acquisition-fulfillment-views';
 import { resolveAnalyticsFilters, clipAnalyticsFilters } from '../lib/analytics/date-range';
@@ -171,6 +186,176 @@ describe('durable AI evidence', () => {
       await db
         .delete(analyticsEconomicsDailyFacts)
         .where(eq(analyticsEconomicsDailyFacts.day, day));
+    }
+  });
+
+  it('honors local carrier corrections and measures delivery durations independently of database timezone', async () => {
+    const db = getDb();
+    const day = '2091-07-01';
+    const adId = randomUUID();
+    const [order] = await db
+      .insert(orders)
+      .values({
+        firstName: 'Analytics correction',
+        phoneNumber1: '055' + adId.replace(/\D/g, '').slice(0, 7),
+        createdAt: new Date(day + 'T09:00:00Z'),
+        totalAmount: '500',
+        inHouseStatus: ORDER_STATUS.RETURNED,
+        state: 16,
+        city: 'Audit',
+      })
+      .returning();
+    const filters = resolveAnalyticsFilters({
+      view: 'acquisition',
+      range: 'custom',
+      startDate: day,
+      endDate: day,
+    });
+    try {
+      await db.insert(orderStatusHistory).values({
+        orderId: order!.id,
+        status: ORDER_STATUS.POSTED,
+        changedAt: new Date(day + 'T10:00:00Z'),
+        changedBy: 'audit',
+      });
+      await db.insert(orderLineItems).values({
+        orderId: order!.id,
+        contentId: adId,
+        rawValue: adId,
+        titleSnapshot: 'Analytics product',
+        originalUnitPrice: '500',
+        effectiveUnitPrice: '500',
+        quantity: 1,
+        lineTotal: '500',
+        unitPurchasePriceSnapshot: '100',
+      });
+      await db.insert(ecotrackOrderStates).values({
+        orderId: order!.id,
+        trackingNumber: adId,
+        reference: String(order!.id),
+        currentStatus: 'payed',
+        currentAmount: '500',
+        deliveryTariff: '50',
+      });
+      await db.insert(ecotrackOrderTrackingEvents).values([
+        {
+          orderId: order!.id,
+          trackingNumber: adId,
+          eventDate: day,
+          eventTime: '13:00',
+          status: 'livred',
+          raw: {},
+        },
+        {
+          orderId: order!.id,
+          trackingNumber: adId,
+          eventDate: day,
+          eventTime: '14:00',
+          status: 'payed',
+          raw: {},
+        },
+      ]);
+      await db.insert(orderAcquisitionAttribution).values({
+        orderId: order!.id,
+        semanticsVersion: 'test',
+        attributionModel: 'test',
+        channel: 'meta_paid',
+        landingPath: '/fr',
+        metaAdId: adId,
+        capturedAt: new Date(day + 'T09:00:00Z'),
+      });
+      const economics = await getProfitTrackerReport(
+        { range: 'custom', startDate: day, endDate: day },
+        { db },
+      );
+      const meta = await loadMetaPerformance(db, filters, economics);
+      expect(meta.entities.ads.find((row) => row.id === adId)).toMatchObject({
+        paidOrders: 0,
+        returnedOrders: 1,
+        projectedAdjustedProfitDzd: 0,
+        automaticPaidProfitDzd: 0,
+      });
+      expect(await loadAttemptDistribution(db, day, day)).toEqual([
+        expect.objectContaining({ outcome: 'returned', orders: 1 }),
+      ]);
+      const catalog = await loadCatalogView(db, filters, {
+        orders: day,
+        ordersFrom: day,
+        posted: day,
+        postedFrom: day,
+        ecotrack: day,
+        ecotrackFrom: day,
+        paidFrom: day,
+        meta: day,
+        metaFrom: day,
+        storefront: null,
+        storefrontFrom: null,
+      });
+      expect(catalog.data.metrics.find((metric) => metric.key === 'paidUnits')).toMatchObject({
+        value: 0,
+      });
+      expect((await loadProductMetaAssociations(db, filters))[0]).toMatchObject({
+        productId: adId,
+        paidOrders: 0,
+      });
+      expect((await loadCustomerEconomics(db, filters, 280)).rows[0]).toMatchObject({
+        paidOrders: 0,
+        paidValueDzd: 0,
+        contributionLtvDzd: 0,
+      });
+      for (const timezone of ['UTC', 'Africa/Algiers']) {
+        const zoned = createDb({ max: 1, options: `-c timezone=${timezone}` });
+        try {
+          const products = await loadOperationalProducts(zoned, filters, 15);
+          expect(products.find((row) => row.id === adId)).toMatchObject({
+            deliveryMedianHours: 2,
+            paymentMedianHours: 3,
+          });
+          expect((await loadOperationalGeography(zoned, filters))[0]).toMatchObject({
+            deliveryMedianHours: 2,
+            paidOrders: 0,
+            returnedOrders: 1,
+          });
+          expect((await loadOperationalCommunes(zoned, filters))[0]).toMatchObject({
+            paidOrders: 0,
+            returnedOrders: 1,
+            deliveryMedianHours: 2,
+          });
+        } finally {
+          await zoned.$client.end();
+        }
+      }
+      for (const status of [
+        ORDER_STATUS.MANUAL_COMPLETED,
+        ORDER_STATUS.CANCELLED,
+        ORDER_STATUS.FAILED,
+      ]) {
+        await db.update(orders).set({ inHouseStatus: status }).where(eq(orders.id, order!.id));
+        const correctedMeta = await loadMetaPerformance(db, filters, economics);
+        expect(correctedMeta.entities.ads.find((row) => row.id === adId)).toMatchObject({
+          paidOrders: 0,
+          returnedOrders: 0,
+          automaticPaidProfitDzd: 0,
+          projectedAdjustedProfitDzd:
+            status === ORDER_STATUS.MANUAL_COMPLETED && economics.settings.defaultReturnRate !== 100
+              ? 400
+              : 0,
+        });
+        expect(await loadAttemptDistribution(db, day, day)).toEqual([]);
+        expect((await loadProductMetaAssociations(db, filters))[0]).toMatchObject({
+          paidOrders: 0,
+        });
+        expect((await loadCustomerEconomics(db, filters, 280)).rows[0]).toMatchObject({
+          paidOrders: 0,
+          paidValueDzd: 0,
+        });
+        expect((await loadOperationalCommunes(db, filters))[0]).toMatchObject({
+          paidOrders: 0,
+          returnedOrders: 0,
+        });
+      }
+    } finally {
+      await db.delete(orders).where(eq(orders.id, order!.id));
     }
   });
 

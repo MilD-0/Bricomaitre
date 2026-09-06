@@ -16,6 +16,20 @@ export const ANALYTICS_RESOLVED_SHIPMENT_STATUSES = [
 
 export const ANALYTICS_PAID_SHIPMENT_STATUSES = ['paye_et_archive', 'payed'] as const;
 
+/** Local terminal corrections take precedence over a stale provider snapshot. */
+export function correctedEcotrackStatusSql(input: {
+  localStatus: SQLWrapper;
+  providerStatus: SQLWrapper;
+}) {
+  return sql<string>`case
+    when ${input.localStatus} = ${ORDER_STATUS.CANCELLED} then 'annule'
+    when ${input.localStatus} = ${ORDER_STATUS.RETURNED} then 'retour_archive'
+    when ${input.localStatus} = ${ORDER_STATUS.FAILED} then 'failed'
+    when ${input.localStatus} = ${ORDER_STATUS.MANUAL_COMPLETED} then 'manual_completed'
+    else coalesce(${input.providerStatus}, 'untracked')
+  end`;
+}
+
 export function effectiveEcotrackStatusSql(input: {
   localStatus: SQLWrapper;
   providerStatus: SQLWrapper;
@@ -23,17 +37,14 @@ export function effectiveEcotrackStatusSql(input: {
   fallbackActivityAt: SQLWrapper;
   referenceAt: SQLWrapper;
 }) {
+  const correctedStatus = correctedEcotrackStatusSql(input);
   return sql<string>`case
-    when ${input.localStatus} = ${ORDER_STATUS.CANCELLED} then 'annule'
-    when ${input.localStatus} = ${ORDER_STATUS.RETURNED} then 'retour_archive'
-    when ${input.localStatus} = ${ORDER_STATUS.FAILED} then 'failed'
-    when ${input.localStatus} = ${ORDER_STATUS.MANUAL_COMPLETED} then 'manual_completed'
-    when ${input.providerStatus} = 'prete_a_expedier'
+    when ${correctedStatus} = 'prete_a_expedier'
       and ${input.referenceAt} - coalesce(
         ${input.latestActivityAt},
         ${input.fallbackActivityAt}
       ) >= ${ECOTRACK_FAILED_STATUS_MAX_AGE_DAYS} * interval '1 day'
       then 'failed'
-    else coalesce(${input.providerStatus}, 'untracked')
+    else ${correctedStatus}
   end`;
 }
