@@ -13,7 +13,6 @@ export type LegacyImportCliOptions = {
   productsPath: string | null;
   ordersPath: string | null;
   skipBlockedOrders: boolean;
-  dryRun: boolean;
   replace: boolean;
   json: boolean;
   dropScope: DropScope | null;
@@ -23,9 +22,16 @@ export type LegacyImportCliOptions = {
 export type LegacyImportFilePaths = Record<ImportTarget, string>;
 
 export function parseLegacyImportArgs(argv: string[]): LegacyImportCliOptions {
-  const dryRun = argv.includes('--dry-run') || !argv.includes('--replace');
-  const replace = argv.includes('--replace');
-  const dropScope = readOption(argv, '--drop-scope') as DropScope | null;
+  const replace = argv.includes('--replace') && !argv.includes('--dry-run');
+  const dropScope = readOption(argv, '--drop-scope');
+  if (
+    dropScope !== null &&
+    dropScope !== 'all' &&
+    dropScope !== 'import' &&
+    dropScope !== 'custom'
+  ) {
+    throw new Error('Drop scope must be all, import, or custom.');
+  }
   const dropTablesOption = readOption(argv, '--drop-tables');
 
   return {
@@ -35,7 +41,6 @@ export function parseLegacyImportArgs(argv: string[]): LegacyImportCliOptions {
     productsPath: readOption(argv, '--products'),
     ordersPath: readOption(argv, '--orders'),
     skipBlockedOrders: argv.includes('--skip-blocked-orders'),
-    dryRun,
     replace,
     json: argv.includes('--json'),
     dropScope,

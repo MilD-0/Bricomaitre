@@ -10,15 +10,16 @@ describe('tools/legacy-data/legacy-mongo-import-script', () => {
   it('defaults to dry-run mode until --replace is provided', () => {
     expect(parseLegacyImportArgs([])).toEqual(
       expect.objectContaining({
-        dryRun: true,
         replace: false,
         skipBlockedOrders: false,
       }),
     );
 
+    expect(() => parseLegacyImportArgs(['--replace', '--drop-scope', 'typo'])).toThrow(
+      'Drop scope',
+    );
     expect(parseLegacyImportArgs(['--replace', '--skip-blocked-orders'])).toEqual(
       expect.objectContaining({
-        dryRun: false,
         replace: true,
         skipBlockedOrders: true,
       }),
@@ -39,7 +40,6 @@ describe('tools/legacy-data/legacy-mongo-import-script', () => {
         productsPath: null,
         ordersPath: null,
         skipBlockedOrders: false,
-        dryRun: false,
         replace: true,
         json: false,
         dropScope: null,
@@ -55,7 +55,6 @@ describe('tools/legacy-data/legacy-mongo-import-script', () => {
         productsPath: null,
         ordersPath: null,
         skipBlockedOrders: false,
-        dryRun: false,
         replace: true,
         json: false,
         dropScope: 'custom',
