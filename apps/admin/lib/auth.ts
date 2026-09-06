@@ -4,10 +4,11 @@ import { betterAuth } from 'better-auth/minimal';
 import { nextCookies } from 'better-auth/next-js';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { cache } from 'react';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { accounts, sessions, users, verificationTokens } from '@bric/db/schema';
-import { isEmailAllowed, loadAccessProfileForUserId } from './access';
+import { buildAccessProfile, isEmailAllowed, loadAccessProfileForUserId } from './access';
 import type { PermissionKey, Role } from './permissions';
 
 const getRequiredEnv = (
@@ -112,7 +113,7 @@ export type AdminSession = Omit<BetterAuthSession, 'user'> & {
   };
 };
 
-export async function auth(): Promise<AdminSession | null> {
+export const auth = cache(async (): Promise<AdminSession | null> => {
   if (!hasDb()) {
     return null;
   }
@@ -123,9 +124,7 @@ export async function auth(): Promise<AdminSession | null> {
     return null;
   }
 
-  const access = await loadAccessProfileForUserId(session.user.id, {
-    email: session.user.email,
-  });
+  const access = await buildAccessProfile({ email: session.user.email });
 
   return {
     ...session,
@@ -138,7 +137,7 @@ export async function auth(): Promise<AdminSession | null> {
       roleLabel: access.roleLabel ?? undefined,
     },
   };
-}
+});
 
 export async function signIn(provider: 'google', options: { redirectTo: string }) {
   const result = await authServer.api.signInSocial({

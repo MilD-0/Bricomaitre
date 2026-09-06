@@ -3,10 +3,7 @@ import { getStorefrontPublicBaseUrl } from '../../../lib/storefront-public-url';
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { AppShell } from '../../../components/layout/app-shell';
-import { getDb, hasDb } from '@bric/db/client';
-import { users } from '@bric/db/schema';
 import { auth } from '../../../lib/auth';
-import { eq } from 'drizzle-orm';
 import { getAdminAiModelOptions } from '../../../lib/admin-ai-models';
 
 export default async function ProtectedLayout({
@@ -22,17 +19,6 @@ export default async function ProtectedLayout({
   if (!session?.user?.isAllowed) {
     redirect(`/${locale}`);
   }
-  const userId = session.user.id;
-  const persistedUser =
-    hasDb() && userId
-      ? await getDb().query.users.findFirst({
-          where: eq(users.id, userId),
-          columns: {
-            image: true,
-          },
-        })
-      : null;
-
   return (
     <StorefrontOriginProvider value={getStorefrontPublicBaseUrl()}>
       <AppShell
@@ -44,7 +30,7 @@ export default async function ProtectedLayout({
         initialIsAllowed={session.user.isAllowed}
         initialRoleLabel={session.user.roleLabel}
         initialUserEmail={session.user.email}
-        initialUserImage={persistedUser?.image ?? session.user.image}
+        initialUserImage={session.user.image}
         initialUserName={session.user.name}
       >
         {children}

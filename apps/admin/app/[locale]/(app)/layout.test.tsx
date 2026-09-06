@@ -1,28 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 
-const { authMock, hasDbMock, getDbMock, appShellMock, redirectMock, connectionMock } = vi.hoisted(
-  () => ({
-    authMock: vi.fn(),
-    hasDbMock: vi.fn(),
-    getDbMock: vi.fn(),
-    appShellMock: vi.fn(({ children }: { children: React.ReactNode }) => <div>{children}</div>),
-    redirectMock: vi.fn(),
-    connectionMock: vi.fn(),
-  }),
-);
+const { authMock, appShellMock, redirectMock, connectionMock } = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  appShellMock: vi.fn(({ children }: { children: React.ReactNode }) => <div>{children}</div>),
+  redirectMock: vi.fn(),
+  connectionMock: vi.fn(),
+}));
 
 vi.mock('../../../lib/auth', () => ({
   auth: authMock,
-}));
-
-vi.mock('@bric/db/client', () => ({
-  hasDb: hasDbMock,
-  getDb: getDbMock,
-}));
-
-vi.mock('@bric/db/schema', () => ({
-  users: { id: 'id' },
 }));
 
 vi.mock('../../../components/layout/app-shell', () => ({
@@ -57,19 +44,9 @@ describe('app/[locale]/(app)/layout', () => {
         roleLabel: null,
       },
     });
-    hasDbMock.mockReturnValue(true);
-    getDbMock.mockReturnValue({
-      query: {
-        users: {
-          findFirst: vi.fn().mockResolvedValue({
-            image: 'https://db.example.com/avatar.png',
-          }),
-        },
-      },
-    });
   });
 
-  it('prefers the users table image for the sidebar avatar', async () => {
+  it('provides the authenticated profile and permissions to the application shell', async () => {
     const ui = await ProtectedLayout({
       children: <div>content</div>,
       params: Promise.resolve({ locale: 'en' }),
@@ -80,29 +57,10 @@ describe('app/[locale]/(app)/layout', () => {
       expect.objectContaining({
         initialUserEmail: 'ada@example.com',
         initialUserName: 'Ada Lovelace',
-        initialUserImage: 'https://db.example.com/avatar.png',
+        initialUserImage: 'https://session.example.com/avatar.png',
+        initialPermissions: ['products_write'],
+        initialIsAllowed: true,
       }),
-      undefined,
-    );
-  });
-
-  it('falls back to the session image when the user row is unavailable', async () => {
-    getDbMock.mockReturnValue({
-      query: {
-        users: {
-          findFirst: vi.fn().mockResolvedValue(null),
-        },
-      },
-    });
-
-    const ui = await ProtectedLayout({
-      children: <div>content</div>,
-      params: Promise.resolve({ locale: 'en' }),
-    });
-
-    render(ui);
-    expect(appShellMock).toHaveBeenCalledWith(
-      expect.objectContaining({ initialUserImage: 'https://session.example.com/avatar.png' }),
       undefined,
     );
   });
@@ -120,8 +78,7 @@ describe('app/[locale]/(app)/layout', () => {
         params: Promise.resolve({ locale: 'fr' }),
       }),
     ).rejects.toThrow('REDIRECT');
-    expect(getDbMock).not.toHaveBeenCalled();
-
+    expect(appShellMock).not.toHaveBeenCalled();
     expect(redirectMock).toHaveBeenCalledWith('/fr');
   });
 });
