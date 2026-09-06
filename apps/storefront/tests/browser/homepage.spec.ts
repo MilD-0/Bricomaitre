@@ -9,8 +9,19 @@ test('renders the production homepage hierarchy with responsive banner media', a
     'srcset',
     /portrait/,
   );
-  await expect(banner.locator('.home-banner-picture').first()).toHaveClass(/is-ready/);
-  await expect(banner.locator('.home-banner-picture').nth(1)).toHaveClass(/is-ready/);
+  await expect(banner.locator('picture img')).toHaveCount(2);
+  await expect
+    .poll(() =>
+      banner
+        .locator('picture img')
+        .evaluateAll((images) =>
+          images.every(
+            (image) =>
+              (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0,
+          ),
+        ),
+    )
+    .toBe(true);
   const bannerBox = await banner.locator('.home-banner-picture').first().boundingBox();
   expect(bannerBox).not.toBeNull();
   expect(bannerBox!.height).toBeCloseTo((bannerBox!.width * 21) / 50, 0);

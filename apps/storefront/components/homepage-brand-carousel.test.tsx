@@ -1,6 +1,6 @@
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { homepageFixtureResponse } from '@/test/fixtures/homepage';
 import {
@@ -18,6 +18,8 @@ vi.mock('embla-carousel-react', () => ({ default: mocks.embla }));
 vi.mock('@/components/storefront-image', () => ({
   StorefrontImage: (props: Record<string, unknown>) => React.createElement('img', props),
 }));
+
+afterEach(() => vi.unstubAllGlobals());
 
 const stamp = '2026-07-01T00:00:00.000Z';
 const brands = [
@@ -204,5 +206,73 @@ describe('HomepageBrandCarousel', () => {
     await waitFor(() =>
       expect(overflow.container.querySelector('.home-carousel-controls')).toBeInTheDocument(),
     );
+  });
+  it('cancels obsolete group requests and retries failed pages without replacing current cards', async () => {
+    const listeners = new Map<string, Set<() => void>>();
+    const api = {
+      rootNode: () => ({ clientWidth: 100, scrollWidth: 200 }),
+      canScrollPrev: () => false,
+      canScrollNext: () => true,
+      selectedScrollSnap: () => 1,
+      scrollSnapList: () => [0, 1],
+      on: (event: string, callback: () => void) => {
+        const set = listeners.get(event) ?? new Set();
+        set.add(callback);
+        listeners.set(event, set);
+      },
+      off: (event: string, callback: () => void) => listeners.get(event)?.delete(callback),
+    };
+    mocks.embla.mockReturnValue([vi.fn(), api] as never);
+    const pending = Promise.withResolvers<Response>();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(pending.promise)
+      .mockRejectedValueOnce(new TypeError('Network unavailable'))
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [
+            { ...homepageFixtureResponse.topProducts[0]!, id: 93, title: 'New page product' },
+          ],
+          total: 2,
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const initial = [homepageFixtureResponse.topProducts[0]!];
+    const next = [{ ...initial[0]!, id: 92, title: 'Current selection' }];
+    const props = {
+      locale: 'fr' as const,
+      brands: homepageFixtureResponse.brands,
+      categories: homepageFixtureResponse.categories,
+    };
+    const { container, rerender } = render(
+      <HomepageProductCarousel {...props} products={initial} featuredGroupId={1} />,
+    );
+    await act(async () => {
+      listeners.get('select')?.forEach((callback) => callback());
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    rerender(<HomepageProductCarousel {...props} products={next} featuredGroupId={2} />);
+    expect((fetchMock.mock.calls[0]![1]!.signal as AbortSignal).aborted).toBe(true);
+    await act(async () => {
+      pending.resolve(
+        Response.json({ items: [{ ...initial[0]!, id: 91, title: 'Obsolete product' }], total: 2 }),
+      );
+    });
+    expect(container).not.toHaveTextContent('Obsolete product');
+    expect(container).toHaveTextContent('Current selection');
+    await act(async () => {
+      listeners.get('select')?.forEach((callback) => callback());
+    });
+    expect(container).not.toHaveTextContent('Chargement…');
+    await act(async () => {
+      listeners.get('select')?.forEach((callback) => callback());
+    });
+    expect(container).toHaveTextContent('New page product');
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/homepage/groups/1?page=2&limit=12',
+      '/api/homepage/groups/2?page=2&limit=12',
+      '/api/homepage/groups/2?page=2&limit=12',
+    ]);
+    mocks.embla.mockReturnValue([vi.fn(), null]);
   });
 });

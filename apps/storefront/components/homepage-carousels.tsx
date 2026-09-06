@@ -2,6 +2,8 @@
 
 import AutoScroll from 'embla-carousel-auto-scroll';
 import useEmblaCarousel from 'embla-carousel-react';
+import { z } from 'zod';
+import { storefrontCatalogCardSchema } from '@bric/storefront-core/contracts';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -14,6 +16,10 @@ import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts
 type Product = CatalogProduct;
 type Category = StorefrontHomepageResponse['categories'][number];
 type Brand = StorefrontHomepageResponse['brands'][number];
+const featuredPageSchema = z.object({
+  items: z.array(storefrontCatalogCardSchema),
+  total: z.number().int().nonnegative(),
+});
 const touchCarouselOptions = { align: 'start' as const, dragFree: true };
 
 function Controls({
@@ -142,50 +148,57 @@ export function HomepageProductCarousel({
   const [nextPage, setNextPage] = useState(2);
   const [total, setTotal] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const loadingRef = useRef(false);
-  const initialProductIds = useMemo(
-    () => products.map((product) => product.id).join(','),
-    [products],
-  );
+  const requestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    let active = true;
     queueMicrotask(() => {
+      if (!active) return;
       setLoadedProducts(products);
       setNextPage(2);
       setTotal(null);
       setLoadingMore(false);
     });
-    loadingRef.current = false;
-  }, [featuredGroupId, initialProductIds, products]);
+    return () => {
+      active = false;
+      requestRef.current?.abort();
+      requestRef.current = null;
+    };
+  }, [featuredGroupId, products]);
 
   const loadNextPage = useCallback(async () => {
     if (
       !featuredGroupId ||
-      loadingRef.current ||
+      requestRef.current ||
       (total !== null && loadedProducts.length >= total)
     )
       return;
-    loadingRef.current = true;
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoadingMore(true);
     try {
       const response = await fetch(
         `/api/homepage/groups/${featuredGroupId}?page=${nextPage}&limit=12`,
-        { headers: { accept: 'application/json' } },
+        { headers: { accept: 'application/json' }, signal: controller.signal },
       );
       if (!response.ok) return;
-      const payload = (await response.json()) as { items?: Product[]; total?: number };
-      if (!Array.isArray(payload.items)) return;
+      const payload = featuredPageSchema.parse(await response.json());
+      if (controller.signal.aborted) return;
       const nextItems = payload.items;
       setLoadedProducts((current) => {
         const byId = new Map(current.map((product) => [product.id, product]));
         nextItems.forEach((product) => byId.set(product.id, product));
         return [...byId.values()];
       });
-      setTotal(typeof payload.total === 'number' ? payload.total : null);
+      setTotal(payload.total);
       setNextPage((current) => current + 1);
+    } catch {
+      // Keep the current selection usable and let a later carousel interaction retry.
     } finally {
-      loadingRef.current = false;
-      setLoadingMore(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setLoadingMore(false);
+      }
     }
   }, [featuredGroupId, loadedProducts.length, nextPage, total]);
 

@@ -2,44 +2,6 @@
   display: grid;
   gap: clamp(2.7rem, 7vw, 5.5rem);
 }
-.home-loading {
-  min-height: 34rem;
-  border-radius: var(--squircle-lg);
-  corner-shape: squircle;
-  background: linear-gradient(
-    100deg,
-    var(--sf-surface-subtle, #e8eae8) 25%,
-    var(--sf-surface-subtle, #f2f3f2) 40%,
-    var(--sf-surface-subtle, #e8eae8) 55%
-  );
-  background-size: 240% 100%;
-  animation: home-loading-shimmer var(--sf-duration-slow, 1.4s) linear infinite;
-}
-@keyframes home-loading-shimmer {
-  to {
-    background-position-x: -240%;
-  }
-}
-.home-primary-cta {
-  min-height: 3.15rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--sf-radius-card, 1rem);
-  corner-shape: squircle;
-  padding-inline: calc(1.25rem * var(--sf-density));
-  font-size: var(--sf-type-small, 0.8rem);
-  font-weight: var(--sf-weight-bold, 760);
-  transition:
-    transform var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
-    background-color var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
-    box-shadow var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease);
-}
-.home-primary-cta {
-  background: var(--commerce-orange);
-  color: var(--sf-text-strong, #202529);
-  box-shadow: var(--sf-shadow-raised, 0 10px 23px rgba(188, 70, 10, 0.22));
-}
 .home-trust-band {
   overflow: hidden;
   border: var(--sf-border-width, 1px) solid var(--sf-border-default, #dce0e1);
@@ -504,11 +466,6 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .home-primary-cta:hover {
-    background: var(--commerce-orange-strong);
-    box-shadow: var(--sf-shadow-floating, 0 13px 26px rgba(188, 70, 10, 0.29));
-    transform: translateY(-2px);
-  }
   .home-carousel-controls button:hover {
     border-color: var(--sf-border-default, #9eaaad);
     color: var(--brand-teal);
@@ -738,12 +695,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-loading {
-    animation: none;
-  }
-  .home-primary-cta {
-    transition: none;
-  }
   .home-banner-picture > picture:last-child,
   .home-category-carousel a,
   .home-category-carousel img,

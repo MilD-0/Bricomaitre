@@ -5,7 +5,7 @@ import { CatalogInfiniteLoader } from '@/components/catalog-infinite-loader';
 import { SimilarProductsTelemetry } from '@/components/similar-products-telemetry';
 import type { Locale } from '@/i18n/config';
 import { SIMILAR_PRODUCTS_PAGE_SIZE, toStorefrontCatalogQuery } from '@/lib/catalog-query';
-import { buildSimilarProductsQuery, rankSimilarProducts } from '@/lib/similar-products';
+import { buildSimilarProductsQuery } from '@/lib/similar-products';
 import { getStorefrontCatalog, getStorefrontCatalogMeta } from '@/lib/storefront-api';
 
 export async function SimilarProducts({
@@ -26,8 +26,9 @@ export async function SimilarProducts({
   }).catch(() => null);
   if (!catalogResult) return null;
 
-  const ranked = rankSimilarProducts(catalogResult.items, currentProductId);
-  const products = ranked.slice(0, SIMILAR_PRODUCTS_PAGE_SIZE);
+  const products = catalogResult.items
+    .filter((product) => product.id !== currentProductId)
+    .slice(0, SIMILAR_PRODUCTS_PAGE_SIZE);
   const totalCount = Math.max(0, catalogResult.total - 1);
   const hasNextPage = products.length < totalCount;
   if (products.length === 0 && !hasNextPage) return null;

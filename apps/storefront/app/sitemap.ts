@@ -4,20 +4,10 @@ import { buildStorefrontSitemap } from '@/lib/seo-routes';
 import { getStorefrontCatalogMeta, getStorefrontSitemapProducts } from '@/lib/storefront-api';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  let products: Awaited<ReturnType<typeof getStorefrontSitemapProducts>> = [];
-  let taxonomy: Awaited<ReturnType<typeof getStorefrontCatalogMeta>> = {
-    categories: [],
-    brands: [],
-  };
-  try {
-    products = await getStorefrontSitemapProducts();
-  } catch {
-    // Keep the stable public entry points discoverable during a catalog outage.
-  }
-  try {
-    taxonomy = await getStorefrontCatalogMeta();
-  } catch {
-    // Product and static routes remain useful even when taxonomy metadata is unavailable.
-  }
+  // Independent sources preserve the remaining discovery routes during a partial outage.
+  const [products, taxonomy] = await Promise.all([
+    getStorefrontSitemapProducts().catch(() => []),
+    getStorefrontCatalogMeta().catch(() => ({ categories: [], brands: [] })),
+  ]);
   return buildStorefrontSitemap(products, taxonomy);
 }

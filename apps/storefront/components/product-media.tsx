@@ -75,7 +75,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
   const activeIndexRef = useRef(0);
   const imageSizes = useRef(new Map<string, { width: number; height: number }>());
   const lightboxRef = useRef<ProductLightbox | null>(null);
-  const lightboxPromiseRef = useRef<Promise<ProductLightbox> | null>(null);
+  const lightboxPromiseRef = useRef<Promise<ProductLightbox | null> | null>(null);
   const mountedRef = useRef(true);
   const openingRef = useRef(false);
 
@@ -133,6 +133,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
 
     lightboxPromiseRef.current = import('photoswipe/lightbox').then(
       ({ default: PhotoSwipeLightbox }) => {
+        if (!mountedRef.current) return null;
         const lightbox = new PhotoSwipeLightbox({
           dataSource: items.map((item, index) => ({
             src: item.url,
@@ -206,7 +207,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
 
     try {
       const lightbox = await getLightbox();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !lightbox) return;
       const opened = lightbox.loadAndOpen(index, undefined, {
         x: event.clientX,
         y: event.clientY,
@@ -216,7 +217,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
         trackMedia('open', index);
       }
     } catch {
-      window.location.assign(item.url);
+      if (mountedRef.current) window.location.assign(item.url);
     } finally {
       openingRef.current = false;
     }

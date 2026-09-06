@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSimilarProductsQuery, rankSimilarProducts } from './similar-products';
-
-const product = (id: number, brandId: number | null, inStock: boolean) => ({
-  id,
-  brandId,
-  inStock,
-});
+import { buildSimilarProductsQuery } from './similar-products';
 
 describe('similar product matching', () => {
   it('uses category as the strongest relevance boundary and brand as fallback', () => {
@@ -20,13 +14,5 @@ describe('similar product matching', () => {
       brand: 2,
       sort: 'recommended',
     });
-  });
-
-  it('excludes the current product while retaining the relevant recommended order', () => {
-    const ranked = rankSimilarProducts(
-      [product(12, 2, true), product(13, 4, true), product(14, 2, false), product(15, 2, true)],
-      12,
-    );
-    expect(ranked.map(({ id }) => id)).toEqual([13, 14, 15]);
   });
 });

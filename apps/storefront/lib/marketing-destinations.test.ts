@@ -1,12 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { StorefrontAnalyticsPayload } from './analytics';
-import {
-  buildMetaServerEvent,
-  deliverClientMarketingEvent,
-  mapMetaEvent,
-  prepareMarketingDestinations,
-} from './marketing-destinations';
+let destinations: typeof import('./marketing-destinations');
 
 function payload(overrides: Partial<StorefrontAnalyticsPayload> = {}): StorefrontAnalyticsPayload {
   return {
@@ -59,14 +54,18 @@ function payload(overrides: Partial<StorefrontAnalyticsPayload> = {}): Storefron
 }
 
 describe('client destination mappings', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    destinations = await import('./marketing-destinations');
     delete window.fbq;
+    delete window._fbq;
   });
+  afterEach(() => vi.unstubAllEnvs());
 
   it('prepares only the Meta queue without injecting vendor scripts', () => {
     vi.stubEnv('NEXT_PUBLIC_TIKTOK_PIXEL_ID', 'tt-id');
     vi.stubEnv('NEXT_PUBLIC_GA_MEASUREMENT_ID', 'G-TEST');
-    prepareMarketingDestinations({ metaPixelId: 'meta-id' });
+    destinations.prepareMarketingDestinations({ metaPixelId: 'meta-id' });
     expect(window.fbq).toBeTypeOf('function');
     expect('gtag' in window).toBe(false);
     expect('dataLayer' in window).toBe(false);
@@ -75,11 +74,11 @@ describe('client destination mappings', () => {
   });
 
   it('uses governed Meta names and commerce parameters', () => {
-    expect(mapMetaEvent(payload())).toMatchObject({
+    expect(destinations.mapMetaEvent(payload())).toMatchObject({
       name: 'ViewContent',
       params: { content_ids: ['12'] },
     });
-    expect(mapMetaEvent(payload())).toMatchObject({
+    expect(destinations.mapMetaEvent(payload())).toMatchObject({
       params: { value: 4500, contents: [{ id: '12', quantity: 2, item_price: 2250 }] },
     });
   });
@@ -113,7 +112,7 @@ describe('client destination mappings', () => {
         ],
       },
     });
-    const mapped = mapMetaEvent(purchase);
+    const mapped = destinations.mapMetaEvent(purchase);
     expect(mapped).toMatchObject({
       name: 'Purchase',
       params: {
@@ -126,7 +125,7 @@ describe('client destination mappings', () => {
       },
     });
     expect(JSON.stringify(mapped)).not.toMatch(/phone|email|address/i);
-    expect(buildMetaServerEvent(purchase)).toBeNull();
+    expect(destinations.buildMetaServerEvent(purchase)).toBeNull();
   });
 
   it('maps every checkout line to Pixel and server CAPI using numeric catalog ids', () => {
@@ -160,11 +159,11 @@ describe('client destination mappings', () => {
       },
     });
 
-    expect(mapMetaEvent(checkout)).toMatchObject({
+    expect(destinations.mapMetaEvent(checkout)).toMatchObject({
       name: 'InitiateCheckout',
       params: { content_ids: ['12', '34'], value: 8000 },
     });
-    expect(buildMetaServerEvent(checkout)).toMatchObject({
+    expect(destinations.buildMetaServerEvent(checkout)).toMatchObject({
       eventName: 'InitiateCheckout',
       items: [
         { productId: 12, quantity: 2 },
@@ -173,15 +172,29 @@ describe('client destination mappings', () => {
     });
   });
 
-  it('keeps throwing or blocked vendor globals non-blocking', () => {
-    window.fbq = vi.fn(() => {
-      throw new Error('blocked');
-    });
-    expect(deliverClientMarketingEvent(payload()).meta.invoked).toBe(false);
+  it('retries failed initialization and only deduplicates successful event invocations', () => {
+    vi.stubEnv('NEXT_PUBLIC_FACEBOOK_PIXEL_ID', 'meta-id');
+    const pixel = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('blocked initialization');
+      })
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(() => {
+        throw new Error('blocked tracking');
+      })
+      .mockImplementation(() => undefined);
+    window.fbq = pixel;
+    expect(destinations.deliverClientMarketingEvent(payload()).meta.invoked).toBe(false);
+    expect(pixel.mock.calls.map((call) => call[0])).toEqual(['init']);
+    expect(destinations.deliverClientMarketingEvent(payload()).meta.invoked).toBe(false);
+    expect(destinations.deliverClientMarketingEvent(payload()).meta.invoked).toBe(true);
+    expect(destinations.deliverClientMarketingEvent(payload()).meta.invoked).toBe(true);
+    expect(pixel.mock.calls.map((call) => call[0])).toEqual(['init', 'init', 'track', 'track']);
   });
 
   it('builds an allowlisted Meta server event for non-purchase interactions', () => {
-    expect(buildMetaServerEvent(payload())).toEqual(
+    expect(destinations.buildMetaServerEvent(payload())).toEqual(
       expect.objectContaining({
         eventId: 'event-1',
         eventName: 'ViewContent',

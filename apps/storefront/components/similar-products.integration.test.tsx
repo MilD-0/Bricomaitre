@@ -15,9 +15,7 @@ vi.mock('next-intl/server', () => ({
       (key: string) =>
         (
           ({
-            similarEyebrow: 'Same work',
             similarTitle: 'Similar products',
-            similarDescription: 'Matched for this product',
             inStock: 'In stock',
             outOfStock: 'Unavailable',
             priceOnRequest: 'Ask',
@@ -62,7 +60,12 @@ const relatedProduct = {
 
 describe('SimilarProducts', () => {
   beforeEach(() => {
-    mocks.catalog.mockReset().mockResolvedValue({ items: [relatedProduct], total: 2 });
+    mocks.catalog
+      .mockReset()
+      .mockResolvedValue({
+        items: [{ ...relatedProduct, id: 12, slug: 'current-product' }, relatedProduct],
+        total: 2,
+      });
     mocks.meta.mockReset().mockResolvedValue({
       brands: [{ id: 2, name: 'Bric' }],
       categories: [{ id: 3, name: 'Lighting', nameAr: 'إضاءة' }],
@@ -78,8 +81,7 @@ describe('SimilarProducts', () => {
     });
     const html = renderToStaticMarkup(element);
     expect(html).toContain('Similar products');
-    expect(html).not.toContain('Same work');
-    expect(html).not.toContain('Matched for this product');
+    expect(html).not.toContain('/fr/products/current-product');
     expect(html).toContain('/fr/products/work-light');
     expect(html).toContain('data-page-size="6"');
     expect(html).toContain('data-list-context="similar_products"');

@@ -22,14 +22,9 @@ import { CheckoutOrderError, verifyCheckoutOrderByToken } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
 
 type Labels = {
-  verifying: string;
   title: string;
   description: string;
   orderNumber: string;
-  nextTitle: string;
-  nextOne: string;
-  nextTwo: string;
-  nextThree: string;
   summary: string;
   quantity: string;
   subtotal: string;

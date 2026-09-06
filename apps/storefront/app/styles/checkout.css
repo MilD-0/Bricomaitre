@@ -650,33 +650,6 @@
 .support-contact-panel .support-contact-actions {
   margin-inline-start: auto;
 }
-.thank-you-next {
-  margin-block: calc(2rem * var(--sf-density));
-  padding-block: calc(1.5rem * var(--sf-density));
-  border-block: var(--sf-border-width, 1px) solid var(--sf-border-default, #dce1e2);
-}
-.thank-you-next ol {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: calc(1.25rem * var(--sf-density));
-  margin: calc(1.2rem * var(--sf-density)) 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: next-step;
-}
-.thank-you-next li {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: calc(0.75rem * var(--sf-density));
-  color: var(--sf-text-muted, #5d676b);
-  font-size: var(--sf-type-small, 0.82rem);
-  line-height: var(--sf-leading-snug, 1.45);
-}
-.thank-you-next li svg {
-  width: 1.3rem;
-  color: var(--primary);
-}
 .thank-you-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(17rem, 0.7fr);
@@ -779,9 +752,6 @@
     grid-column: auto;
   }
   .checkout-delivery {
-    grid-template-columns: 1fr;
-  }
-  .thank-you-next ol {
     grid-template-columns: 1fr;
   }
   .thank-you-hero {

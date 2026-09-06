@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-const delivered = new Set<string>();
+const invokedEvents = new Set<string>();
 let prepared = false;
 
 type MarketingDestinationConfig = {
@@ -37,13 +37,19 @@ function initializeMeta(pixelId: string) {
 }
 
 export function prepareMarketingDestinations(config: MarketingDestinationConfig = {}) {
-  if (prepared || typeof window === 'undefined') return;
-  prepared = true;
+  if (typeof window === 'undefined') return false;
+  if (prepared) return true;
   const metaId =
     config.metaPixelId === undefined
       ? process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID?.trim()
       : config.metaPixelId?.trim();
-  if (metaId) initializeMeta(metaId);
+  try {
+    if (metaId) initializeMeta(metaId);
+    prepared = true;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function commerceItems(payload: StorefrontAnalyticsPayload) {
@@ -108,34 +114,22 @@ export function mapMetaEvent(payload: StorefrontAnalyticsPayload) {
   };
 }
 
-function once(destination: string, eventId: string, send: () => void) {
-  const key = `${destination}:${eventId}`;
-  if (delivered.has(key)) return true;
-  delivered.add(key);
-  try {
-    send();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function deliverClientMarketingEvent(payload: StorefrontAnalyticsPayload) {
-  prepareMarketingDestinations();
+  const ready = prepareMarketingDestinations();
   const meta = mapMetaEvent(payload);
-  const metaInvoked = Boolean(
-    meta &&
-    window.fbq &&
-    once('meta', payload.eventId, () =>
-      window.fbq?.('track', meta.name, meta.params, { eventID: payload.eventId }),
-    ),
-  );
-  return {
-    meta: {
-      eventName: meta?.name ?? null,
-      invoked: metaInvoked,
-    },
-  };
+  let invoked = false;
+  if (ready && meta && window.fbq) {
+    try {
+      if (!invokedEvents.has(payload.eventId)) {
+        window.fbq('track', meta.name, meta.params, { eventID: payload.eventId });
+        invokedEvents.add(payload.eventId);
+      }
+      invoked = true;
+    } catch {
+      // A blocked Pixel must not interrupt first-party analytics or mark the event sent.
+    }
+  }
+  return { meta: { eventName: meta?.name ?? null, invoked } };
 }
 
 export function buildMetaServerEvent(payload: StorefrontAnalyticsPayload) {

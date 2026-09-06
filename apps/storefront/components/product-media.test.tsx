@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProductMedia } from './product-media';
@@ -141,6 +141,19 @@ describe('ProductMedia', () => {
   });
 
   afterEach(() => cleanup());
+
+  it('does not initialize a lightbox after navigating away during its lazy import', async () => {
+    const { unmount } = render(
+      <ProductMedia items={items} productName="Desk Lamp" analytics={analytics} labels={labels} />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole('link', { name: labels.zoom }));
+      unmount();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(lightboxMock.init).not.toHaveBeenCalled();
+    expect(lightboxMock.loadAndOpen).not.toHaveBeenCalled();
+  });
 
   it('uses loaded intrinsic dimensions when catalog metadata is absent and limits zoom to native resolution', async () => {
     const { container } = render(

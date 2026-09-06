@@ -79,14 +79,9 @@ async function ThankYouPageContent({ params, searchParams }: ThankYouPageProps) 
             : null
         }
         labels={{
-          verifying: t('verifying'),
           title: t('title'),
           description: t('description'),
           orderNumber: t('orderNumber'),
-          nextTitle: t('nextTitle'),
-          nextOne: t('nextOne'),
-          nextTwo: t('nextTwo'),
-          nextThree: t('nextThree'),
           summary: t('summary'),
           quantity: t('quantity'),
           subtotal: t('subtotal'),

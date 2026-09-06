@@ -17,14 +17,9 @@ vi.mock('@/components/storefront-image', () => ({
   StorefrontImage: ({ src }: { src: string }) => <span data-image-src={src} />,
 }));
 const labelKeys = [
-  'verifying',
   'title',
   'description',
   'orderNumber',
-  'nextTitle',
-  'nextOne',
-  'nextTwo',
-  'nextThree',
   'summary',
   'quantity',
   'subtotal',
