@@ -1,11 +1,7 @@
 import 'dotenv/config';
 
 import * as Sentry from '@sentry/node';
-import {
-  createLightweightQueueWorker,
-  createQueueWorker,
-  isJobCancellationError,
-} from '@bric/runtime/jobs';
+import { createLightweightQueueWorker, createQueueWorker } from '@bric/runtime/jobs';
 import { writeWorkerHeartbeat } from '@bric/runtime/worker-heartbeat';
 import cron from 'node-cron';
 
@@ -231,30 +227,6 @@ for (const worker of workers) {
       scope.setTag('service', 'worker');
       scope.setTag('queue', worker.name);
       scope.setTag('worker_event', 'error');
-      Sentry.captureException(error);
-    });
-  });
-
-  worker.on('failed', (job, error) => {
-    if (isJobCancellationError(error)) return;
-    Sentry.withScope((scope) => {
-      scope.setTag('service', 'worker');
-      scope.setTag('queue', worker.name);
-      scope.setTag('worker_event', 'failed');
-      if (job?.id) {
-        scope.setTag('job_id', job.id);
-      }
-      if (job?.name) {
-        scope.setTag('job_name', job.name);
-      }
-      if (job?.attemptsMade !== undefined) {
-        scope.setContext('job', {
-          id: job.id ?? null,
-          name: job.name ?? null,
-          queue: worker.name,
-          attemptsMade: job.attemptsMade,
-        });
-      }
       Sentry.captureException(error);
     });
   });

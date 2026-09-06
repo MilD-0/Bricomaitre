@@ -17,6 +17,21 @@ describe('Redis connection options', () => {
     });
   });
 
+  it('decodes reserved characters in URL credentials before passing discrete options', () => {
+    expect(
+      getRedisConnectionOptions({
+        REDIS_URL: 'rediss://worker%2Bops:p%40ss%3A%2F%25@redis:6380/2',
+      }),
+    ).toMatchObject({
+      username: 'worker+ops',
+      password: 'p@ss:/%',
+      host: 'redis',
+      port: 6380,
+      db: 2,
+      tls: {},
+    });
+  });
+
   it('lets an explicit password replace credentials embedded in the URL', () => {
     expect(
       getRedisConnectionOptions({

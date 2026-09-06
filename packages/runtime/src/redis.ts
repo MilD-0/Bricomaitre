@@ -50,8 +50,8 @@ export function getRedisConnectionOptions(
     return {
       host: parsed.hostname,
       port: Number(parsed.port || 6379),
-      username: parsed.username || undefined,
-      password: env.REDIS_PASSWORD?.trim() || parsed.password || undefined,
+      username: decodeURIComponent(parsed.username) || undefined,
+      password: env.REDIS_PASSWORD?.trim() || decodeURIComponent(parsed.password) || undefined,
       db: parsed.pathname && parsed.pathname !== '/' ? Number(parsed.pathname.slice(1)) : undefined,
       tls: parsed.protocol === 'rediss:' ? {} : undefined,
       protocol: 2,

@@ -37,6 +37,7 @@ export type JobSnapshot = {
   downloadUrl: string | null;
   resultSummary: Record<string, unknown> | null;
   cancelRequested: boolean;
+  requestFingerprint?: string;
 };
 
 export type StartJobResult =
@@ -92,7 +93,11 @@ const RELEASE_OWNED_KEY_SCRIPT = `
   return 0
 `;
 const WRITE_SNAPSHOT_SCRIPT = `
+  if (redis.call('get', KEYS[1]) or '') ~= ARGV[6] then return false end
   local snapshot = cjson.decode(ARGV[1])
+  if ARGV[7] == '1' then
+    redis.call('set', KEYS[2], '1', 'EX', ARGV[2])
+  end
   -- Re-encoding through cjson changes [] to {} and can round large numbers.
   local encoded = ARGV[1]
   if redis.call('exists', KEYS[2]) == 1 then
@@ -112,6 +117,45 @@ const WRITE_SNAPSHOT_SCRIPT = `
   end
   return encoded
 `;
+
+const CLAIM_SNAPSHOT_SCRIPT = `
+  local function activeSnapshot(id)
+    if not id then return nil end
+    local raw = redis.call('get', ARGV[8] .. id)
+    if not raw then return nil end
+    local status = cjson.decode(raw).status
+    if status == 'queued' or status == 'running' then return raw end
+    return nil
+  end
+  local owned = activeSnapshot(redis.call('get', KEYS[3]))
+  if owned then return owned end
+  local active = activeSnapshot(redis.call('get', KEYS[6]))
+  if active then return active end
+  redis.call('set', KEYS[6], cjson.decode(ARGV[1]).id, 'EX', ARGV[2])
+  ${WRITE_SNAPSHOT_SCRIPT}
+`;
+
+function isTerminal(snapshot: JobSnapshot) {
+  return snapshot.status !== 'queued' && snapshot.status !== 'running';
+}
+
+function requestFingerprint<T>(options: StartJobOptions<T>) {
+  const intent = {
+    kind: options.kind,
+    jobName: options.jobName ?? options.kind,
+    origin: options.origin ?? null,
+    conversationId: options.conversationId ?? null,
+    data: options.data,
+  };
+  const serialized = JSON.stringify(intent, (_key, value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value).sort(([left], [right]) => left.localeCompare(right)),
+        )
+      : value,
+  );
+  return crypto.createHash('sha256').update(serialized).digest('hex');
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -156,25 +200,56 @@ function parseSnapshot(value: string | null): JobSnapshot | null {
   return JSON.parse(value) as JobSnapshot;
 }
 
-async function writeSnapshot(redis: IORedis, snapshot: JobSnapshot, ttlSeconds = JOB_TTL_SECONDS) {
+async function writeSnapshot(
+  redis: IORedis,
+  snapshot: JobSnapshot,
+  previous: string,
+  options: { ttlSeconds?: number; claimKey?: string; cancel?: boolean } = {},
+) {
   const indexKey = getQueueIndexKey(snapshot.queue);
-  const originIndexKey = snapshot.origin
-    ? getQueueOriginIndexKey(snapshot.queue, snapshot.origin)
-    : indexKey;
-  await redis.eval(
-    WRITE_SNAPSHOT_SCRIPT,
-    5,
+  const keys = [
     getSnapshotKey(snapshot.queue, snapshot.id),
     getCancellationKey(snapshot.queue, snapshot.id),
     getOwnerKey(snapshot.queue, snapshot.ownerKey),
     indexKey,
-    originIndexKey,
+    snapshot.origin ? getQueueOriginIndexKey(snapshot.queue, snapshot.origin) : indexKey,
+    ...(options.claimKey ? [options.claimKey] : []),
+  ];
+  const raw = await redis.eval(
+    options.claimKey ? CLAIM_SNAPSHOT_SCRIPT : WRITE_SNAPSHOT_SCRIPT,
+    keys.length,
+    ...keys,
     JSON.stringify(snapshot),
-    ttlSeconds,
+    options.ttlSeconds ?? JOB_TTL_SECONDS,
     Date.parse(snapshot.createdAt),
     snapshot.origin ? '1' : '0',
-    JSON.stringify({ ...snapshot, cancelRequested: true }),
+    JSON.stringify({
+      ...snapshot,
+      cancelRequested: true,
+      status: snapshot.status === 'failed' ? 'cancelled' : snapshot.status,
+    }),
+    previous,
+    options.cancel ? '1' : '0',
+    `bric:jobs:${snapshot.queue}:`,
   );
+  return typeof raw === 'string' ? parseSnapshot(raw) : null;
+}
+
+async function updateSnapshot(
+  queueName: string,
+  jobId: string,
+  change: (snapshot: JobSnapshot) => JobSnapshot,
+  options: { cancel?: boolean; ttlSeconds?: number } = {},
+) {
+  const redis = getRedis();
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const raw = await redis.get(getSnapshotKey(queueName, jobId));
+    const current = parseSnapshot(raw);
+    if (!current || isTerminal(current)) return current;
+    const updated = await writeSnapshot(redis, change(current), raw!, options);
+    if (updated) return updated;
+  }
+  throw new Error(`Concurrent updates prevented saving job "${jobId}".`);
 }
 
 export async function getJobSnapshot(queueName: string, jobId: string) {
@@ -250,64 +325,22 @@ export async function getLatestOwnedJob(queueName: string, ownerKey: string) {
 
 export async function requestJobCancellation(queueName: string, ownerKey: string) {
   const snapshot = await getLatestOwnedJob(queueName, ownerKey);
-  if (!snapshot || (snapshot.status !== 'queued' && snapshot.status !== 'running')) {
-    return null;
-  }
-
-  await getRedis().set(getCancellationKey(queueName, snapshot.id), '1', 'EX', JOB_TTL_SECONDS);
-  const nextSnapshot: JobSnapshot = {
-    ...snapshot,
-    cancelRequested: true,
-    updatedAt: nowIso(),
-  };
-  await writeSnapshot(getRedis(), nextSnapshot);
-  return nextSnapshot;
+  return snapshot ? requestJobCancellationById(queueName, snapshot.id) : null;
 }
 
 export async function requestJobCancellationById(queueName: string, jobId: string) {
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot || (snapshot.status !== 'queued' && snapshot.status !== 'running')) {
-    return null;
-  }
-
-  await getRedis().set(getCancellationKey(queueName, jobId), '1', 'EX', JOB_TTL_SECONDS);
-  const nextSnapshot: JobSnapshot = {
-    ...snapshot,
-    cancelRequested: true,
-    updatedAt: nowIso(),
-  };
-  await writeSnapshot(getRedis(), nextSnapshot);
-  return nextSnapshot;
+  return updateSnapshot(
+    queueName,
+    jobId,
+    (snapshot) => ({ ...snapshot, cancelRequested: true, updatedAt: nowIso() }),
+    { cancel: true },
+  );
 }
 
-async function startOwnedJobInternal<T>(
-  options: StartJobOptions<T>,
-  recoverStaleLock: boolean,
-): Promise<StartJobResult> {
+export async function startOwnedJob<T>(options: StartJobOptions<T>): Promise<StartJobResult> {
   const redis = getRedis();
-  const existingOwned = await getLatestOwnedJob(options.queueName, options.ownerKey);
-  if (existingOwned && (existingOwned.status === 'queued' || existingOwned.status === 'running')) {
-    return { kind: 'existing', job: existingOwned };
-  }
-
   const activeScope = options.activeScope ?? 'owner';
   const activeKey = getActiveKey(options.queueName, activeScope, options.ownerKey);
-  const activeJobId = await redis.get(activeKey);
-
-  if (activeJobId) {
-    const activeSnapshot = await getJobSnapshot(options.queueName, activeJobId);
-    if (
-      activeSnapshot &&
-      (activeSnapshot.status === 'queued' || activeSnapshot.status === 'running')
-    ) {
-      if (activeSnapshot.ownerKey === options.ownerKey) {
-        return { kind: 'existing', job: activeSnapshot };
-      }
-
-      return { kind: 'busy', job: activeSnapshot };
-    }
-  }
-
   const jobId = crypto.randomUUID();
   const createdAt = nowIso();
   const snapshot: JobSnapshot = {
@@ -331,31 +364,27 @@ async function startOwnedJobInternal<T>(
     downloadUrl: null,
     resultSummary: null,
     cancelRequested: false,
+    requestFingerprint: requestFingerprint(options),
   };
 
-  const claimed = await redis.set(
-    activeKey,
-    jobId,
-    'EX',
-    options.ttlSeconds ?? JOB_TTL_SECONDS,
-    'NX',
-  );
-  if (!claimed) {
-    const currentId = await redis.get(activeKey);
-    const currentSnapshot = currentId ? await getJobSnapshot(options.queueName, currentId) : null;
-    if (currentSnapshot) {
-      return { kind: 'busy', job: currentSnapshot };
-    }
-
-    if (recoverStaleLock && currentId && (await releaseOwnedKey(redis, activeKey, currentId))) {
-      return startOwnedJobInternal(options, false);
-    }
-
+  const claimed = await writeSnapshot(redis, snapshot, '', {
+    ttlSeconds: options.ttlSeconds,
+    claimKey: activeKey,
+  });
+  if (!claimed)
     throw new Error(`Unable to claim active job slot for queue "${options.queueName}".`);
+  if (claimed.id !== jobId) {
+    return {
+      kind:
+        claimed.ownerKey === options.ownerKey &&
+        claimed.requestFingerprint === snapshot.requestFingerprint
+          ? 'existing'
+          : 'busy',
+      job: claimed,
+    };
   }
 
   try {
-    await writeSnapshot(redis, snapshot, options.ttlSeconds);
     const queue = getQueue(options.queueName);
     await queue.add(
       options.jobName ?? options.kind,
@@ -378,19 +407,12 @@ async function startOwnedJobInternal<T>(
       },
     );
   } catch (error) {
-    const failedAt = nowIso();
     await Promise.allSettled([
       releaseOwnedKey(redis, activeKey, jobId),
-      writeSnapshot(
-        redis,
-        {
-          ...snapshot,
-          status: 'failed',
-          completedAt: failedAt,
-          updatedAt: failedAt,
-          errorMessage: error instanceof Error ? error.message : 'Unable to enqueue job.',
-        },
-        options.ttlSeconds,
+      markJobFailed(
+        options.queueName,
+        jobId,
+        error instanceof Error ? error.message : 'Unable to enqueue job.',
       ),
     ]);
     throw error;
@@ -399,24 +421,14 @@ async function startOwnedJobInternal<T>(
   return { kind: 'started', job: snapshot };
 }
 
-export function startOwnedJob<T>(options: StartJobOptions<T>): Promise<StartJobResult> {
-  return startOwnedJobInternal(options, true);
-}
-
 export async function updateJobProgress(
   queueName: string,
   jobId: string,
   progress: { phase: string; current: number; total: number },
 ) {
-  const redis = getRedis();
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot) {
-    return null;
-  }
-
   const safeTotal = Math.max(progress.total, 0);
   const safeCurrent = Math.max(0, Math.min(progress.current, safeTotal || progress.current));
-  const nextSnapshot: JobSnapshot = {
+  return updateSnapshot(queueName, jobId, (snapshot) => ({
     ...snapshot,
     progress: {
       phase: progress.phase,
@@ -425,26 +437,15 @@ export async function updateJobProgress(
       percentage: safeTotal === 0 ? 0 : Math.round((safeCurrent / safeTotal) * 100),
     },
     updatedAt: nowIso(),
-  };
-
-  await writeSnapshot(redis, nextSnapshot);
-  return nextSnapshot;
+  }));
 }
 
 export async function markJobRunning(queueName: string, jobId: string) {
-  const redis = getRedis();
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot) {
-    return null;
-  }
-
-  const nextSnapshot: JobSnapshot = {
+  return updateSnapshot(queueName, jobId, (snapshot) => ({
     ...snapshot,
     status: 'running',
     updatedAt: nowIso(),
-  };
-  await writeSnapshot(redis, nextSnapshot);
-  return nextSnapshot;
+  }));
 }
 
 export async function markJobCompleted(
@@ -452,42 +453,24 @@ export async function markJobCompleted(
   jobId: string,
   payload?: { downloadUrl?: string | null; resultSummary?: Record<string, unknown> | null },
 ) {
-  const redis = getRedis();
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot) {
-    return null;
-  }
-
-  const completedAt = nowIso();
-  const nextSnapshot: JobSnapshot = {
+  return updateSnapshot(queueName, jobId, (snapshot) => ({
     ...snapshot,
     status: 'completed',
-    completedAt,
-    updatedAt: completedAt,
+    completedAt: nowIso(),
+    updatedAt: nowIso(),
     downloadUrl: payload?.downloadUrl ?? snapshot.downloadUrl,
     resultSummary: payload?.resultSummary ?? snapshot.resultSummary,
-  };
-  await writeSnapshot(redis, nextSnapshot);
-  return nextSnapshot;
+  }));
 }
 
 export async function markJobFailed(queueName: string, jobId: string, errorMessage: string) {
-  const redis = getRedis();
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot) {
-    return null;
-  }
-
-  const completedAt = nowIso();
-  const nextSnapshot: JobSnapshot = {
+  return updateSnapshot(queueName, jobId, (snapshot) => ({
     ...snapshot,
     status: snapshot.cancelRequested ? 'cancelled' : 'failed',
-    completedAt,
-    updatedAt: completedAt,
+    completedAt: nowIso(),
+    updatedAt: nowIso(),
     errorMessage,
-  };
-  await writeSnapshot(redis, nextSnapshot);
-  return nextSnapshot;
+  }));
 }
 
 export async function updateJobSummary(
@@ -495,35 +478,19 @@ export async function updateJobSummary(
   jobId: string,
   resultSummary: Record<string, unknown>,
 ) {
-  const redis = getRedis();
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot) {
-    return null;
-  }
-
-  const nextSnapshot: JobSnapshot = {
+  return updateSnapshot(queueName, jobId, (snapshot) => ({
     ...snapshot,
     resultSummary,
     updatedAt: nowIso(),
-  };
-  await writeSnapshot(redis, nextSnapshot);
-  return nextSnapshot;
+  }));
 }
 
 export async function updateJobDownloadUrl(queueName: string, jobId: string, downloadUrl: string) {
-  const redis = getRedis();
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot) {
-    return null;
-  }
-
-  const nextSnapshot: JobSnapshot = {
+  return updateSnapshot(queueName, jobId, (snapshot) => ({
     ...snapshot,
     downloadUrl,
     updatedAt: nowIso(),
-  };
-  await writeSnapshot(redis, nextSnapshot);
-  return nextSnapshot;
+  }));
 }
 
 export async function throwIfJobCancelled(queueName: string, jobId: string) {
@@ -537,8 +504,15 @@ export async function throwIfJobCancelled(queueName: string, jobId: string) {
   }
 }
 
-export function isFinalJobAttempt(job: { attemptsMade: number; opts: { attempts?: number } }) {
-  return job.attemptsMade >= (job.opts.attempts ?? 1);
+export function isFinalJobAttempt(
+  job: { attemptsMade: number; opts: { attempts?: number } },
+  error?: unknown,
+) {
+  return (
+    error instanceof UnrecoverableError ||
+    isJobCancellationError(error) ||
+    job.attemptsMade >= (job.opts.attempts ?? 1)
+  );
 }
 
 export function isJobCancellationError(error: unknown) {
@@ -618,7 +592,7 @@ export function createLightweightQueueWorker<T>(
   });
 
   worker.on('failed', (job, error) => {
-    if (!job || !isFinalJobAttempt(job)) {
+    if (!job || !isFinalJobAttempt(job, error)) {
       return;
     }
 
@@ -653,56 +627,28 @@ export function createQueueWorker<T>(
   const wrappedProcessor: Processor<T> = async (job) => {
     const queue = queueName;
     await markJobRunning(queue, job.id!);
-    try {
-      const result = await processor(job.data, {
-        job,
-        updateProgress: async (progress) => {
-          await job.updateProgress(progress);
-          await updateJobProgress(queue, job.id!, progress);
-        },
-        updateSummary: async (summary) => {
-          await updateJobSummary(queue, job.id!, summary);
-        },
-        setDownloadUrl: async (url) => {
-          await updateJobDownloadUrl(queue, job.id!, url);
-        },
-        throwIfCancelled: async () => {
-          await throwIfJobCancelled(queue, job.id!);
-        },
-      });
+    const result = await processor(job.data, {
+      job,
+      updateProgress: async (progress) => {
+        await job.updateProgress(progress);
+        await updateJobProgress(queue, job.id!, progress);
+      },
+      updateSummary: async (summary) => {
+        await updateJobSummary(queue, job.id!, summary);
+      },
+      setDownloadUrl: async (url) => {
+        await updateJobDownloadUrl(queue, job.id!, url);
+      },
+      throwIfCancelled: async () => {
+        await throwIfJobCancelled(queue, job.id!);
+      },
+    });
 
-      await markJobCompleted(queue, job.id!, {
-        resultSummary: result ?? null,
-      });
+    await markJobCompleted(queue, job.id!, {
+      resultSummary: result ?? null,
+    });
 
-      return result;
-    } catch (error) {
-      if (!isJobCancellationError(error)) {
-        Sentry.withScope((scope: Sentry.Scope) => {
-          scope.setTag('service', 'runtime');
-          scope.setTag('runtime_component', 'queue_processor');
-          scope.setTag('queue', queueName);
-          scope.setTag('job_id', job.id ?? 'unknown');
-          scope.setTag('job_name', job.name);
-          const jobMeta = (
-            job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }
-          ).__jobMeta;
-          if (jobMeta?.requestId) {
-            scope.setTag('request_id', jobMeta.requestId);
-          }
-          scope.setContext('job', {
-            id: job.id ?? null,
-            name: job.name,
-            queue: queueName,
-            ownerKey: jobMeta?.ownerKey ?? null,
-            requestId: jobMeta?.requestId ?? null,
-            attemptsMade: job.attemptsMade,
-          });
-          Sentry.captureException(error);
-        });
-      }
-      throw error;
-    }
+    return result;
   };
 
   const worker = new Worker<T>(queueName, wrappedProcessor, {
@@ -712,7 +658,7 @@ export function createQueueWorker<T>(
   });
 
   worker.on('failed', async (job, error) => {
-    if (!job?.id || !isFinalJobAttempt(job)) {
+    if (!job?.id || !isFinalJobAttempt(job, error)) {
       return;
     }
 
@@ -741,46 +687,29 @@ export function createQueueWorker<T>(
       });
     }
 
-    await markJobFailed(queueName, job.id, error.message);
+    try {
+      await markJobFailed(queueName, job.id, error.message);
+    } finally {
+      await releaseJobSlot(job);
+    }
   });
 
-  worker.on('completed', async (job) => {
-    if (!job?.id) {
-      return;
+  async function releaseJobSlot(job: Job<T>) {
+    if (!job.id) return;
+    const meta = (
+      job.data as { __jobMeta?: { activeScope?: 'owner' | 'global'; ownerKey?: string } }
+    ).__jobMeta;
+    const ownerKey = meta?.ownerKey ?? (await getJobSnapshot(queueName, job.id))?.ownerKey;
+    if (ownerKey) {
+      await releaseOwnedKey(
+        getRedis(),
+        getActiveKey(queueName, meta?.activeScope ?? 'owner', ownerKey),
+        job.id,
+      );
     }
+  }
 
-    const snapshot = await getJobSnapshot(queueName, job.id);
-    if (!snapshot) {
-      return;
-    }
-
-    const activeKey = getActiveKey(
-      queueName,
-      (job.data as { __jobMeta?: { activeScope?: 'owner' | 'global'; ownerKey?: string } })
-        .__jobMeta?.activeScope ?? 'owner',
-      (job.data as { __jobMeta?: { ownerKey?: string } }).__jobMeta?.ownerKey ?? snapshot.ownerKey,
-    );
-    await releaseOwnedKey(getRedis(), activeKey, job.id);
-  });
-
-  worker.on('failed', async (job) => {
-    if (!job?.id || !isFinalJobAttempt(job)) {
-      return;
-    }
-
-    const snapshot = await getJobSnapshot(queueName, job.id);
-    if (!snapshot) {
-      return;
-    }
-
-    const activeKey = getActiveKey(
-      queueName,
-      (job.data as { __jobMeta?: { activeScope?: 'owner' | 'global'; ownerKey?: string } })
-        .__jobMeta?.activeScope ?? 'owner',
-      (job.data as { __jobMeta?: { ownerKey?: string } }).__jobMeta?.ownerKey ?? snapshot.ownerKey,
-    );
-    await releaseOwnedKey(getRedis(), activeKey, job.id);
-  });
+  worker.on('completed', releaseJobSlot);
 
   return worker;
 }
