@@ -219,11 +219,10 @@ function attributionWindows(setting: string) {
 }
 
 export function mapMetaAdsInsightRow(
-  raw: unknown,
+  row: z.infer<typeof insightResponseRowSchema>,
   account: { currency: string; timezone: string },
   syncedAt: Date,
 ) {
-  const row = insightResponseRowSchema.parse(raw);
   const setting = row.attribution_setting?.trim() || 'account_default';
 
   return {
@@ -289,8 +288,11 @@ export function mapMetaAdsInsightRow(
   };
 }
 
-function mapMetaAdsBreakdownRow(raw: unknown, kind: 'placement_device' | 'region', syncedAt: Date) {
-  const row = breakdownInsightRowSchema.parse(raw);
+function mapMetaAdsBreakdownRow(
+  row: z.infer<typeof breakdownInsightRowSchema>,
+  kind: 'placement_device' | 'region',
+  syncedAt: Date,
+) {
   return {
     day: row.date_start,
     accountId: row.account_id.replace(/^act_/, ''),

@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { syncMock, configMock, scheduleMock } = vi.hoisted(() => ({
   syncMock: vi.fn(),
   configMock: vi.fn(),
-  scheduleMock: vi.fn(() => ({ stop: vi.fn() })),
+  scheduleMock: vi.fn(() => ({ destroy: vi.fn() })),
 }));
 
 vi.mock('node-cron', () => ({
@@ -21,18 +21,23 @@ import {
 } from './search-console-scheduler';
 
 describe('Search Console scheduler', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('ADMIN_SEARCH_CONSOLE_SYNC_ENABLED', 'false');
     stopSearchConsoleScheduler();
   });
 
-  it('stays disabled unless explicitly enabled', () => {
-    const previous = process.env.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED;
-    delete process.env.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED;
+  it('stays disabled unless explicitly enabled', async () => {
     expect(startSearchConsoleScheduler()).toBeNull();
     expect(configMock).not.toHaveBeenCalled();
-    if (previous == null) delete process.env.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED;
-    else process.env.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED = previous;
+    expect(scheduleMock).not.toHaveBeenCalled();
+    vi.stubEnv('ADMIN_SEARCH_CONSOLE_SYNC_ENABLED', 'true');
+    expect(startSearchConsoleScheduler()).not.toBeNull();
+    expect(scheduleMock).toHaveBeenCalledOnce();
+    expect(syncMock).toHaveBeenCalledWith({ trigger: 'startup' });
+    await Promise.resolve();
   });
 
   it('prevents overlapping provider synchronizations', async () => {

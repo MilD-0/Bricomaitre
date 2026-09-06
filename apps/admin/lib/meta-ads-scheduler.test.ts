@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { readMetaAdsConfigMock, scheduleMock, validateMock, syncMetaAdsInsightsMock } = vi.hoisted(
   () => ({
@@ -19,13 +19,14 @@ vi.mock('./meta-ads-insights', () => ({
 }));
 
 describe('Meta Ads Insights scheduler', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     vi.resetModules();
-    scheduleMock.mockReset().mockReturnValue({ stop: vi.fn() });
+    scheduleMock.mockReset().mockReturnValue({ destroy: vi.fn() });
     validateMock.mockReset().mockReturnValue(true);
     readMetaAdsConfigMock.mockReset().mockReturnValue({});
     syncMetaAdsInsightsMock.mockReset().mockResolvedValue({ rows: 1 });
-    vi.stubEnv('NODE_ENV', 'development');
     vi.stubEnv('ADMIN_META_ADS_SYNC_ENABLED', 'true');
     delete process.env.ADMIN_META_ADS_SYNC_CRON;
     delete process.env.ADMIN_META_ADS_SYNC_TIMEZONE;
@@ -51,7 +52,7 @@ describe('Meta Ads Insights scheduler', () => {
     expect(syncMetaAdsInsightsMock).toHaveBeenCalledWith({ trigger: 'test' });
   });
 
-  it('does not register until shadow synchronization is explicitly enabled', async () => {
+  it('does not register until synchronization is explicitly enabled', async () => {
     vi.stubEnv('ADMIN_META_ADS_SYNC_ENABLED', 'false');
     const { stopMetaAdsScheduler, startMetaAdsScheduler } = await import('./meta-ads-scheduler');
     stopMetaAdsScheduler();

@@ -504,7 +504,6 @@ async function handleGoogle(request, response, url) {
     const body = await readJson(request);
     return json(response, 200, {
       inspectionResult: {
-        inspectionUrl: body.inspectionUrl,
         indexStatusResult: {
           verdict: 'PASS',
           coverageState: 'Submitted and indexed',

@@ -7,8 +7,8 @@ export {
 } from './meta-catalog-shared';
 import { META_CATALOG_EXPORT_HEADERS, type MetaCatalogExportRow } from './meta-catalog-shared';
 
-export function buildMetaCatalogWorkbook(rows: MetaCatalogExportRow[]) {
-  const sheet = XLSX.utils.aoa_to_sheet([
+function buildMetaCatalogSheet(rows: MetaCatalogExportRow[]) {
+  return XLSX.utils.aoa_to_sheet([
     [...META_CATALOG_EXPORT_HEADERS],
     ...rows.map((row) => [
       row.id,
@@ -24,7 +24,10 @@ export function buildMetaCatalogWorkbook(rows: MetaCatalogExportRow[]) {
       row.brand,
     ]),
   ]);
+}
 
+export function buildMetaCatalogWorkbook(rows: MetaCatalogExportRow[]) {
+  const sheet = buildMetaCatalogSheet(rows);
   sheet['!cols'] = [
     { wch: 12 },
     { wch: 12 },
@@ -50,22 +53,7 @@ export function toXlsxBuffer(workbook: XLSX.WorkBook) {
 }
 
 export function toCsvBuffer(rows: MetaCatalogExportRow[]) {
-  const sheet = XLSX.utils.aoa_to_sheet([
-    [...META_CATALOG_EXPORT_HEADERS],
-    ...rows.map((row) => [
-      row.id,
-      row.contentId,
-      row.title,
-      row.description,
-      row.availability,
-      row.condition,
-      row.price,
-      row.salePrice,
-      row.link,
-      row.imageLink,
-      row.brand,
-    ]),
-  ]);
+  const sheet = buildMetaCatalogSheet(rows);
 
   const csv = XLSX.utils.sheet_to_csv(sheet);
   return Buffer.from(csv, 'utf8');

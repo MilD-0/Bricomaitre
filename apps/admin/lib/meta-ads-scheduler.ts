@@ -6,31 +6,12 @@ import { readMetaAdsConfig, syncMetaAdsInsights } from './meta-ads-insights';
 export const DEFAULT_META_ADS_SYNC_CRON = '17 */6 * * *';
 const DEFAULT_META_ADS_SYNC_TIMEZONE = 'Africa/Algiers';
 
-type SchedulerState = {
-  started: boolean;
-  running: boolean;
-  task: ReturnType<typeof cron.schedule> | null;
-};
-
-const schedulerGlobal = globalThis as typeof globalThis & {
-  __metaAdsSchedulerState?: SchedulerState;
-};
-
-function state() {
-  if (!schedulerGlobal.__metaAdsSchedulerState) {
-    schedulerGlobal.__metaAdsSchedulerState = { started: false, running: false, task: null };
-  }
-  return schedulerGlobal.__metaAdsSchedulerState;
-}
-
-function isMetaAdsSyncEnabled(env: NodeJS.ProcessEnv = process.env) {
-  return env.ADMIN_META_ADS_SYNC_ENABLED?.trim().toLowerCase() === 'true';
-}
+let running = false;
+let task: ReturnType<typeof cron.schedule> | null = null;
 
 export async function runScheduledMetaAdsSync(trigger = 'schedule') {
-  const current = state();
-  if (current.running) return false;
-  current.running = true;
+  if (running) return false;
+  running = true;
 
   try {
     await syncMetaAdsInsights({ trigger });
@@ -45,15 +26,14 @@ export async function runScheduledMetaAdsSync(trigger = 'schedule') {
     console.error('[meta-ads] scheduled insights sync failed', error);
     return false;
   } finally {
-    current.running = false;
+    running = false;
   }
 }
 
 export function startMetaAdsScheduler() {
-  if (process.env.NODE_ENV === 'test' || !isMetaAdsSyncEnabled()) return null;
+  if (process.env.ADMIN_META_ADS_SYNC_ENABLED?.trim().toLowerCase() !== 'true') return null;
   readMetaAdsConfig();
-  const current = state();
-  if (current.started) return current.task;
+  if (task) return task;
 
   const expression = (process.env.ADMIN_META_ADS_SYNC_CRON ?? DEFAULT_META_ADS_SYNC_CRON).trim();
   if (!cron.validate(expression)) {
@@ -62,18 +42,14 @@ export function startMetaAdsScheduler() {
   const timezone = (
     process.env.ADMIN_META_ADS_SYNC_TIMEZONE ?? DEFAULT_META_ADS_SYNC_TIMEZONE
   ).trim();
-  current.task = cron.schedule(expression, () => void runScheduledMetaAdsSync('schedule'), {
+  task = cron.schedule(expression, () => void runScheduledMetaAdsSync('schedule'), {
     timezone,
   });
-  current.started = true;
   void runScheduledMetaAdsSync('startup');
-  return current.task;
+  return task;
 }
 
 export function stopMetaAdsScheduler() {
-  const current = state();
-  current.task?.stop();
-  current.started = false;
-  current.running = false;
-  current.task = null;
+  void task?.destroy();
+  task = null;
 }

@@ -14,6 +14,8 @@ import {
   searchConsoleUrlInspections,
 } from '@bric/db/schema';
 
+import { reportingDateSchema } from './analytics/contract';
+
 type Database = ReturnType<typeof getDb>;
 type FetchLike = typeof fetch;
 
@@ -80,7 +82,6 @@ const inspectionResponseSchema = z
   .object({
     inspectionResult: z
       .object({
-        inspectionUrl: z.string().optional(),
         indexStatusResult: z
           .object({
             verdict: z.string().optional(),
@@ -230,57 +231,82 @@ async function accessToken(
   signer.update(unsigned);
   signer.end();
   const assertion = `${unsigned}.${signer.sign(config.credentials.private_key).toString('base64url')}`;
-  const response = await fetchImpl(config.credentials.token_uri, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
-    }),
-  });
-  const body = (await response.json().catch(() => ({}))) as {
-    access_token?: string;
-    error?: string;
-  };
-  if (!response.ok || !body.access_token) {
+  const body = await googleRequest(
+    config.credentials.token_uri,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion,
+      }),
+    },
+    null,
+    fetchImpl,
+  );
+  const parsed = z.object({ access_token: z.string().min(1) }).safeParse(body);
+  if (!parsed.success) {
     throw new SearchConsoleSyncError(
       'Search Console authentication failed.',
-      body.error || 'authentication_failed',
-      response.status,
+      'authentication_failed',
     );
   }
-  return body.access_token;
+  return parsed.data.access_token;
 }
 
-async function googleRequest(url: string, init: RequestInit, token: string, fetchImpl: FetchLike) {
-  let lastStatus: number | null = null;
+async function googleRequest(
+  url: string,
+  init: RequestInit,
+  token: string | null,
+  fetchImpl: FetchLike,
+): Promise<unknown> {
+  let lastError = new SearchConsoleSyncError('Search Console request failed.', 'request_failed');
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const response = await fetchImpl(url, {
-      ...init,
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-      },
-    });
-    lastStatus = response.status;
-    const body = (await response.json().catch(() => ({}))) as {
-      error?: { message?: string; status?: string };
-    };
-    if (response.ok) return body;
-    if (response.status !== 429 && response.status < 500) {
-      throw new SearchConsoleSyncError(
-        body.error?.message?.slice(0, 500) || 'Search Console request failed.',
-        body.error?.status || 'request_failed',
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetchImpl(url, {
+        ...init,
+        ...(token
+          ? { headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' } }
+          : {}),
+        signal: controller.signal,
+      });
+      const body: unknown = await response.json();
+      if (response.ok) return body;
+      const error = z
+        .object({
+          error: z
+            .union([
+              z.string(),
+              z.object({ message: z.string().optional(), status: z.string().optional() }),
+            ])
+            .optional(),
+        })
+        .safeParse(body);
+      const detail = error.success ? error.data.error : undefined;
+      lastError = new SearchConsoleSyncError(
+        typeof detail === 'object'
+          ? detail.message?.slice(0, 500) || 'Search Console request failed.'
+          : 'Search Console request failed.',
+        typeof detail === 'string' ? detail : detail?.status || 'request_failed',
         response.status,
       );
+      if (response.status !== 429 && response.status < 500) throw lastError;
+    } catch (error) {
+      if (error instanceof SearchConsoleSyncError) throw error;
+      lastError = new SearchConsoleSyncError(
+        controller.signal.aborted
+          ? 'Search Console request timed out.'
+          : 'Search Console returned an unreadable response.',
+        controller.signal.aborted ? 'request_timeout' : 'invalid_response',
+      );
+    } finally {
+      clearTimeout(timeout);
     }
-    await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
   }
-  throw new SearchConsoleSyncError(
-    'Search Console remained unavailable after retrying.',
-    'upstream_unavailable',
-    lastStatus,
-  );
+  throw lastError;
 }
 
 type AnalyticsQuery = {
@@ -315,15 +341,22 @@ async function queryAnalytics(
     token,
     fetchImpl,
   );
-  return analyticsResponseSchema.parse(body).rows ?? [];
+  const rows = analyticsResponseSchema.parse(body).rows ?? [];
+  const dateIndex = input.dimensions?.indexOf('date') ?? -1;
+  if (
+    dateIndex >= 0 &&
+    rows.some((row) => !reportingDateSchema.safeParse(row.keys[dateIndex]).success)
+  ) {
+    throw new SearchConsoleSyncError(
+      'Search Console returned an invalid calendar day.',
+      'invalid_response',
+    );
+  }
+  return rows;
 }
 
 function numericString(value: number) {
   return Number.isFinite(value) ? String(value) : '0';
-}
-
-function validDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function canonicalInspectionUrl(value: string, origin: string) {
@@ -346,7 +379,11 @@ export async function fetchSearchConsoleSnapshot(input: {
   now?: Date;
   inspectionLimit?: number;
 }) {
-  if (!validDate(input.since) || !validDate(input.until) || input.since > input.until) {
+  if (
+    !reportingDateSchema.safeParse(input.since).success ||
+    !reportingDateSchema.safeParse(input.until).success ||
+    input.since > input.until
+  ) {
     throw new SearchConsoleSyncError('Search Console date range is invalid.', 'invalid_range');
   }
   const config = readSearchConsoleConfig(input.env ?? process.env);
@@ -433,7 +470,9 @@ export async function fetchSearchConsoleSnapshot(input: {
             token,
             fetchImpl,
           );
-          return inspectionResponseSchema.parse(body).inspectionResult;
+          const parsed = inspectionResponseSchema.safeParse(body);
+          if (!parsed.success) return null;
+          return { ...parsed.data.inspectionResult, url };
         } catch (error) {
           if (!(error instanceof SearchConsoleSyncError)) throw error;
           return null;
@@ -441,8 +480,11 @@ export async function fetchSearchConsoleSnapshot(input: {
       }),
     )
   ).filter(
-    (inspection): inspection is z.infer<typeof inspectionResponseSchema>['inspectionResult'] =>
-      inspection != null,
+    (
+      inspection,
+    ): inspection is z.infer<typeof inspectionResponseSchema>['inspectionResult'] & {
+      url: string;
+    } => inspection != null,
   );
 
   return {
@@ -516,7 +558,11 @@ export async function syncSearchConsole(
     .where(eq(searchConsoleDailyTotals.searchType, 'web'));
   const until = options.until ?? addDays(dayInAlgiers(now), -3);
   const since = options.since ?? (latest ? addDays(String(latest), -7) : subtractMonths(until, 16));
-  if (since > until) {
+  if (
+    !reportingDateSchema.safeParse(since).success ||
+    !reportingDateSchema.safeParse(until).success ||
+    since > until
+  ) {
     throw new SearchConsoleSyncError('Search Console date range is invalid.', 'invalid_range');
   }
 
@@ -701,8 +747,7 @@ export async function syncSearchConsole(
       }
 
       for (const inspection of snapshot.inspections) {
-        const url = inspection.inspectionUrl;
-        if (!url) continue;
+        const url = inspection.url;
         const status = inspection.indexStatusResult;
         await tx
           .insert(searchConsoleUrlInspections)
@@ -758,6 +803,9 @@ export async function syncSearchConsole(
         updatedAt: new Date(),
       })
       .where(eq(searchConsoleSyncRuns.id, run.id));
+    await import('./analytics-snapshots')
+      .then(({ invalidateAnalyticsSnapshots }) => invalidateAnalyticsSnapshots())
+      .catch((error) => console.error('[search-console] Snapshot invalidation failed.', error));
     return {
       since,
       until,

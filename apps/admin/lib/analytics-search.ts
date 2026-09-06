@@ -371,6 +371,16 @@ async function appearances(db: Database, startDate: string | null, endDate: stri
   }));
 }
 
+function canonicalInspectionIdentity(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    return url.href;
+  } catch {
+    return value;
+  }
+}
+
 async function indexHealth(db: Database) {
   const [inspectionResult, sitemapResult, syncResult] = await Promise.all([
     db.execute(sql`
@@ -392,8 +402,8 @@ async function indexHealth(db: Database) {
     const canonicalMismatch = Boolean(
       row.google_canonical &&
       row.user_canonical &&
-      canonicalSearchPath(String(row.google_canonical)) !==
-        canonicalSearchPath(String(row.user_canonical)),
+      canonicalInspectionIdentity(String(row.google_canonical)) !==
+        canonicalInspectionIdentity(String(row.user_canonical)),
     );
     const verdict = row.verdict ? String(row.verdict) : null;
     return {
@@ -412,7 +422,8 @@ async function indexHealth(db: Database) {
         verdict === 'FAIL' ||
         verdict === 'PARTIAL' ||
         canonicalMismatch ||
-        String(row.page_fetch_state ?? '') === 'ERROR',
+        (typeof row.page_fetch_state === 'string' &&
+          !['SUCCESSFUL', 'PAGE_FETCH_STATE_UNSPECIFIED'].includes(row.page_fetch_state)),
     };
   });
   const sitemaps = records(sitemapResult.rows).map((row) => ({
