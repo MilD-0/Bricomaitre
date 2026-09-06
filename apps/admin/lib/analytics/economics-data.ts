@@ -11,10 +11,11 @@ import {
   profitTrackerDays,
   profitTrackerOperatingCosts,
   profitTrackerSettings,
+  processedOrders,
 } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import {
-  getProfitTrackerReport,
+  loadProfitTrackerReportForRange,
   getProfitTrackerSettings,
   listProfitTrackerCosts,
 } from '../profit-tracker';
@@ -30,7 +31,6 @@ import {
   type AnalyticsReturnObservation,
   type Database,
   type EconomicsReport,
-  economicsInput,
   metric,
 } from './loaders-shared';
 
@@ -140,13 +140,22 @@ export async function loadMaterializedEconomicsReport(
           from ${orderStatusHistory} where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}),
         (select min(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}),
         (select min(${profitTrackerDays.day}) from ${profitTrackerDays})
-      ), 'YYYY-MM-DD') as required_start_date
+      ), 'YYYY-MM-DD') as required_start_date,
+      exists (
+        select 1 from ${processedOrders}
+        where ${datePredicate(sql`(coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt}) at time zone 'Africa/Algiers')::date`, filters.startDate, filters.endDate)}
+      ) as has_imported_settlements
     `),
     getProfitTrackerSettings(db),
     listProfitTrackerCosts(db),
   ]);
   const rows = factResult.rows as Array<Record<string, unknown>>;
-  if (!rows.length) return null;
+  if (
+    !rows.length ||
+    (dependencyResult.rows[0] as { has_imported_settlements?: boolean } | undefined)
+      ?.has_imported_settlements
+  )
+    return null;
   const dependencyUpdatedAt = isoValue(
     (dependencyResult.rows[0] as Record<string, unknown> | undefined)?.dependencies_updated_at,
   );
@@ -412,18 +421,13 @@ export async function loadEconomicsPair(
   ...sourceStarts: Array<string | null>
 ) {
   const previousFiltersValue = previousFiltersWithCoverage(filters, ...sourceStarts);
-  const previousInput = previousFiltersValue
-    ? economicsInput(previousFiltersValue.startDate, previousFiltersValue.endDate)
-    : null;
   const [current, previousReport] = await Promise.all([
     loadMaterializedEconomicsReport(db, filters).then(
-      (report) =>
-        report ??
-        getProfitTrackerReport(economicsInput(filters.startDate, filters.endDate), { db }),
+      (report) => report ?? loadProfitTrackerReportForRange(db, filters),
     ),
-    previousInput && previousFiltersValue
+    previousFiltersValue
       ? loadMaterializedEconomicsReport(db, previousFiltersValue).then(
-          (report) => report ?? getProfitTrackerReport(previousInput, { db }),
+          (report) => report ?? loadProfitTrackerReportForRange(db, previousFiltersValue),
         )
       : Promise.resolve<EconomicsReport | null>(null),
   ]);

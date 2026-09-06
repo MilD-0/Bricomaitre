@@ -48,8 +48,6 @@ export function aggregateEconomicsSeries(
     operatingCostDzd: number;
     realizedProfitDzd: number;
     realizedSamples: number;
-    realizedProfitAfterAdsDzd: number;
-    realizedAfterAdsSamples: number;
     postedOrders: number;
     settledOrders: number;
     costCompleteOrders: number;
@@ -70,8 +68,6 @@ export function aggregateEconomicsSeries(
       operatingCostDzd: 0,
       realizedProfitDzd: 0,
       realizedSamples: 0,
-      realizedProfitAfterAdsDzd: 0,
-      realizedAfterAdsSamples: 0,
       postedOrders: 0,
       settledOrders: 0,
       costCompleteOrders: 0,
@@ -98,10 +94,6 @@ export function aggregateEconomicsSeries(
     if (realized) {
       current.realizedProfitDzd += realized.realizedProfitDzd;
       current.realizedSamples += 1;
-      if (realized.realizedProfitAfterAdsDzd != null) {
-        current.realizedProfitAfterAdsDzd += realized.realizedProfitAfterAdsDzd;
-        current.realizedAfterAdsSamples += 1;
-      }
     }
     groups.set(bucket, current);
   }

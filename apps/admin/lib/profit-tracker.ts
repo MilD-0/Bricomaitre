@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { addDays, resolveAnalyticsFilters } from './analytics/date-range';
 import { numeric, nullableNumeric, isoValue as isoTimestamp } from './analytics/query-values';
-import { reportingDateSchema as dateOnlySchema } from './analytics/contract';
+import { reportingDateSchema as dateOnlySchema, type AnalyticsFilters } from './analytics/contract';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -952,9 +952,21 @@ export async function getProfitTrackerReport(
     { ...profitTrackerRangeSchema.parse(input), view: 'money', grain: 'auto' },
     options.now,
   );
-  const filters = { range, startDate, endDate };
+  return loadProfitTrackerReportForRange(db, { range, startDate, endDate });
+}
+
+// Canonical reporting clips already-validated source windows. A source with no
+// overlapping coverage intentionally supplies an empty start > end interval.
+export async function loadProfitTrackerReportForRange(
+  db: Database,
+  filters: Pick<AnalyticsFilters, 'range' | 'startDate' | 'endDate'>,
+) {
   const settings = await getProfitTrackerSettings(db);
-  const queryStartDate = filters.startDate ? addDays(filters.startDate, -7) : null;
+  const queryStartDate = filters.startDate
+    ? filters.startDate > filters.endDate
+      ? filters.startDate
+      : addDays(filters.startDate, -7)
+    : null;
   const dayConditions = [lte(profitTrackerDays.day, filters.endDate)];
   if (queryStartDate) dayConditions.push(gte(profitTrackerDays.day, queryStartDate));
   const [dayRows, costs, automaticDays, metaDays, realizedDays] = await Promise.all([

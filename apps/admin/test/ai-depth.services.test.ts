@@ -8,6 +8,8 @@ import {
   aiProposals,
   aiRuns,
   aiToolCalls,
+  analyticsEconomicsDailyFacts,
+  processedOrders,
   analyticsAiDailyRollups,
   categories,
   products,
@@ -28,6 +30,12 @@ import {
   featuredProductGroupProducts,
 } from '@bric/db/schema';
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
+import {
+  loadEconomicsPair,
+  loadMaterializedEconomicsReport,
+} from '../lib/analytics/economics-data';
+import { resolveAnalyticsFilters, clipAnalyticsFilters } from '../lib/analytics/date-range';
+import { ANALYTICS_FACT_SEMANTICS_VERSION } from '../lib/analytics-fact-contract';
 import { getAiStatsData } from '../lib/ai-stats';
 import { getLiveStorefrontAiStats } from '../lib/stats-experience-ai';
 import { DEFAULT_STOREFRONT_SETTINGS } from '@bric/storefront-core/settings';
@@ -76,6 +84,76 @@ afterAll(async () => {
 });
 
 describe('durable AI evidence', () => {
+  it('returns empty economics for a valid range outside source coverage without weakening public date validation', async () => {
+    const db = getDb();
+    const requested = resolveAnalyticsFilters({
+      view: 'money',
+      range: 'custom',
+      startDate: '2091-01-01',
+      endDate: '2091-01-03',
+    });
+    const clipped = clipAnalyticsFilters(requested, '2091-02-01', '2091-02-01');
+    expect(clipped.startDate! > clipped.endDate).toBe(true);
+    const report = await loadEconomicsPair(db, clipped, '2091-02-01');
+    expect(report.current.days).toEqual([]);
+    expect(report.current.summary).toMatchObject({ postedOrders: 0, grossProfitDzd: 0 });
+    expect(report.previous).toBeNull();
+    await expect(
+      getProfitTrackerReport(
+        { range: 'custom', startDate: clipped.startDate!, endDate: clipped.endDate },
+        { db },
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('preserves imported settlements when current projected facts are otherwise usable', async () => {
+    const db = getDb(),
+      day = '2091-06-01',
+      tracking = randomUUID();
+    const filters = resolveAnalyticsFilters({
+      view: 'money',
+      range: 'custom',
+      startDate: day,
+      endDate: day,
+    });
+    await db.insert(analyticsEconomicsDailyFacts).values({
+      day,
+      fxRateUsed: '280',
+      planningReturnRatePct: '15',
+      semanticsVersion: ANALYTICS_FACT_SEMANTICS_VERSION,
+      refreshedAt: new Date('2091-06-02T12:00:00Z'),
+    });
+    try {
+      expect(await loadMaterializedEconomicsReport(db, filters)).not.toBeNull();
+      await db.insert(processedOrders).values({
+        orderId: tracking,
+        tracking,
+        importBatchId: randomUUID(),
+        encaissedAt: new Date(day + 'T12:00:00Z'),
+        amountCollected: '500',
+        totalFees: '50',
+        netRevenue: '450',
+        productCost: '100',
+        profit: '350',
+      });
+      const report = await loadEconomicsPair(db, filters);
+      expect(report.current.realized.summary).toMatchObject({
+        settledOrders: 1,
+        realizedProfitDzd: 350,
+        amountCollectedDzd: 500,
+      });
+      expect(report.current.realized.days).toEqual([
+        expect.objectContaining({ date: day, settledOrders: 1, realizedProfitDzd: 350 }),
+      ]);
+      expect(report.current.coverage.settledOrders).toBe(1);
+    } finally {
+      await db.delete(processedOrders).where(eq(processedOrders.tracking, tracking));
+      await db
+        .delete(analyticsEconomicsDailyFacts)
+        .where(eq(analyticsEconomicsDailyFacts.day, day));
+    }
+  });
+
   it('counts every tool type while limiting the display and respecting the operations business day', async () => {
     const db = getDb();
     const runs = await db
