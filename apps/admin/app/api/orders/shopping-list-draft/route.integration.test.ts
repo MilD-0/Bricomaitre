@@ -160,9 +160,10 @@ describe('app/api/orders/shopping-list-draft/route', () => {
   it('loads a large selection by its server-computed identity from a body', async () => {
     const ids = Array.from({ length: 1000 }, (_, index) => 250000 + index);
     const scopeKey = buildShoppingListScopeKey('selected', ids);
-    const where = vi.fn((_condition: import('drizzle-orm').SQL) => ({
-      limit: async () => [draftRow({ sourceMode: 'selected', scopeKey, orderIds: ids })],
-    }));
+    const where = vi.fn((_condition: import('drizzle-orm').SQL) => {
+      void _condition;
+      return { limit: async () => [draftRow({ sourceMode: 'selected', scopeKey, orderIds: ids })] };
+    });
     const db = { transaction: vi.fn(), select: () => ({ from: () => ({ where }) }) };
     db.transaction.mockImplementation(async (fn) => fn(db));
     getDbMock.mockReturnValue(db);
@@ -213,7 +214,10 @@ describe('app/api/orders/shopping-list-draft/route', () => {
     const ids = Array.from({ length: 1000 }, (_, index) => 250000 + index);
     const scopeKey = buildShoppingListScopeKey('selected', ids);
     const row = draftRow({ sourceMode: 'selected', scopeKey, orderIds: ids });
-    const where = vi.fn((_condition: import('drizzle-orm').SQL) => ({ for: async () => [row] }));
+    const where = vi.fn((_condition: import('drizzle-orm').SQL) => {
+      void _condition;
+      return { for: async () => [row] };
+    });
     const set = vi.fn(() => ({
       where: () => ({ returning: async () => [{ ...row, revision: 1 }] }),
     }));
