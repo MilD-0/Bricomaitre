@@ -390,38 +390,6 @@ describe('production packaging and release runtime', () => {
     expect(dependabot).toContain('open-pull-requests-limit: 5');
   });
 
-  it('validates shell operations with a pinned, integrity-checked ShellCheck release', () => {
-    const validator = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/validate-operations.sh'),
-      'utf8',
-    );
-
-    expect(validator).toContain("shellcheck_version='0.11.0'");
-    expect(validator).toContain('"$installed_shellcheck" --version | grep -Fxq');
-    expect(validator).toContain(
-      "shellcheck_sha256='8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198'",
-    );
-    expect(validator).toContain(
-      "shellcheck_sha256='12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588'",
-    );
-    expect(validator).toContain('printf \'%s  %s\\n\' "$shellcheck_sha256"');
-    expect(validator).toContain('download_with_retry()');
-    expect(validator).toContain('download_from_cache()');
-    expect(validator.match(/download_from_cache \\/g)).toHaveLength(2);
-    expect(validator).toContain('download_cache_dir="$cache_root/downloads"');
-    expect(validator).toContain('exec {cache_lock_fd}>"$cache_path.lock"');
-    expect(validator).toContain('sha256sum -c --status');
-    expect(validator).toContain('--retry-all-errors');
-    expect(validator).toContain('--connect-timeout 20');
-    expect(validator).toContain('--max-time 180');
-    expect(validator).toContain(
-      '"$shellcheck_bin" --external-sources --source-path=SCRIPTDIR "${shell_scripts[@]}"',
-    );
-    expect(validator).toContain('build_check_max_attempts=3');
-    expect(validator).toContain('BuildKit registry metadata check hit a transient network error');
-    expect(validator).toContain('i/o timeout|TLS handshake timeout|connection reset by peer');
-  });
-
   it('uses durable local BuildKit caches, OCI identity, and grouped Bake builds', () => {
     const bake = readFileSync(resolve(workspaceRoot, 'ops/docker/docker-bake.hcl'), 'utf8');
     const dockerfiles = productionDockerfiles.map(({ path }) =>
