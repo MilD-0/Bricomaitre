@@ -58,7 +58,20 @@ describe('bulletin attachment access', () => {
     expect(readObjectMock).toHaveBeenCalledWith('bulletin/2026-09-04/file.pdf');
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('content-disposition')).toBe(
-      'inline; filename="customer brief.pdf"',
+      'inline; filename="customer brief.pdf"; filename*=UTF-8\'\'customer%20brief.pdf',
+    );
+    await expect(response.text()).resolves.toBe('private attachment');
+  });
+
+  it('preserves Arabic attachment filenames without invalid HTTP header characters', async () => {
+    const name = 'تسليم.pdf';
+    const response = await GET(
+      new NextRequest(`http://localhost/attachment?name=${encodeURIComponent(name)}`),
+      { params: Promise.resolve({ key: ['bulletin', 'file.pdf'] }) },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-disposition')).toContain(
+      `filename*=UTF-8''${encodeURIComponent(name)}`,
     );
     await expect(response.text()).resolves.toBe('private attachment');
   });

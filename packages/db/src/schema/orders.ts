@@ -85,7 +85,6 @@ export const orders = pgTable(
     index('idx_orders_cart_products_gin').using('gin', t.cartProducts),
     uniqueIndex('orders_public_token_unique').on(t.publicToken),
     index('idx_orders_public_token_expires').on(t.publicTokenExpiresAt),
-    index('idx_orders_created_desc').on(t.createdAt.desc()),
     index('idx_orders_confirmed_created_desc').on(t.inHouseStatus, t.createdAt.desc()),
     check('orders_state_check', sql`${t.state} is null or ${t.state} between 1 and 58`),
     check('orders_delivery_check', sql`${t.delivery} in (0, 1)`),

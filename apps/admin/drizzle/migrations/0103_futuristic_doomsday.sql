@@ -1,0 +1,1 @@
+DROP INDEX "admin"."bulletin_tags_slug_unique";

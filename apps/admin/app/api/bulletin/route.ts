@@ -20,20 +20,7 @@ export async function GET(request?: NextRequest) {
   }
 
   if (!hasDb()) {
-    return NextResponse.json({
-      posts: [],
-      availableTags: [],
-      currentUserId: session.user.id ?? null,
-      permissions: { canModerate: false, canPost: true },
-      pagination: {
-        page: 1,
-        limit: 20,
-        totalItems: 0,
-        totalPages: 1,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      },
-    });
+    return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
   const viewer = getBulletinViewer(session);

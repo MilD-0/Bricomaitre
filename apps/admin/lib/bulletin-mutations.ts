@@ -3,23 +3,19 @@ import { and, eq } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
-  bulletinPostAttachments,
   bulletinPostReactions,
   bulletinPosts,
-  bulletinPostTags,
   bulletinReplies,
   bulletinReplyReactions,
 } from '@bric/db/schema';
 
-import { mutateEntityWithHistory } from './action-history';
+import { mutateEntityWithHistory, mutateEntityWithHistoryTransaction } from './action-history';
 import {
   bulletinPostPatchSchema,
   bulletinPostSchema,
   bulletinReactionSchema,
   bulletinReplySchema,
-  canDeleteBulletinPost,
-  canDeleteBulletinReply,
-  canEditBulletinPost,
+  canManageBulletinContent,
   canModerateBulletin,
 } from './bulletin';
 import { syncBulletinPostAttachments, syncBulletinPostTags } from './bulletin-server';
@@ -66,49 +62,53 @@ export async function setBulletinPostReaction(
   actor: BulletinMutationActor,
 ) {
   const { emoji } = bulletinReactionSchema.parse({ emoji: emojiInput });
-  const post = await db.query.bulletinPosts.findFirst({
-    where: eq(bulletinPosts.id, postId),
-  });
-  if (!post) throw new BulletinPostNotFoundError(postId);
-  const existing = await db.query.bulletinPostReactions.findFirst({
-    where: and(
-      eq(bulletinPostReactions.postId, postId),
-      eq(bulletinPostReactions.userEmail, actor.email),
-      eq(bulletinPostReactions.emoji, emoji),
-    ),
-  });
-  const shouldReact = desired === 'toggle' ? !existing : desired === 'add';
-  if (Boolean(existing) === shouldReact) {
-    return { id: postId, emoji, reacted: shouldReact, changed: false };
-  }
+  return db.transaction(async (tx) => {
+    const [post] = await tx
+      .select()
+      .from(bulletinPosts)
+      .where(eq(bulletinPosts.id, postId))
+      .for('update');
+    if (!post) throw new BulletinPostNotFoundError(postId);
+    const existing = await tx.query.bulletinPostReactions.findFirst({
+      where: and(
+        eq(bulletinPostReactions.postId, postId),
+        eq(bulletinPostReactions.userEmail, actor.email),
+        eq(bulletinPostReactions.emoji, emoji),
+      ),
+    });
+    const shouldReact = desired === 'toggle' ? !existing : desired === 'add';
+    if (Boolean(existing) === shouldReact) {
+      return { id: postId, emoji, reacted: shouldReact, changed: false };
+    }
 
-  await mutateEntityWithHistory(db, {
-    entityType: 'bulletinPostReactions',
-    ...(existing ? { entityId: existing.id } : {}),
-    operation: existing ? 'delete' : 'create',
-    actor,
-    resolveEntityId: (id: number) => id,
-    execute: async (tx) => {
-      if (existing) {
-        await tx.delete(bulletinPostReactions).where(eq(bulletinPostReactions.id, existing.id));
-        return existing.id;
-      } else {
-        const [inserted] = await tx
-          .insert(bulletinPostReactions)
-          .values({
-            postId,
-            userId: actor.id ?? null,
-            userName: actor.name,
-            userEmail: actor.email,
-            emoji,
-          })
-          .returning({ id: bulletinPostReactions.id });
-        if (!inserted) throw new Error('Unable to create bulletin reaction');
-        return inserted.id;
-      }
-    },
+    await mutateEntityWithHistoryTransaction(tx, {
+      entityType: 'bulletinPostReactions',
+      ...(existing ? { entityId: existing.id } : {}),
+      operation: existing ? 'delete' : 'create',
+      actor,
+      resolveEntityId: (id: number) => id,
+      execute: async (tx) => {
+        if (existing) {
+          await tx.delete(bulletinPostReactions).where(eq(bulletinPostReactions.id, existing.id));
+          return existing.id;
+        } else {
+          const [inserted] = await tx
+            .insert(bulletinPostReactions)
+            .values({
+              postId,
+              userId: actor.id ?? null,
+              userName: actor.name,
+              userEmail: actor.email,
+              emoji,
+            })
+            .returning({ id: bulletinPostReactions.id });
+          if (!inserted) throw new Error('Unable to create bulletin reaction');
+          return inserted.id;
+        }
+      },
+    });
+    return { id: postId, emoji, reacted: shouldReact, changed: true };
   });
-  return { id: postId, emoji, reacted: shouldReact, changed: true };
 }
 
 export async function setBulletinReplyReaction(
@@ -119,49 +119,53 @@ export async function setBulletinReplyReaction(
   actor: BulletinMutationActor,
 ) {
   const { emoji } = bulletinReactionSchema.parse({ emoji: emojiInput });
-  const reply = await db.query.bulletinReplies.findFirst({
-    where: eq(bulletinReplies.id, replyId),
-  });
-  if (!reply) throw new BulletinReplyNotFoundError(replyId);
-  const existing = await db.query.bulletinReplyReactions.findFirst({
-    where: and(
-      eq(bulletinReplyReactions.replyId, replyId),
-      eq(bulletinReplyReactions.userEmail, actor.email),
-      eq(bulletinReplyReactions.emoji, emoji),
-    ),
-  });
-  const shouldReact = desired === 'toggle' ? !existing : desired === 'add';
-  if (Boolean(existing) === shouldReact) {
-    return { id: replyId, postId: reply.postId, emoji, reacted: shouldReact, changed: false };
-  }
+  return db.transaction(async (tx) => {
+    const [reply] = await tx
+      .select()
+      .from(bulletinReplies)
+      .where(eq(bulletinReplies.id, replyId))
+      .for('update');
+    if (!reply) throw new BulletinReplyNotFoundError(replyId);
+    const existing = await tx.query.bulletinReplyReactions.findFirst({
+      where: and(
+        eq(bulletinReplyReactions.replyId, replyId),
+        eq(bulletinReplyReactions.userEmail, actor.email),
+        eq(bulletinReplyReactions.emoji, emoji),
+      ),
+    });
+    const shouldReact = desired === 'toggle' ? !existing : desired === 'add';
+    if (Boolean(existing) === shouldReact) {
+      return { id: replyId, postId: reply.postId, emoji, reacted: shouldReact, changed: false };
+    }
 
-  await mutateEntityWithHistory(db, {
-    entityType: 'bulletinReplyReactions',
-    ...(existing ? { entityId: existing.id } : {}),
-    operation: existing ? 'delete' : 'create',
-    actor,
-    resolveEntityId: (id: number) => id,
-    execute: async (tx) => {
-      if (existing) {
-        await tx.delete(bulletinReplyReactions).where(eq(bulletinReplyReactions.id, existing.id));
-        return existing.id;
-      } else {
-        const [inserted] = await tx
-          .insert(bulletinReplyReactions)
-          .values({
-            replyId,
-            userId: actor.id ?? null,
-            userName: actor.name,
-            userEmail: actor.email,
-            emoji,
-          })
-          .returning({ id: bulletinReplyReactions.id });
-        if (!inserted) throw new Error('Unable to create bulletin reaction');
-        return inserted.id;
-      }
-    },
+    await mutateEntityWithHistoryTransaction(tx, {
+      entityType: 'bulletinReplyReactions',
+      ...(existing ? { entityId: existing.id } : {}),
+      operation: existing ? 'delete' : 'create',
+      actor,
+      resolveEntityId: (id: number) => id,
+      execute: async (tx) => {
+        if (existing) {
+          await tx.delete(bulletinReplyReactions).where(eq(bulletinReplyReactions.id, existing.id));
+          return existing.id;
+        } else {
+          const [inserted] = await tx
+            .insert(bulletinReplyReactions)
+            .values({
+              replyId,
+              userId: actor.id ?? null,
+              userName: actor.name,
+              userEmail: actor.email,
+              emoji,
+            })
+            .returning({ id: bulletinReplyReactions.id });
+          if (!inserted) throw new Error('Unable to create bulletin reaction');
+          return inserted.id;
+        }
+      },
+    });
+    return { id: replyId, postId: reply.postId, emoji, reacted: shouldReact, changed: true };
   });
-  return { id: replyId, postId: reply.postId, emoji, reacted: shouldReact, changed: true };
 }
 
 export async function createBulletinPost(
@@ -258,8 +262,8 @@ export async function updateBulletinPost(
   });
   if (!post) throw new BulletinPostNotFoundError(postId);
   if (
-    !canEditBulletinPost({
-      postAuthorId: post.authorId,
+    !canManageBulletinContent({
+      authorId: post.authorId,
       userId: actor.id,
       permissions: actor.permissions,
     })
@@ -313,8 +317,8 @@ export async function deleteBulletinPost(
   });
   if (!post) throw new BulletinPostNotFoundError(postId);
   if (
-    !canDeleteBulletinPost({
-      postAuthorId: post.authorId,
+    !canManageBulletinContent({
+      authorId: post.authorId,
       userId: actor.id,
       permissions: actor.permissions,
     })
@@ -328,8 +332,6 @@ export async function deleteBulletinPost(
     operation: 'delete',
     actor,
     execute: async (tx) => {
-      await tx.delete(bulletinPostAttachments).where(eq(bulletinPostAttachments.postId, postId));
-      await tx.delete(bulletinPostTags).where(eq(bulletinPostTags.postId, postId));
       await tx.delete(bulletinPosts).where(eq(bulletinPosts.id, postId));
     },
   });
@@ -346,8 +348,8 @@ export async function deleteBulletinReply(
   });
   if (!reply) throw new BulletinReplyNotFoundError(replyId);
   if (
-    !canDeleteBulletinReply({
-      replyAuthorId: reply.authorId,
+    !canManageBulletinContent({
+      authorId: reply.authorId,
       userId: actor.id,
       permissions: actor.permissions,
     })

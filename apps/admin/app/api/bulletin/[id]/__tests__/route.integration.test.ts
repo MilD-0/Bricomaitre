@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, PATCH } from '../route';
-import { bulletinPostPatchSchema } from '../../../../../lib/bulletin';
 
 const { hasDbMock, getDbMock, authMock, mutateEntityWithHistoryMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
@@ -135,11 +134,6 @@ describe('app/api/bulletin/[id]/route', () => {
         },
       },
     });
-    vi.spyOn(bulletinPostPatchSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: { pinned: true },
-    } as never);
-
     const res = await PATCH(
       new NextRequest('http://localhost/api/bulletin/5', {
         method: 'PATCH',

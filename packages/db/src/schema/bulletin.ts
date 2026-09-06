@@ -127,10 +127,7 @@ export const bulletinTags = adminSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex('bulletin_tags_name_unique').on(t.name),
-    uniqueIndex('bulletin_tags_slug_unique').on(t.slug),
-  ],
+  (t) => [uniqueIndex('bulletin_tags_name_unique').on(t.name)],
 );
 
 export const bulletinPostTags = adminSchema.table(

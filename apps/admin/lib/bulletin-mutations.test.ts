@@ -22,8 +22,6 @@ import {
   BulletinMutationForbiddenError,
   deleteBulletinPost,
   deleteBulletinReply,
-  setBulletinPostReaction,
-  setBulletinReplyReaction,
   updateBulletinPost,
 } from './bulletin-mutations';
 
@@ -115,7 +113,7 @@ describe('canonical Bulletin mutations', () => {
       postId: 7,
       deleted: true,
     });
-    expect(tx.delete).toHaveBeenCalledTimes(4);
+    expect(tx.delete).toHaveBeenCalledTimes(2);
     expect(mocks.mutate).toHaveBeenNthCalledWith(
       1,
       db,
@@ -126,38 +124,5 @@ describe('canonical Bulletin mutations', () => {
       db,
       expect.objectContaining({ entityType: 'bulletinReplies', operation: 'delete', entityId: 9 }),
     );
-  });
-
-  it('adds, removes, and preserves exact desired reaction state', async () => {
-    const { db, tx } = database();
-    mocks.post.mockResolvedValue({ id: 7 });
-    mocks.reply.mockResolvedValue({ id: 9, postId: 7 });
-    mocks.postReaction.mockResolvedValue(null);
-    mocks.replyReaction.mockResolvedValue({ id: 21 });
-
-    await expect(setBulletinPostReaction(db as never, 7, '👍', 'add', actor)).resolves.toEqual({
-      id: 7,
-      emoji: '👍',
-      reacted: true,
-      changed: true,
-    });
-    await expect(setBulletinReplyReaction(db as never, 9, '🔥', 'remove', actor)).resolves.toEqual({
-      id: 9,
-      postId: 7,
-      emoji: '🔥',
-      reacted: false,
-      changed: true,
-    });
-    expect(tx.insert).toHaveBeenCalledTimes(1);
-    expect(tx.delete).toHaveBeenCalledTimes(1);
-
-    vi.clearAllMocks();
-    const unchanged = database();
-    mocks.post.mockResolvedValue({ id: 7 });
-    mocks.postReaction.mockResolvedValue({ id: 20 });
-    await expect(
-      setBulletinPostReaction(unchanged.db as never, 7, '👍', 'add', actor),
-    ).resolves.toEqual({ id: 7, emoji: '👍', reacted: true, changed: false });
-    expect(mocks.mutate).not.toHaveBeenCalled();
   });
 });

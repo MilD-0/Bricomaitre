@@ -12,12 +12,8 @@ import {
   bulletinTags,
 } from '@bric/db/schema';
 import {
-  canDeleteBulletinReply,
-  canDeleteBulletinPost,
-  canEditBulletinPost,
-  canPinBulletinPost,
+  canManageBulletinContent,
   bulletinListQuerySchema,
-  slugifyBulletinTag,
   type BulletinAttachment,
   type BulletinReactionRecord,
   type BulletinReplyRecord,
@@ -63,7 +59,7 @@ async function getOrCreateTagIds(tx: BulletinTransaction, names: string[]) {
       .values(
         missingNames.map((name) => ({
           name,
-          slug: slugifyBulletinTag(name),
+          slug: name,
         })),
       )
       .onConflictDoNothing()
@@ -111,14 +107,10 @@ export async function syncBulletinPostAttachments(
   postId: number,
   attachments: BulletinAttachment[] | undefined,
 ) {
-  const existing = await tx
-    .select({ fileKey: bulletinPostAttachments.fileKey })
-    .from(bulletinPostAttachments)
-    .where(eq(bulletinPostAttachments.postId, postId));
   await tx.delete(bulletinPostAttachments).where(eq(bulletinPostAttachments.postId, postId));
 
   if (!attachments || attachments.length === 0) {
-    return existing.map((attachment) => attachment.fileKey);
+    return;
   }
 
   await tx.insert(bulletinPostAttachments).values(
@@ -131,10 +123,6 @@ export async function syncBulletinPostAttachments(
       size: attachment.size,
     })),
   );
-  const retained = new Set(attachments.map((attachment) => attachment.fileKey));
-  return existing
-    .map((attachment) => attachment.fileKey)
-    .filter((fileKey) => !retained.has(fileKey));
 }
 
 function mapReactions(
@@ -270,8 +258,8 @@ function mapBulletinPosts(
         },
         reactions,
         permissions: {
-          canDelete: canDeleteBulletinReply({
-            replyAuthorId: row.authorId,
+          canDelete: canManageBulletinContent({
+            authorId: row.authorId,
             userId: viewer.userId,
             permissions: viewer.permissions,
           }),
@@ -281,6 +269,11 @@ function mapBulletinPosts(
   });
 
   return posts.map((post) => {
+    const canManage = canManageBulletinContent({
+      authorId: post.authorId,
+      userId: viewer.userId,
+      permissions: viewer.permissions,
+    });
     const reactions = Array.from(postReactionsByPostId.get(post.id)?.values() ?? []).sort(
       (left, right) => right.count - left.count || left.emoji.localeCompare(right.emoji),
     );
@@ -302,21 +295,9 @@ function mapBulletinPosts(
         email: post.authorEmail,
       },
       permissions: {
-        canEdit: canEditBulletinPost({
-          postAuthorId: post.authorId,
-          userId: viewer.userId,
-          permissions: viewer.permissions,
-        }),
-        canDelete: canDeleteBulletinPost({
-          postAuthorId: post.authorId,
-          userId: viewer.userId,
-          permissions: viewer.permissions,
-        }),
-        canPin: canPinBulletinPost({
-          postAuthorId: post.authorId,
-          userId: viewer.userId,
-          permissions: viewer.permissions,
-        }),
+        canEdit: canManage,
+        canDelete: canManage,
+        canPin: canManage,
       },
     };
   });

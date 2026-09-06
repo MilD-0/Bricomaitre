@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, POST } from '../route';
-import { bulletinPostSchema } from '../../../../lib/bulletin';
 
 const { hasDbMock, getDbMock, authMock, mutateEntityWithHistoryMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
@@ -55,21 +54,16 @@ describe('app/api/bulletin/route', () => {
       },
     });
 
-    vi.spyOn(bulletinPostSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
+    const req = new NextRequest('http://localhost/api/bulletin', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         title: 'Store reminder',
         body: 'Close the side door before the shift ends tonight.',
         tags: ['ops'],
         pinned: true,
         attachments: [],
-      },
-    } as never);
-
-    const req = new NextRequest('http://localhost/api/bulletin', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
+      }),
     });
 
     const res = await POST(req);

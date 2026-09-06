@@ -4,7 +4,7 @@ import {
   bulletinComposerFormSchema,
   bulletinPostPatchSchema,
   bulletinPostSchema,
-  canDeleteBulletinPost,
+  canManageBulletinContent,
   canModerateBulletin,
   formatBulletinTags,
   parseBulletinTags,
@@ -68,8 +68,8 @@ describe('bulletin schemas', () => {
 describe('bulletin permissions', () => {
   it('allows owners to delete their own post without moderator rights', () => {
     expect(
-      canDeleteBulletinPost({
-        postAuthorId: 'user-1',
+      canManageBulletinContent({
+        authorId: 'user-1',
         userId: 'user-1',
         permissions: [],
       }),
@@ -79,15 +79,15 @@ describe('bulletin permissions', () => {
   it('requires bulletin_moderate to act on other users posts', () => {
     expect(canModerateBulletin(['bulletin_moderate'])).toBe(true);
     expect(
-      canDeleteBulletinPost({
-        postAuthorId: 'user-1',
+      canManageBulletinContent({
+        authorId: 'user-1',
         userId: 'user-2',
         permissions: [],
       }),
     ).toBe(false);
     expect(
-      canDeleteBulletinPost({
-        postAuthorId: 'user-1',
+      canManageBulletinContent({
+        authorId: 'user-1',
         userId: 'user-2',
         permissions: ['bulletin_moderate'],
       }),

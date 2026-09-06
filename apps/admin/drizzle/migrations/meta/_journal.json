@@ -715,6 +715,20 @@
       "when": 1788691186867,
       "tag": "0101_cold_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1788695883741,
+      "tag": "0102_puzzling_luke_cage",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1788696401032,
+      "tag": "0103_futuristic_doomsday",
+      "breakpoints": true
     }
   ]
 }

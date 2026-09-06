@@ -23,14 +23,16 @@ export async function GET(
   });
   if (!object) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (!object.Body) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  const fileName = (request.nextUrl.searchParams.get('name') ?? 'attachment').replace(
-    /["\\\r\n]/g,
-    '_',
+  const fileName = request.nextUrl.searchParams.get('name') ?? 'attachment';
+  const fallbackName = fileName.replace(/[^\x20-\x7e]|["\\]/g, '_');
+  const encodedName = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
   return new Response(object.Body.transformToWebStream(), {
     headers: {
       'content-type': object.ContentType ?? 'application/octet-stream',
-      'content-disposition': `inline; filename="${fileName}"`,
+      'content-disposition': `inline; filename="${fallbackName}"; filename*=UTF-8''${encodedName}`,
       'cache-control': 'private, no-store',
       'x-content-type-options': 'nosniff',
     },

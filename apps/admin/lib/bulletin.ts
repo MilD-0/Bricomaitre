@@ -1,13 +1,13 @@
 import { z } from 'zod';
 
-import { hasPermission, normalizePermissions, type PermissionKey } from './permissions';
+import { hasPermission, normalizePermissions } from './permissions';
 import {
   MAX_BULLETIN_UPLOAD_BYTES,
   MAX_BULLETIN_UPLOAD_FILES,
   MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
 } from './upload-limits';
 
-const bulletinAttachmentSchema = z.object({
+export const bulletinAttachmentSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   fileUrl: z
     .string()
@@ -80,8 +80,8 @@ export type BulletinPagination = {
 };
 
 export const bulletinComposerFormSchema = z.object({
-  title: z.string().trim().min(3).max(120),
-  body: z.string().trim().min(10).max(5000),
+  title: bulletinTitleSchema,
+  body: bulletinBodySchema,
   tagsInput: z.string().max(200),
   pinned: z.boolean(),
   attachments: bulletinAttachmentsSchema,
@@ -171,78 +171,18 @@ export function formatBulletinTags(tags: string[]) {
   return tags.join(', ');
 }
 
-export function slugifyBulletinTag(tag: string) {
-  return tag
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-export function canModerateBulletin(access: readonly PermissionKey[] | unknown) {
+export function canModerateBulletin(access: unknown) {
   return hasPermission(normalizePermissions(access), 'bulletin_moderate');
 }
 
-export function canDeleteBulletinPost({
-  postAuthorId,
+export function canManageBulletinContent({
+  authorId,
   userId,
   permissions,
 }: {
-  postAuthorId: string | null;
+  authorId: string | null;
   userId: string | null | undefined;
-  permissions: readonly PermissionKey[] | unknown;
+  permissions: unknown;
 }) {
-  if (userId && postAuthorId && userId === postAuthorId) {
-    return true;
-  }
-
-  return canModerateBulletin(permissions);
-}
-
-export function canDeleteBulletinReply({
-  replyAuthorId,
-  userId,
-  permissions,
-}: {
-  replyAuthorId: string | null;
-  userId: string | null | undefined;
-  permissions: readonly PermissionKey[] | unknown;
-}) {
-  if (userId && replyAuthorId && userId === replyAuthorId) {
-    return true;
-  }
-
-  return canModerateBulletin(permissions);
-}
-
-export function canEditBulletinPost({
-  postAuthorId,
-  userId,
-  permissions,
-}: {
-  postAuthorId: string | null;
-  userId: string | null | undefined;
-  permissions: readonly PermissionKey[] | unknown;
-}) {
-  if (userId && postAuthorId && userId === postAuthorId) {
-    return true;
-  }
-
-  return canModerateBulletin(permissions);
-}
-
-export function canPinBulletinPost({
-  postAuthorId,
-  userId,
-  permissions,
-}: {
-  postAuthorId: string | null;
-  userId: string | null | undefined;
-  permissions: readonly PermissionKey[] | unknown;
-}) {
-  if (userId && postAuthorId && userId === postAuthorId) {
-    return true;
-  }
-
-  return canModerateBulletin(permissions);
+  return Boolean(userId && authorId && userId === authorId) || canModerateBulletin(permissions);
 }
