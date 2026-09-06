@@ -395,7 +395,7 @@ VALUES
     'Les bons outils. Le travail peut commencer.',
     'الأدوات المناسبة. لنبدأ العمل.',
     :'asset_origin' || '/bricomaitre-demo/merchandising/banners/workshop-wide-lettered-50x21.webp',
-    :'asset_origin' || '/bricomaitre-demo/merchandising/banners/workshop-mobile-lettered.webp',
+    :'asset_origin' || '/bricomaitre-demo/merchandising/banners/workshop-mobile-lettered-58ee276391bf982b.webp',
     :'asset_origin' || '/bricomaitre-demo/merchandising/banners/workshop-wide-lettered-50x21.webp',
     NULL, 1, true
   ),
@@ -403,7 +403,7 @@ VALUES
     'Tracez juste avant de fixer.',
     'حدّد بدقة قبل التثبيت.',
     :'asset_origin' || '/bricomaitre-demo/merchandising/banners/precision-wide-lettered-50x21.webp',
-    :'asset_origin' || '/bricomaitre-demo/merchandising/banners/precision-mobile-lettered.webp',
+    :'asset_origin' || '/bricomaitre-demo/merchandising/banners/precision-mobile-lettered-4e005e6159103551.webp',
     :'asset_origin' || '/bricomaitre-demo/merchandising/banners/precision-wide-lettered-50x21.webp',
     NULL, 2, true
   );

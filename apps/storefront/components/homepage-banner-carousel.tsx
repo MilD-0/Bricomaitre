@@ -56,16 +56,46 @@ function BannerImage({
     if (image?.complete && image.naturalWidth > 0) markReady();
   }, [markReady]);
   return (
-    <span className={ready ? 'home-banner-picture is-ready' : 'home-banner-picture'}>
-      <picture>
-        <source
-          media="(max-width: 620px)"
-          srcSet={portraitProps.srcSet ?? portraitProps.src}
-          sizes={portraitProps.sizes}
-        />
-        <img {...landscapeProps} alt={alt} ref={imageRef} onLoad={markReady} onError={markReady} />
-      </picture>
-    </span>
+    <>
+      {priority ? (
+        <>
+          <link
+            rel="preload"
+            as="image"
+            href={portraitProps.src}
+            imageSrcSet={portraitProps.srcSet}
+            imageSizes={portraitProps.sizes}
+            media="(max-width: 620px)"
+            fetchPriority="high"
+          />
+          <link
+            rel="preload"
+            as="image"
+            href={landscapeProps.src}
+            imageSrcSet={landscapeProps.srcSet}
+            imageSizes={landscapeProps.sizes}
+            media="not all and (max-width: 620px)"
+            fetchPriority="high"
+          />
+        </>
+      ) : null}
+      <span className={ready ? 'home-banner-picture is-ready' : 'home-banner-picture'}>
+        <picture>
+          <source
+            media="(max-width: 620px)"
+            srcSet={portraitProps.srcSet ?? portraitProps.src}
+            sizes={portraitProps.sizes}
+          />
+          <img
+            {...landscapeProps}
+            alt={alt}
+            ref={imageRef}
+            onLoad={markReady}
+            onError={markReady}
+          />
+        </picture>
+      </span>
+    </>
   );
 }
 

@@ -135,6 +135,7 @@ function EditorialCards({
                     height={620}
                     sizes="(max-width: 620px) 90vw, 36vw"
                     quality={60}
+                    fetchPriority="low"
                   />
                 ) : (
                   <span aria-hidden="true">BRICO</span>
@@ -252,7 +253,7 @@ export function Homepage({
             locale={locale}
             brands={data.brands}
             categories={data.categories}
-            eagerImages
+            eagerImages={data.banners.length === 0}
           />
         </section>
       ) : null}

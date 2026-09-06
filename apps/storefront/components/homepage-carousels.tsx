@@ -100,6 +100,7 @@ export function HomepageCategoryCarousel({
                     height={170}
                     sizes="180px"
                     quality={60}
+                    fetchPriority="low"
                   />
                 ) : (
                   <span className="catalog-card-placeholder" aria-hidden="true">
@@ -314,6 +315,7 @@ export function HomepageBrandCarousel({ brands, locale }: { brands: Brand[]; loc
                   height={100}
                   sizes="150px"
                   quality={60}
+                  fetchPriority="low"
                 />
               ) : (
                 <strong className="home-brand-name">{brand.name}</strong>

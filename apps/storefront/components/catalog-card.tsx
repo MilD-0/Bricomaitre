@@ -68,7 +68,7 @@ export function CatalogCard({
               height={420}
               sizes="(max-width: 520px) 46vw, (max-width: 900px) 30vw, 260px"
               loading={eagerImage ? 'eager' : 'lazy'}
-              fetchPriority={highPriorityImage ? 'high' : 'auto'}
+              fetchPriority={highPriorityImage ? 'high' : eagerImage ? 'auto' : 'low'}
               quality={60}
             />
           ) : (
