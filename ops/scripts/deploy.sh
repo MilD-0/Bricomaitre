@@ -118,7 +118,7 @@ cleanup_failed_deployment() {
 
     if [[ "$routing_restored" == true && -f "$image_state_file" ]] \
       && grep -q '^BRIC_IMAGE_STOREFRONT_META_WORKER=' "$image_state_file"; then
-      compose up -d --force-recreate "$meta_worker_service"
+      compose up -d --pull never --force-recreate "$meta_worker_service"
       assert_service_image "$meta_worker_service"
       bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
     elif [[ "$routing_restored" == true ]]; then
@@ -239,8 +239,7 @@ set -a
 source "${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env"
 set +a
 
-compose pull "$api_service"
-compose up -d --force-recreate "$api_service"
+compose up -d --pull never --force-recreate "$api_service"
 assert_service_image "$api_service"
 bash "$script_dir/wait-for-health.sh" "$api_service"
 
@@ -285,8 +284,7 @@ fi
 append_summary "- Storefront release surface: ${BRIC_STOREFRONT_APP}"
 append_summary "- ✅ Storefront release identity and live catalog preflight passed"
 
-compose pull "$admin_service" "$storefront_service"
-compose up -d --force-recreate "$admin_service" "$storefront_service"
+compose up -d --pull never --force-recreate "$admin_service" "$storefront_service"
 assert_service_image "$admin_service"
 assert_service_image "$storefront_service"
 bash "$script_dir/wait-for-health.sh" "$admin_service"
@@ -301,8 +299,7 @@ else
   exit 1
 fi
 
-compose pull "$worker_service"
-compose up -d --force-recreate "$worker_service"
+compose up -d --pull never --force-recreate "$worker_service"
 assert_service_image "$worker_service"
 if ! bash "$script_dir/wait-for-health.sh" "$worker_service"; then
   exit 1
@@ -328,8 +325,7 @@ if ! bash "$script_dir/smoke-check.sh"; then
   exit 1
 fi
 
-compose pull "$meta_worker_service"
-compose up -d --force-recreate "$meta_worker_service"
+compose up -d --pull never --force-recreate "$meta_worker_service"
 assert_service_image "$meta_worker_service"
 bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
 

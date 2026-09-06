@@ -105,12 +105,13 @@ describe('PostgreSQL high-churn autovacuum configuration', () => {
     expect(test.result.stderr).toContain('PostgreSQL container is not running');
   });
 
-  it('pulls once and runs verify, migrate, verify before configuring autovacuum', () => {
+  it('runs verify, migrate, verify with missing-image acquisition before configuring autovacuum', () => {
     const test = runConfigurator('verified', true);
     expect(test.result.status, test.result.stderr).toBe(0);
     const commands = readFileSync(test.dockerLog, 'utf8').trim().split('\n');
-    expect(commands.filter((command) => command.includes(' pull '))).toHaveLength(1);
+    expect(commands.filter((command) => command.includes(' pull '))).toHaveLength(0);
     const tasks = commands.filter((command) => command.includes(' run --rm --no-deps '));
+    expect(tasks.every((command) => command.includes('--pull missing'))).toBe(true);
     expect(tasks.map((command) => command.split('|')[0])).toEqual(['verify', 'migrate', 'verify']);
     expect(commands.indexOf(tasks[2]!)).toBeLessThan(
       commands.findIndex((command) => command.includes('exec -i')),

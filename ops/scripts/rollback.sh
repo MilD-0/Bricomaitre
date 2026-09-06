@@ -57,7 +57,7 @@ cleanup_failed_rollback() {
     if [[ "$routing_restored" == true ]]; then
       remove_slot_release_services "$target_slot"
       rollback_image_state_transaction
-      compose up -d --force-recreate "$meta_worker_service"
+      compose up -d --pull never --force-recreate "$meta_worker_service"
       assert_service_image "$meta_worker_service"
       bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
       restore_release_link "$current_link" "$current_release"
@@ -77,8 +77,7 @@ begin_image_state_transaction
 begin_nginx_main_config_transaction "$current_release/ops/nginx/nginx.conf"
 apply_release_images "$target_slot" "$release_images_file" "$verified_release_image_profile"
 
-compose pull "$api_service" "$admin_service" "$storefront_service"
-compose up -d --force-recreate "$api_service" "$admin_service" "$storefront_service"
+compose up -d --pull never --force-recreate "$api_service" "$admin_service" "$storefront_service"
 assert_service_image "$api_service"
 assert_service_image "$admin_service"
 assert_service_image "$storefront_service"
@@ -86,8 +85,7 @@ bash "$script_dir/wait-for-health.sh" "$api_service"
 bash "$script_dir/wait-for-health.sh" "$admin_service"
 bash "$script_dir/wait-for-health.sh" "$storefront_service"
 
-compose pull "$worker_service"
-compose up -d --force-recreate "$worker_service"
+compose up -d --pull never --force-recreate "$worker_service"
 assert_service_image "$worker_service"
 bash "$script_dir/wait-for-health.sh" "$worker_service"
 
@@ -99,8 +97,7 @@ ensure_nginx
 reload_nginx
 bash "$script_dir/smoke-check.sh"
 
-compose pull "$meta_worker_service"
-compose up -d --force-recreate "$meta_worker_service"
+compose up -d --pull never --force-recreate "$meta_worker_service"
 assert_service_image "$meta_worker_service"
 bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
 

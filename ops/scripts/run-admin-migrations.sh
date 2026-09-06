@@ -16,8 +16,7 @@ if [[ -f "${BRIC_ENV_DIR:-/srv/bric/env}/admin.env" ]]; then
   set +a
 fi
 
-compose pull "$service"
 for task in verify migrate verify; do
-  ADMIN_DB_TASK="$task" compose run --rm --no-deps "$service"
+  ADMIN_DB_TASK="$task" compose run --rm --no-deps --pull missing "$service"
 done
 "$script_dir/configure-postgres-autovacuum.sh"

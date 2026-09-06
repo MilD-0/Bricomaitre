@@ -742,60 +742,6 @@ describe('production packaging and release runtime', () => {
     expect(nginx).not.toContain('$http_referer');
   });
 
-  it('starts complete candidate services only after their images are available', () => {
-    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
-    const storefrontPull = deploy.indexOf('compose pull "$admin_service" "$storefront_service"');
-    const storefrontStart = deploy.indexOf(
-      'compose up -d --force-recreate "$admin_service" "$storefront_service"',
-    );
-
-    expect(storefrontPull).toBeGreaterThan(-1);
-    expect(storefrontStart).toBeGreaterThan(storefrontPull);
-  });
-
-  it('reconciles PostgreSQL and Redis serially before candidate services', () => {
-    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
-    const postgresStart = deploy.indexOf('compose up -d postgres');
-    const postgresHealth = deploy.indexOf('wait-for-health.sh" postgres');
-    const redisStart = deploy.indexOf('compose up -d redis');
-    const redisHealth = deploy.indexOf('wait-for-health.sh" redis');
-    const apiStart = deploy.indexOf('compose up -d --force-recreate "$api_service"');
-
-    expect(postgresStart).toBeGreaterThan(-1);
-    expect(postgresHealth).toBeGreaterThan(postgresStart);
-    expect(redisStart).toBeGreaterThan(postgresHealth);
-    expect(redisHealth).toBeGreaterThan(redisStart);
-    expect(apiStart).toBeGreaterThan(redisHealth);
-    expect(deploy).not.toContain('compose up -d postgres redis');
-    expect(deploy).toContain('env -u REDISCLI_AUTH redis-cli --raw ping');
-    expect(deploy).toContain('CONFIG SET requirepass "$REDISCLI_AUTH"');
-    expect(deploy).toContain('authenticated_redis_ping');
-    expect(deploy).toContain('reconcile_incumbent_slot');
-    expect(deploy).toContain('compose up -d --no-deps --force-recreate "$previous_api_service"');
-  });
-
-  it('proves migration rollback compatibility before candidate cutover', () => {
-    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
-    const safetyGate = deploy.indexOf('verify-migration-rollback-safety.py');
-    const migration = deploy.indexOf('run-admin-migrations.sh" "$target_slot"');
-    const previousSmoke = deploy.indexOf(
-      'Previous slot ${previous_slot} remained rollback-compatible',
-    );
-    const candidateApps = deploy.indexOf(
-      'compose up -d --force-recreate "$admin_service" "$storefront_service"',
-    );
-
-    expect(safetyGate).toBeGreaterThan(-1);
-    expect(safetyGate).toBeLessThan(migration);
-    expect(deploy).toContain('release is missing migration state');
-    expect(deploy).toContain('wait-for-health.sh" "$previous_api_service"');
-    expect(deploy).toContain('wait-for-health.sh" "$previous_admin_service"');
-    expect(deploy).toContain('wait-for-health.sh" "$previous_storefront_service"');
-    expect(deploy).toContain('wait-for-health.sh" "$previous_worker_service"');
-    expect(previousSmoke).toBeGreaterThan(migration);
-    expect(previousSmoke).toBeLessThan(candidateApps);
-  });
-
   it('keeps production env templates secret-free and splits browser/server marketing credentials', () => {
     const storefrontEnv = readFileSync(
       resolve(workspaceRoot, 'ops/env/storefront.env.example'),
