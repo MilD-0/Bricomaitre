@@ -11,22 +11,22 @@ import {
 
 describe('admin AI analytics actions', () => {
   it('changes only the assistant-controlled planning return rate and refreshes facts', async () => {
-    const updateSettings = vi.fn(async (input) => ({ ...input }));
+    const updateSettings = vi.fn(async (input) => ({
+      previous: { fxRate: 280, defaultReturnRate: 18, restFrom: null },
+      current: { fxRate: 280, defaultReturnRate: 18, restFrom: null, ...input },
+    }));
     const refreshFacts = vi.fn(async () => true);
 
     const result = await updateAdminAiAnalyticsSettings(
       { planningReturnRate: 24 },
       {
-        getSettings: vi.fn(async () => ({ fxRate: 280, defaultReturnRate: 18, restFrom: null })),
         updateSettings,
         refreshFacts,
       },
     );
 
     expect(updateSettings).toHaveBeenCalledWith({
-      fxRate: 280,
       defaultReturnRate: 24,
-      restFrom: null,
     });
     expect(result).toEqual({
       kind: 'analytics_settings',
@@ -49,10 +49,28 @@ describe('admin AI analytics actions', () => {
     ).toThrow();
   });
 
-  it('merges cost edits with canonical records and reports partial batch outcomes', async () => {
-    const updateCost = vi.fn(async (id, input) => ({ id, ...input }));
+  it('passes named cost edits to canonical mutation and reports partial batch outcomes', async () => {
+    const updateCost = vi.fn(async (id, input) => ({
+      previous: {
+        id,
+        name: 'Hosting',
+        amountDzd: 20_000,
+        period: 'monthly' as const,
+        startDate: '2026-01-01',
+        endDate: null,
+      },
+      current: {
+        id,
+        name: 'Hosting',
+        amountDzd: 20_000,
+        period: 'monthly' as const,
+        startDate: '2026-01-01',
+        endDate: null,
+        ...input,
+      },
+    }));
     const createCost = vi.fn(async (input) => ({ id: 8, ...input }));
-    const deleteCost = vi.fn(async (id) => id);
+    const deleteCost = vi.fn(async () => null);
     const refreshFacts = vi.fn(async () => true);
 
     const result = await manageAdminAiAnalyticsCosts(
@@ -71,16 +89,6 @@ describe('admin AI analytics actions', () => {
         ],
       },
       {
-        listCosts: vi.fn(async () => [
-          {
-            id: 7,
-            name: 'Hosting',
-            amountDzd: 20_000,
-            period: 'monthly' as const,
-            startDate: '2026-01-01',
-            endDate: '2026-12-31',
-          },
-        ]),
         createCost,
         updateCost,
         deleteCost,
@@ -88,14 +96,8 @@ describe('admin AI analytics actions', () => {
       },
     );
 
-    expect(updateCost).toHaveBeenCalledWith(7, {
-      name: 'Hosting',
-      amountDzd: 42_000,
-      period: 'monthly',
-      startDate: '2026-01-01',
-      endDate: '2026-12-31',
-    });
-    expect(deleteCost).not.toHaveBeenCalled();
+    expect(updateCost).toHaveBeenCalledWith(7, { amountDzd: 42_000 });
+    expect(deleteCost).toHaveBeenCalledWith(99);
     expect(createCost).toHaveBeenCalledOnce();
     expect(result).toMatchObject({
       requestedCount: 3,
@@ -142,6 +144,22 @@ describe('admin AI analytics actions', () => {
     });
     expect(refreshFacts).toHaveBeenCalledOnce();
   });
+
+  it.each(['2026-02-30', '2026-13-01'])(
+    'rejects impossible sync date %s before contacting a source',
+    async (date) => {
+      const syncMeta = vi.fn(),
+        syncSearch = vi.fn();
+      await expect(
+        syncAdminAiAnalyticsSource(
+          { source: 'meta', since: date, until: date },
+          { syncMeta, syncSearch },
+        ),
+      ).rejects.toThrow();
+      expect(syncMeta).not.toHaveBeenCalled();
+      expect(syncSearch).not.toHaveBeenCalled();
+    },
+  );
 
   it('uses exact source ranges and enforces Meta’s existing 90-day cap', async () => {
     expect(

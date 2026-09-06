@@ -1,23 +1,23 @@
 import { z } from 'zod';
 
+import { reportingDateSchema } from './analytics/contract';
 import { refreshAnalyticsFactsAfterMutation } from './analytics-facts';
 import { syncMetaAdsInsights } from './meta-ads-insights';
 import {
   createProfitTrackerCost,
   deleteProfitTrackerCost,
   deleteProfitTrackerDay,
-  getProfitTrackerSettings,
-  listProfitTrackerCosts,
+  profitTrackerCostSchema,
+  profitTrackerCostPatchSchema,
   updateProfitTrackerCost,
   updateProfitTrackerSettings,
   upsertProfitTrackerDay,
 } from './profit-tracker';
 import { syncSearchConsole } from './search-console';
 
-const dateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .describe('Exact Africa/Algiers business date in YYYY-MM-DD format.');
+const dateSchema = reportingDateSchema.describe(
+  'Exact Africa/Algiers business date in YYYY-MM-DD format.',
+);
 
 const planningReturnRateSchema = z
   .number()
@@ -34,13 +34,11 @@ export const adminAiAnalyticsSettingsPatchSchema = z
   .strict();
 
 type AnalyticsSettingsDependencies = {
-  getSettings: typeof getProfitTrackerSettings;
   updateSettings: typeof updateProfitTrackerSettings;
   refreshFacts: typeof refreshAnalyticsFactsAfterMutation;
 };
 
 const defaultSettingsDependencies: AnalyticsSettingsDependencies = {
-  getSettings: getProfitTrackerSettings,
   updateSettings: updateProfitTrackerSettings,
   refreshFacts: refreshAnalyticsFactsAfterMutation,
 };
@@ -50,11 +48,8 @@ export async function updateAdminAiAnalyticsSettings(
   dependencies: AnalyticsSettingsDependencies = defaultSettingsDependencies,
 ) {
   const changes = adminAiAnalyticsSettingsPatchSchema.parse(raw);
-  const previous = await dependencies.getSettings();
-  const current = await dependencies.updateSettings({
-    fxRate: previous.fxRate,
+  const { previous, current } = await dependencies.updateSettings({
     defaultReturnRate: changes.planningReturnRate,
-    restFrom: previous.restFrom,
   });
   await dependencies.refreshFacts();
   return {
@@ -69,34 +64,13 @@ export async function updateAdminAiAnalyticsSettings(
   };
 }
 
-const costFieldsBaseSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80),
-    amountDzd: z.number().finite().nonnegative().max(1_000_000_000_000),
-    period: z.enum(['monthly', 'once']),
-    startDate: dateSchema,
-    endDate: dateSchema.nullable(),
-  })
-  .strict();
-
-const costFieldsSchema = costFieldsBaseSchema
-  .extend({ endDate: dateSchema.nullable().default(null) })
-  .refine((value) => !value.endDate || value.endDate >= value.startDate, {
-    message: 'endDate must not precede startDate.',
-    path: ['endDate'],
-  });
-
-const costChangesSchema = costFieldsBaseSchema
-  .partial()
-  .refine((value) => Object.keys(value).length > 0, 'Provide at least one cost change.');
-
 const costOperationSchema = z.discriminatedUnion('action', [
-  costFieldsSchema.safeExtend({ action: z.literal('create') }),
+  profitTrackerCostSchema.safeExtend({ action: z.literal('create') }).strict(),
   z
     .object({
       action: z.literal('update'),
       id: z.number().int().positive(),
-      changes: costChangesSchema,
+      changes: profitTrackerCostPatchSchema,
     })
     .strict(),
   z.object({ action: z.literal('delete'), id: z.number().int().positive() }).strict(),
@@ -107,7 +81,6 @@ export const adminAiAnalyticsCostsMutationSchema = z
   .strict();
 
 type AnalyticsCostDependencies = {
-  listCosts: typeof listProfitTrackerCosts;
   createCost: typeof createProfitTrackerCost;
   updateCost: typeof updateProfitTrackerCost;
   deleteCost: typeof deleteProfitTrackerCost;
@@ -115,7 +88,6 @@ type AnalyticsCostDependencies = {
 };
 
 const defaultCostDependencies: AnalyticsCostDependencies = {
-  listCosts: listProfitTrackerCosts,
   createCost: createProfitTrackerCost,
   updateCost: updateProfitTrackerCost,
   deleteCost: deleteProfitTrackerCost,
@@ -127,7 +99,6 @@ export async function manageAdminAiAnalyticsCosts(
   dependencies: AnalyticsCostDependencies = defaultCostDependencies,
 ) {
   const { operations } = adminAiAnalyticsCostsMutationSchema.parse(raw);
-  const currentById = new Map((await dependencies.listCosts()).map((cost) => [cost.id, cost]));
   const results: Array<Record<string, unknown>> = [];
   let changedCount = 0;
 
@@ -142,26 +113,14 @@ export async function manageAdminAiAnalyticsCosts(
           endDate: operation.endDate,
         };
         const current = await dependencies.createCost(input);
-        currentById.set(current.id, current);
         changedCount += 1;
         results.push({ index, action: operation.action, status: 'created', current });
         continue;
       }
 
-      const previous = currentById.get(operation.id);
-      if (!previous) {
-        results.push({
-          index,
-          action: operation.action,
-          id: operation.id,
-          status: 'not_found',
-        });
-        continue;
-      }
-
       if (operation.action === 'delete') {
-        const deletedId = await dependencies.deleteCost(operation.id);
-        if (!deletedId) {
+        const previous = await dependencies.deleteCost(operation.id);
+        if (!previous) {
           results.push({
             index,
             action: operation.action,
@@ -170,7 +129,6 @@ export async function manageAdminAiAnalyticsCosts(
           });
           continue;
         }
-        currentById.delete(operation.id);
         changedCount += 1;
         results.push({
           index,
@@ -182,15 +140,8 @@ export async function manageAdminAiAnalyticsCosts(
         continue;
       }
 
-      const current = await dependencies.updateCost(operation.id, {
-        name: operation.changes.name ?? previous.name,
-        amountDzd: operation.changes.amountDzd ?? previous.amountDzd,
-        period: operation.changes.period ?? previous.period,
-        startDate: operation.changes.startDate ?? previous.startDate,
-        endDate:
-          operation.changes.endDate === undefined ? previous.endDate : operation.changes.endDate,
-      });
-      if (!current) {
+      const updated = await dependencies.updateCost(operation.id, operation.changes);
+      if (!updated) {
         results.push({
           index,
           action: operation.action,
@@ -199,9 +150,8 @@ export async function manageAdminAiAnalyticsCosts(
         });
         continue;
       }
-      currentById.set(current.id, current);
       changedCount += 1;
-      results.push({ index, action: operation.action, status: 'updated', previous, current });
+      results.push({ index, action: operation.action, status: 'updated', ...updated });
     } catch (error) {
       results.push({
         index,
@@ -322,37 +272,33 @@ export async function manageAdminAiAnalyticsDayOverrides(
   };
 }
 
-function analyticsSyncSchema(sourceSchema: z.ZodType<'meta' | 'searchConsole'>) {
-  return z
-    .object({
-      source: sourceSchema,
-      since: dateSchema,
-      until: dateSchema,
-    })
-    .strict()
-    .superRefine((value, context) => {
-      if (value.since > value.until) {
-        context.addIssue({
-          code: 'custom',
-          message: 'since must not follow until.',
-          path: ['until'],
-        });
-      }
-      const days =
-        (Date.parse(`${value.until}T00:00:00Z`) - Date.parse(`${value.since}T00:00:00Z`)) /
-          (24 * 60 * 60 * 1_000) +
-        1;
-      if (value.source === 'meta' && days > 90) {
-        context.addIssue({
-          code: 'custom',
-          message: 'Meta synchronization is capped at 90 days.',
-          path: ['since'],
-        });
-      }
-    });
-}
-
-export const adminAiAnalyticsSyncSchema = analyticsSyncSchema(z.enum(['meta', 'searchConsole']));
+export const adminAiAnalyticsSyncSchema = z
+  .object({
+    source: z.enum(['meta', 'searchConsole']),
+    since: dateSchema,
+    until: dateSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.since > value.until) {
+      context.addIssue({
+        code: 'custom',
+        message: 'since must not follow until.',
+        path: ['until'],
+      });
+    }
+    const days =
+      (Date.parse(`${value.until}T00:00:00Z`) - Date.parse(`${value.since}T00:00:00Z`)) /
+        (24 * 60 * 60 * 1_000) +
+      1;
+    if (value.source === 'meta' && days > 90) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Meta synchronization is capped at 90 days.',
+        path: ['since'],
+      });
+    }
+  });
 
 type AnalyticsSyncDependencies = {
   syncMeta: (options?: Parameters<typeof syncMetaAdsInsights>[0]) => Promise<unknown>;

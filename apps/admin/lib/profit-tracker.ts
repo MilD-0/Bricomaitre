@@ -85,14 +85,21 @@ export const profitTrackerDaySchema = z
   })
   .strict();
 
-export const profitTrackerCostSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80),
-    amountDzd: z.number().finite().nonnegative().max(1_000_000_000_000),
-    period: z.enum(['monthly', 'once']),
-    startDate: dateOnlySchema,
-    endDate: dateOnlySchema.nullable().default(null),
-  })
+const profitTrackerCostFieldsSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  amountDzd: z.number().finite().nonnegative().max(1_000_000_000_000),
+  period: z.enum(['monthly', 'once']),
+  startDate: dateOnlySchema,
+  endDate: dateOnlySchema.nullable(),
+});
+
+export const profitTrackerCostPatchSchema = profitTrackerCostFieldsSchema
+  .partial()
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'Provide at least one cost change.');
+
+export const profitTrackerCostSchema = profitTrackerCostFieldsSchema
+  .extend({ endDate: dateOnlySchema.nullable().default(null) })
   .superRefine((value, context) => {
     if (value.endDate && value.endDate < value.startDate) {
       context.addIssue({
@@ -558,32 +565,39 @@ export async function getProfitTrackerSettings(db: Database = getDb()) {
 }
 
 export async function updateProfitTrackerSettings(
-  input: z.infer<typeof profitTrackerSettingsSchema>,
+  input: Partial<z.infer<typeof profitTrackerSettingsSchema>>,
   db: Database = getDb(),
 ) {
-  const value = profitTrackerSettingsSchema.parse(input);
-  const now = new Date();
-  const [row] = await db
-    .insert(profitTrackerSettings)
-    .values({
-      id: 1,
-      fxRate: String(value.fxRate),
-      defaultReturnRate: String(value.defaultReturnRate),
-      restFrom: value.restFrom,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: profitTrackerSettings.id,
-      set: {
+  const patch = profitTrackerSettingsSchema.partial().strict().parse(input);
+  return db.transaction(async (tx) => {
+    await tx
+      .insert(profitTrackerSettings)
+      .values({
+        id: 1,
+        fxRate: String(DEFAULT_SETTINGS.fxRate),
+        defaultReturnRate: String(DEFAULT_SETTINGS.defaultReturnRate),
+        restFrom: null,
+      })
+      .onConflictDoNothing({ target: profitTrackerSettings.id });
+    const [stored] = await tx
+      .select()
+      .from(profitTrackerSettings)
+      .where(eq(profitTrackerSettings.id, 1))
+      .for('update');
+    const previous = mapSettings(stored);
+    const value = profitTrackerSettingsSchema.parse({ ...previous, ...patch });
+    const [row] = await tx
+      .update(profitTrackerSettings)
+      .set({
         fxRate: String(value.fxRate),
         defaultReturnRate: String(value.defaultReturnRate),
         restFrom: value.restFrom,
-        updatedAt: now,
-      },
-    })
-    .returning();
-  return mapSettings(row);
+        updatedAt: new Date(),
+      })
+      .where(eq(profitTrackerSettings.id, 1))
+      .returning();
+    return { previous, current: mapSettings(row) };
+  });
 }
 
 export async function upsertProfitTrackerDay(
@@ -702,33 +716,43 @@ export async function createProfitTrackerCost(
 
 export async function updateProfitTrackerCost(
   id: number,
-  input: z.input<typeof profitTrackerCostSchema>,
+  input: z.input<typeof profitTrackerCostPatchSchema>,
   db: Database = getDb(),
 ) {
-  const value = profitTrackerCostSchema.parse(input);
-  const [row] = await db
-    .update(profitTrackerOperatingCosts)
-    .set({
-      name: value.name,
-      amountDzd: String(value.amountDzd),
-      period: value.period,
-      startDate: value.startDate,
-      endDate: value.endDate,
-      updatedAt: new Date(),
-    })
-    .where(eq(profitTrackerOperatingCosts.id, id))
-    .returning();
-  return row ? mapCost(row) : null;
+  const patch = profitTrackerCostPatchSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [stored] = await tx
+      .select()
+      .from(profitTrackerOperatingCosts)
+      .where(eq(profitTrackerOperatingCosts.id, id))
+      .for('update');
+    if (!stored) return null;
+    const previous = mapCost(stored);
+    const value = profitTrackerCostSchema.parse({ ...previous, ...patch });
+    const [row] = await tx
+      .update(profitTrackerOperatingCosts)
+      .set({
+        name: value.name,
+        amountDzd: String(value.amountDzd),
+        period: value.period,
+        startDate: value.startDate,
+        endDate: value.endDate,
+        updatedAt: new Date(),
+      })
+      .where(eq(profitTrackerOperatingCosts.id, id))
+      .returning();
+    return { previous, current: mapCost(row) };
+  });
 }
 
 export async function deleteProfitTrackerCost(id: number, db: Database = getDb()) {
   return db.transaction(async (tx) => {
-    const rows = await tx
+    const [row] = await tx
       .delete(profitTrackerOperatingCosts)
       .where(eq(profitTrackerOperatingCosts.id, id))
-      .returning({ id: profitTrackerOperatingCosts.id });
-    if (rows.length) await invalidateDeletedEconomics(tx);
-    return rows[0]?.id ?? null;
+      .returning();
+    if (row) await invalidateDeletedEconomics(tx);
+    return row ? mapCost(row) : null;
   });
 }
 

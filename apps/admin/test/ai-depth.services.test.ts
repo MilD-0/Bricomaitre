@@ -16,8 +16,21 @@ import {
   analyticsJourneys,
   analyticsEvents,
   analyticsDailyRollups,
+  profitTrackerSettings,
 } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
+import {
+  createProfitTrackerCost,
+  deleteProfitTrackerCost,
+  listProfitTrackerCosts,
+  getProfitTrackerSettings,
+  updateProfitTrackerCost,
+  updateProfitTrackerSettings,
+} from '../lib/profit-tracker';
+import {
+  manageAdminAiAnalyticsCosts,
+  updateAdminAiAnalyticsSettings,
+} from '../lib/admin-ai-analytics-actions';
 import { getAnalyticsData } from '../lib/analytics';
 import { analyticsForAssistant } from '../lib/ai-analytics';
 import { inspectAdminOrders } from '../lib/admin-ai-domain';
@@ -45,6 +58,98 @@ afterAll(async () => {
 });
 
 describe('durable AI evidence', () => {
+  it('preserves concurrent operator settings and cost edits when the assistant patches named fields', async () => {
+    const db = getDb();
+    const [savedSettings] = await db
+      .select()
+      .from(profitTrackerSettings)
+      .where(eq(profitTrackerSettings.id, 1));
+    const cost = await createProfitTrackerCost(
+      {
+        name: 'Old rent name',
+        amountDzd: 20000,
+        period: 'monthly',
+        startDate: '2095-01-01',
+        endDate: '2095-12-31',
+      },
+      db,
+    );
+    try {
+      await updateProfitTrackerSettings({ fxRate: 280, defaultReturnRate: 18, restFrom: null }, db);
+      const settingsResult = await updateAdminAiAnalyticsSettings(
+        { planningReturnRate: 24 },
+        {
+          updateSettings: async (patch) => {
+            // Another operator commits after the assistant starts but before its write.
+            await updateProfitTrackerSettings({ fxRate: 335, restFrom: '2095-02-01' }, db);
+            return updateProfitTrackerSettings(patch, db);
+          },
+          refreshFacts: async () => true,
+        },
+      );
+      expect(settingsResult).toMatchObject({
+        previous: { planningReturnRate: 18 },
+        current: { planningReturnRate: 24 },
+      });
+      expect(await getProfitTrackerSettings(db)).toMatchObject({
+        fxRate: 335,
+        defaultReturnRate: 24,
+        restFrom: '2095-02-01',
+      });
+      const result = await manageAdminAiAnalyticsCosts(
+        { operations: [{ action: 'update', id: cost.id, changes: { amountDzd: 42000 } }] },
+        {
+          createCost: (input) => createProfitTrackerCost(input, db),
+          deleteCost: (id) => deleteProfitTrackerCost(id, db),
+          updateCost: async (id, patch) => {
+            await updateProfitTrackerCost(
+              id,
+              { name: 'New operator name', endDate: '2096-01-01' },
+              db,
+            );
+            return updateProfitTrackerCost(id, patch, db);
+          },
+          refreshFacts: async () => true,
+        },
+      );
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'updated',
+          previous: expect.objectContaining({
+            name: 'New operator name',
+            amountDzd: 20000,
+            endDate: '2096-01-01',
+          }),
+          current: expect.objectContaining({
+            name: 'New operator name',
+            amountDzd: 42000,
+            endDate: '2096-01-01',
+          }),
+        }),
+      ]);
+      await expect(
+        updateProfitTrackerCost(cost.id, { startDate: '2097-01-01' }, db),
+      ).rejects.toThrow('endDate must not precede startDate');
+      expect((await listProfitTrackerCosts(db)).find((row) => row.id === cost.id)).toMatchObject({
+        startDate: '2095-01-01',
+        amountDzd: 42000,
+      });
+      expect(await deleteProfitTrackerCost(cost.id, db)).toMatchObject({
+        name: 'New operator name',
+        amountDzd: 42000,
+      });
+      expect(await updateProfitTrackerCost(cost.id, { amountDzd: 100 }, db)).toBeNull();
+    } finally {
+      await deleteProfitTrackerCost(cost.id, db);
+      if (savedSettings)
+        await db
+          .update(profitTrackerSettings)
+          .set(savedSettings)
+          .where(eq(profitTrackerSettings.id, 1));
+      else await db.delete(profitTrackerSettings).where(eq(profitTrackerSettings.id, 1));
+    }
+  });
+
   it('returns retained product interest to the assistant without double-counting rolled events', async () => {
     const db = getDb();
     const marker = randomUUID();

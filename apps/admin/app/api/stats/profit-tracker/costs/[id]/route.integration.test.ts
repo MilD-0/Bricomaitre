@@ -43,8 +43,11 @@ describe('profit tracker cost detail route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireMutationMock.mockResolvedValue(null);
-    updateCostMock.mockResolvedValue({ id: 12, ...cost });
-    deleteCostMock.mockResolvedValue(12);
+    updateCostMock.mockResolvedValue({
+      previous: { id: 12, ...cost },
+      current: { id: 12, ...cost },
+    });
+    deleteCostMock.mockResolvedValue({ id: 12, ...cost });
     refreshFactsMock.mockResolvedValue(true);
   });
 
@@ -59,6 +62,7 @@ describe('profit tracker cost detail route', () => {
 
     expect(response.status).toBe(200);
     expect(updateCostMock).toHaveBeenCalledWith(12, cost);
+    await expect(response.json()).resolves.toEqual({ data: { id: 12, ...cost } });
     expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 

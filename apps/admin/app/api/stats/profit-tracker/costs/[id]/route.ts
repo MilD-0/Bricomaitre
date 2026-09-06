@@ -33,7 +33,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const row = await updateProfitTrackerCost(id, parsed.data);
   if (row) await refreshAnalyticsFactsAfterMutation();
   return row
-    ? NextResponse.json({ data: row })
+    ? NextResponse.json({ data: row.current })
     : NextResponse.json({ error: 'Operating cost not found' }, { status: 404 });
 }
 
@@ -50,6 +50,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const deleted = await deleteProfitTrackerCost(id);
   if (deleted) await refreshAnalyticsFactsAfterMutation();
   return deleted
-    ? NextResponse.json({ data: { id: deleted } })
+    ? NextResponse.json({ data: { id: deleted.id } })
     : NextResponse.json({ error: 'Operating cost not found' }, { status: 404 });
 }

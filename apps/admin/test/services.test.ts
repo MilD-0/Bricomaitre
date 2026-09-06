@@ -2064,7 +2064,7 @@ describe('real PostgreSQL and Redis contracts', () => {
           .update(profitTrackerSettings)
           .set({ updatedAt: new Date('2000-01-01') })
           .where(eq(profitTrackerSettings.id, 1));
-        expect(await deleteProfitTrackerCost(first.id!, db)).toBe(first.id);
+        expect(await deleteProfitTrackerCost(first.id!, db)).toEqual(first);
         const [settings] = await tx
           .select()
           .from(profitTrackerSettings)

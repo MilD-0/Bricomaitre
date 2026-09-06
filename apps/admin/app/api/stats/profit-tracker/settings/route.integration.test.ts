@@ -43,7 +43,7 @@ describe('profit tracker settings route', () => {
     requireOpsMock.mockResolvedValue(null);
     requireMutationMock.mockResolvedValue(null);
     getSettingsMock.mockResolvedValue({ fxRate: 280, defaultReturnRate: 10, restFrom: null });
-    updateSettingsMock.mockImplementation(async (value) => value);
+    updateSettingsMock.mockImplementation(async (value) => ({ previous: {}, current: value }));
     refreshFactsMock.mockResolvedValue(true);
   });
 
@@ -66,6 +66,7 @@ describe('profit tracker settings route', () => {
     expect(response.status).toBe(200);
     expect(requireMutationMock).toHaveBeenCalledWith('stats');
     expect(updateSettingsMock).toHaveBeenCalledWith(input);
+    await expect(response.json()).resolves.toEqual({ data: input });
     expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 

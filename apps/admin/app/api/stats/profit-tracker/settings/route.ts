@@ -29,7 +29,7 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const data = await updateProfitTrackerSettings(parsed.data);
+  const { current: data } = await updateProfitTrackerSettings(parsed.data);
   await refreshAnalyticsFactsAfterMutation();
   return NextResponse.json({ data });
 }
