@@ -11,6 +11,7 @@ export type UnmatchedImportRow = {
   amountCollected: number;
   products: string;
   note: string;
+  reason?: 'order_not_found' | 'unknown_product' | 'missing_cost';
 };
 
 export const importBatches = adminSchema.table('import_batches', {

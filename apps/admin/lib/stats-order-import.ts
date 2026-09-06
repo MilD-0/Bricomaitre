@@ -6,6 +6,7 @@ import {
   categories,
   importBatches,
   orders,
+  orderLineItems,
   processedOrderProducts,
   processedOrders,
   products,
@@ -135,7 +136,25 @@ export async function importStatsSpreadsheet(
       : Promise.resolve([]),
   ]);
 
-  const cartProductReferences = collectCartProductReferenceBuckets(candidateOrders);
+  const capturedLines =
+    numericReferences.length > 0
+      ? await db
+          .select()
+          .from(orderLineItems)
+          .where(inArray(orderLineItems.orderId, numericReferences))
+      : [];
+  const linesByOrder = new Map<number, typeof capturedLines>();
+  for (const line of capturedLines) {
+    const lines = linesByOrder.get(line.orderId) ?? [];
+    lines.push(line);
+    linesByOrder.set(line.orderId, lines);
+  }
+  const cartProductReferences = collectCartProductReferenceBuckets(
+    candidateOrders.filter((order) => !linesByOrder.has(order.id)),
+  );
+  cartProductReferences.productIds.push(
+    ...capturedLines.flatMap((line) => (line.productId === null ? [] : [line.productId])),
+  );
 
   const productRows =
     cartProductReferences.productIds.length === 0 &&
@@ -150,7 +169,7 @@ export async function importStatsSpreadsheet(
             title: products.title,
             sku: products.sku,
             price: sql<number>`coalesce(${products.price}, 0)::double precision`,
-            cost: sql<number>`coalesce(${products.purchasePrice}, 0)::double precision`,
+            cost: sql<number | null>`${products.purchasePrice}::double precision`,
             brandId: products.brandId,
             brandName: brands.name,
             categoryId: products.categoryId,
@@ -175,6 +194,7 @@ export async function importStatsSpreadsheet(
 
   const orderById = new Map(candidateOrders.map((order) => [String(order.id), order]));
   const productLookup = buildCartProductLookup(productRows);
+  const productById = new Map(productRows.map((product) => [product.id, product]));
   const existingTrackings = new Set(existingRows.map((row) => row.tracking));
 
   let duplicateOrders = 0;
@@ -196,7 +216,38 @@ export async function importStatsSpreadsheet(
       ? orderById.get(row.reference.trim())
       : null;
 
-    if (!matchedOrder) {
+    const lines = matchedOrder ? linesByOrder.get(matchedOrder.id) : undefined;
+    const matchedProducts = lines
+      ? lines.flatMap((line) => {
+          const metadata = line.productId === null ? undefined : productById.get(line.productId);
+          return Array.from({ length: line.quantity }, () => ({
+            id: line.productId,
+            title: line.titleSnapshot,
+            price: Number(line.effectiveUnitPrice),
+            cost:
+              line.unitPurchasePriceSnapshot === null
+                ? null
+                : Number(line.unitPurchasePriceSnapshot),
+            sku: metadata?.sku ?? null,
+            categoryId: metadata?.categoryId ?? null,
+            categoryName: metadata?.categoryName ?? null,
+            brandId: metadata?.brandId ?? null,
+            brandName: metadata?.brandName ?? null,
+          }));
+        })
+      : (matchedOrder?.cartProducts ?? []).map((value) => {
+          const key = getCartProductLookupKey(value);
+          return key ? productLookup.get(key) : undefined;
+        });
+    const reason: UnmatchedImportRow['reason'] = !matchedOrder
+      ? 'order_not_found'
+      : matchedProducts.length === 0 || matchedProducts.some((product) => !product)
+        ? 'unknown_product'
+        : matchedProducts.some((product) => product?.cost === null)
+          ? 'missing_cost'
+          : undefined;
+
+    if (reason || !matchedOrder) {
       unmatchedReferences.push(row.reference || row.tracking);
       unmatchedDetails.push({
         reference: row.reference,
@@ -208,20 +259,13 @@ export async function importStatsSpreadsheet(
         amountCollected: amountCollectedFromRow(row),
         products: row.produits,
         note: row.remarque,
+        reason,
       });
       continue;
     }
 
-    const matchedProducts = matchedOrder.cartProducts
-      .map((value) => getCartProductLookupKey(value))
-      .filter((value): value is string => Boolean(value))
-      .map((lookupKey) => productLookup.get(lookupKey))
-      .filter((value): value is NonNullable<typeof value> => Boolean(value));
-
-    const productCost = matchedProducts.reduce(
-      (sum, product) => sum + numberOrZero(product.cost),
-      0,
-    );
+    const resolvedProducts = matchedProducts.filter((product) => product !== undefined);
+    const productCost = resolvedProducts.reduce((sum, product) => sum + Number(product.cost), 0);
     const totalFees =
       row.totalFraisService > 0
         ? row.totalFraisService
@@ -263,9 +307,9 @@ export async function importStatsSpreadsheet(
 
     processedProductValuesByTracking.set(
       row.tracking,
-      matchedProducts.map((product) => ({
+      resolvedProducts.map((product) => ({
         processedOrderId: 0,
-        productId: String(product.id),
+        productId: product.id === null ? null : String(product.id),
         title: product.title,
         price: numberOrZero(product.price).toFixed(2),
         cost: numberOrZero(product.cost).toFixed(2),
