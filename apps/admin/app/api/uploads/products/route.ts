@@ -6,7 +6,7 @@ import { captureAdminException, getRequestId, withRequestIdHeaders } from '../..
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
-  const denied = await requireMutationAccess('products');
+  const { response: denied } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }

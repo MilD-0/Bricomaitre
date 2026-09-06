@@ -37,7 +37,10 @@ describe('app/api/orders/ecotrack/shipments/labels/route', () => {
 
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
   });
 
   it('returns structured partial label results as JSON', async () => {

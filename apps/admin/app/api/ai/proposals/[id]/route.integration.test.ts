@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   appAccess: vi.fn(),
-  mutationAccess: vi.fn(),
   hasDb: vi.fn(),
   auth: vi.fn(),
   review: vi.fn(),
@@ -12,9 +11,9 @@ const mocks = vi.hoisted(() => ({
   deleteRows: vi.fn(),
   refreshConsumers: vi.fn(),
 }));
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('../../../../../lib/rbac', async (original) => ({
+  ...(await original<typeof import('../../../../../lib/rbac')>()),
   requireAppAccess: mocks.appAccess,
-  requireMutationAccess: mocks.mutationAccess,
 }));
 vi.mock('@bric/db/client', () => ({
   hasDb: mocks.hasDb,
@@ -50,12 +49,13 @@ const request = (action: string) =>
 
 describe('AI proposal review route', () => {
   beforeEach(() => {
-    mocks.appAccess.mockReset().mockResolvedValue(null);
-    mocks.mutationAccess.mockReset().mockResolvedValue(null);
-    mocks.hasDb.mockReset().mockReturnValue(true);
-    mocks.auth
+    mocks.appAccess
       .mockReset()
-      .mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
+      .mockImplementation(async () => ({ response: null, session: await mocks.auth() }));
+    mocks.hasDb.mockReset().mockReturnValue(true);
+    mocks.auth.mockReset().mockResolvedValue({
+      user: { email: 'admin@example.com', name: 'Admin', permissions: ['products_write'] },
+    });
     mocks.review
       .mockReset()
       .mockResolvedValue({ id: 4, status: 'applied', verified: true, product: { id: 1 } });
@@ -78,7 +78,6 @@ describe('AI proposal review route', () => {
     ]);
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
-    expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
     expect(mocks.reviewAdmin).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'admin@example.com',
@@ -93,14 +92,11 @@ describe('AI proposal review route', () => {
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
 
     expect(response.status).toBe(404);
-    expect(mocks.mutationAccess).not.toHaveBeenCalled();
     expect(mocks.reviewAdmin).not.toHaveBeenCalled();
   });
 
   it('requires the proposal domain permission for approval', async () => {
-    mocks.mutationAccess.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    mocks.auth.mockResolvedValue({ user: { email: 'admin@example.com', permissions: [] } });
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(403);
     expect(mocks.review).not.toHaveBeenCalled();
@@ -110,7 +106,7 @@ describe('AI proposal review route', () => {
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
     expect(mocks.appAccess).toHaveBeenCalledOnce();
-    expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
+    expect(mocks.auth).toHaveBeenCalledOnce();
     expect(mocks.refreshConsumers).toHaveBeenCalledOnce();
   });
 
@@ -119,7 +115,7 @@ describe('AI proposal review route', () => {
     const response = await PATCH(request('reject'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
     expect(mocks.appAccess).toHaveBeenCalledOnce();
-    expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
+    expect(mocks.auth).toHaveBeenCalledOnce();
     expect(mocks.refreshConsumers).not.toHaveBeenCalled();
   });
 
@@ -149,7 +145,6 @@ describe('AI proposal review route', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
     expect(mocks.deleteRows).toHaveBeenCalledOnce();
     await expect(response.json()).resolves.toEqual({ deleted: { id: 4 } });
   });
@@ -162,7 +157,6 @@ describe('AI proposal review route', () => {
     });
 
     expect(response.status).toBe(404);
-    expect(mocks.mutationAccess).not.toHaveBeenCalled();
     expect(mocks.deleteRows).not.toHaveBeenCalled();
   });
 

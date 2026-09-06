@@ -4,7 +4,7 @@ import { loadAssetsMetaData } from '../../../../lib/admin-assets-data';
 import { requireAppAccess } from '../../../../lib/rbac';
 
 export async function GET() {
-  const denied = await requireAppAccess();
+  const { response: denied } = await requireAppAccess();
   if (denied) {
     return denied;
   }

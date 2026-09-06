@@ -21,7 +21,10 @@ import { POST } from './route';
 describe('POST /api/stats/profit-tracker/fetch-meta', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireMutationMock.mockResolvedValue(null);
+    requireMutationMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     syncMock.mockResolvedValue({ rows: 4, since: '2026-08-15', until: '2026-08-15' });
     reportMock.mockResolvedValue({ days: [{ date: '2026-08-15', spendEur: 25 }] });
   });

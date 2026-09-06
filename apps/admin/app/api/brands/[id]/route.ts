@@ -2,7 +2,6 @@ import { ActionHistoryEntityNotFoundError } from '../../../../lib/action-history
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { auth } from '../../../../lib/auth';
 import { readBrand } from '../../../../lib/brands-categories-api';
 import { brandUpdateSchema } from '../../../../lib/brands-categories';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
@@ -14,7 +13,7 @@ import {
 } from '../../../../lib/taxonomy-mutations';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAppAccess();
+  const { response: denied } = await requireAppAccess();
   if (denied) {
     return denied;
   }
@@ -40,7 +39,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('brandsCategories');
+  const { response: denied, session } = await requireMutationAccess('brandsCategories');
   if (denied) {
     return denied;
   }
@@ -61,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   try {
     await updateBrandThroughCanonicalWorkflow(db, numericId, parsed.data, actor);
@@ -78,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('brandsCategories');
+  const { response: denied, session } = await requireMutationAccess('brandsCategories');
   if (denied) {
     return denied;
   }
@@ -94,7 +93,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {

@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
-import { auth } from '../../../../../lib/auth';
 import { ADMIN_AI_CONTEXT_QUERY_LIMIT } from '../../../../../lib/admin-ai-conversation-context';
 import { requireAppAccess } from '../../../../../lib/rbac';
 
@@ -39,14 +38,14 @@ function messageContent(content: unknown) {
 }
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success)
     return NextResponse.json({ error: 'Invalid conversation.' }, { status: 400 });
-  const session = await auth();
+
   const owner = session?.user?.email;
   if (!owner) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 
@@ -104,7 +103,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -115,7 +114,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const title = renameSchema.safeParse(body);
   if (!params.success || !title.success)
     return NextResponse.json({ error: 'Invalid conversation rename.' }, { status: 400 });
-  const session = await auth();
+
   const owner = session?.user?.email;
   if (!owner) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 
@@ -142,14 +141,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success)
     return NextResponse.json({ error: 'Invalid conversation.' }, { status: 400 });
-  const session = await auth();
+
   const owner = session?.user?.email;
   if (!owner) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 

@@ -13,7 +13,7 @@ const getCachedCatalog = unstable_cache(
 );
 
 export async function GET() {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) return denied;
 
   if (!hasDb()) {

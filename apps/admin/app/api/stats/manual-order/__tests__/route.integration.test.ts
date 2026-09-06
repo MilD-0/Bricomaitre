@@ -58,15 +58,19 @@ describe('app/api/stats/manual-order/route', () => {
     triggerAdminReportingRefreshMock.mockReset();
 
     hasDbMock.mockReturnValue(true);
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
     triggerAdminReportingRefreshMock.mockResolvedValue(null);
   });
 
   it('blocks GET when ops access is denied', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await GET(new NextRequest('http://localhost/api/stats/manual-order'));
 

@@ -5,7 +5,6 @@ import {
   ecotrackShipmentListQuerySchema,
   loadEcotrackOrdersPageData,
 } from '../../../../../lib/admin-ecotrack-orders-data';
-import { auth } from '../../../../../lib/auth';
 import { OrderSearchTimeoutError } from '../../../../../lib/order-search';
 import { getRequestSearchParams } from '../../../../../lib/request';
 import { canMutateResource, requireMutationAccess } from '../../../../../lib/rbac';
@@ -17,12 +16,11 @@ import {
 
 export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
 
-  const session = await auth();
   const writable = canMutateResource(session?.user?.permissions, 'orders');
 
   if (!hasDb()) {

@@ -17,7 +17,7 @@ const requestSchema = z
 
 // One bounded lookup replaces a browser request for every product and brand.
 export async function POST(req: NextRequest) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) return denied;
   const parsed = requestSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

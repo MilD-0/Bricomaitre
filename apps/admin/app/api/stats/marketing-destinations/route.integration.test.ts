@@ -13,7 +13,10 @@ vi.mock('../../../../lib/marketing-diagnostics', () => ({
 
 describe('GET /api/stats/marketing-destinations', () => {
   beforeEach(() => {
-    mocks.access.mockReset().mockResolvedValue(null);
+    mocks.access.mockReset().mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     mocks.hasDb.mockReset().mockReturnValue(true);
     mocks.diagnostics.mockReset().mockResolvedValue({
       destinations: [{ destination: 'google', accepted: 4 }],
@@ -22,7 +25,10 @@ describe('GET /api/stats/marketing-destinations', () => {
   });
 
   it('enforces operations access', async () => {
-    mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+    mocks.access.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect((await GET()).status).toBe(403);
     expect(mocks.diagnostics).not.toHaveBeenCalled();
   });

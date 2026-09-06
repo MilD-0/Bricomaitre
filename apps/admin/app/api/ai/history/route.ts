@@ -5,15 +5,14 @@ import {
   allowedAdminBackgroundJobTypes,
   listAdminBackgroundJobs,
 } from '../../../../lib/ai-background-jobs';
-import { auth } from '../../../../lib/auth';
 import { publishAiTaskTerminalMessage } from '../../../../lib/ai-task-followups';
 import { normalizePermissions } from '../../../../lib/permissions';
 import { requireAppAccess } from '../../../../lib/rbac';
 
 export async function GET() {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
-  const session = await auth();
+
   const allowedJobTypes = allowedAdminBackgroundJobTypes(
     normalizePermissions(session?.user?.permissions),
   );

@@ -46,7 +46,10 @@ describe('app/api/stats/manual-order/[id]/route', () => {
     triggerAdminReportingRefreshMock.mockReset();
 
     hasDbMock.mockReturnValue(true);
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
     triggerAdminReportingRefreshMock.mockResolvedValue(null);
   });
@@ -96,9 +99,10 @@ describe('app/api/stats/manual-order/[id]/route', () => {
   });
 
   it('returns the RBAC denial response', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await DELETE(
       new NextRequest('http://localhost/api/stats/manual-order/1', { method: 'DELETE' }),

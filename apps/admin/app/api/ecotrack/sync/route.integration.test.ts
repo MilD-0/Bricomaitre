@@ -32,7 +32,10 @@ describe('app/api/ecotrack/sync/route', () => {
     getLatestExportJobMock.mockReset();
     startEcotrackSyncJobMock.mockReset();
 
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockResolvedValue({ user: { email: 'ops@example.com' } });
     getLatestExportJobMock.mockResolvedValue(null);
     startEcotrackSyncJobMock.mockResolvedValue({
@@ -42,9 +45,10 @@ describe('app/api/ecotrack/sync/route', () => {
   });
 
   it('returns the RBAC denial response', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await POST(
       new NextRequest('http://localhost/api/ecotrack/sync', { method: 'POST' }),

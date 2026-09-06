@@ -5,11 +5,10 @@ import { getDb, hasDb } from '@bric/db/client';
 import { loadAssetsData } from '../../../lib/admin-assets-data';
 import { assetMutationRequestSchema } from '../../../lib/assets';
 import { createAdminAsset } from '../../../lib/asset-mutations';
-import { auth } from '../../../lib/auth';
 import { requireMutationAccess } from '../../../lib/rbac';
 
 export async function GET() {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied } = await requireMutationAccess('assets');
   if (denied) {
     return denied;
   }
@@ -18,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) {
     return denied;
   }
@@ -32,7 +31,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   const kind =

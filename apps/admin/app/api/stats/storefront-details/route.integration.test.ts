@@ -22,7 +22,10 @@ describe('GET /api/stats/storefront-details', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasDbMock.mockReturnValue(true);
-    requireAnalyticsAccessMock.mockResolvedValue(null);
+    requireAnalyticsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     getDetailsMock.mockResolvedValue({ data: { trend: [] }, generatedAt: '2026-08-19' });
   });
 
@@ -41,9 +44,10 @@ describe('GET /api/stats/storefront-details', () => {
   });
 
   it('enforces analytics access before loading details', async () => {
-    requireAnalyticsAccessMock.mockResolvedValueOnce(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireAnalyticsAccessMock.mockImplementationOnce(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     expect(
       (await GET(new NextRequest('http://localhost/api/stats/storefront-details'))).status,

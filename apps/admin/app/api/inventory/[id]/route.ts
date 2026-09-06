@@ -5,7 +5,6 @@ import { ProductIntegrityConflictError } from '../../../../lib/product-integrity
 
 import { getDb, hasDb } from '@bric/db/client';
 import { updateAdminInventoryProduct } from '../../../../lib/admin-inventory-workflow';
-import { auth } from '../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { applyInventoryQuantityChange } from '../../../../lib/inventory-actions';
 import { inventoryBarcodeSchema } from '../../../../lib/inventory';
@@ -27,7 +26,7 @@ const inventoryMutationSchema = z.union([
 ]);
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }
@@ -47,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   let updated;

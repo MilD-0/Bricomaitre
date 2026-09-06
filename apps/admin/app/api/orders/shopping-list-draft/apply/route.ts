@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
-import { auth } from '../../../../../lib/auth';
-import { requireMutationAccess } from '../../../../../lib/rbac';
+import { requireMutationAccess, canMutateResource } from '../../../../../lib/rbac';
 import {
   applyShoppingListInventory,
   shoppingListInventoryApplySchema,
@@ -10,14 +9,14 @@ import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list
 import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
 
 export async function POST(req: NextRequest) {
-  const denied =
-    (await requireMutationAccess('orders')) ?? (await requireMutationAccess('products'));
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) return denied;
+  if (!canMutateResource(session.user.permissions, 'products'))
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   const parsed = shoppingListInventoryApplySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const session = await auth();
   try {
     return NextResponse.json(
       await applyShoppingListInventory(getDb(), parsed.data, {

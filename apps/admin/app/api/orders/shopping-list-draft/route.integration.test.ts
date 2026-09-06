@@ -95,13 +95,17 @@ describe('app/api/orders/shopping-list-draft/route', () => {
 
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
   });
 
   it('returns RBAC denial when access is forbidden', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await GET(
       new NextRequest('http://localhost/api/orders/shopping-list-draft?sourceMode=confirmed'),
@@ -197,9 +201,10 @@ describe('app/api/orders/shopping-list-draft/route', () => {
       );
       expect(response.status).toBe(400);
     }
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect(
       (
         await POST(

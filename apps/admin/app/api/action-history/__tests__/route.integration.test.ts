@@ -28,7 +28,10 @@ vi.mock('../../../../lib/action-history', async (importOriginal) => ({
 describe('app/api/action-history/route', () => {
   beforeEach(() => {
     requireSettingsAccessMock.mockReset();
-    requireSettingsAccessMock.mockResolvedValue(null);
+    requireSettingsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     hasDbMock.mockReset();
     getDbMock.mockReset();
     listActionHistoryMock.mockReset();
@@ -40,9 +43,10 @@ describe('app/api/action-history/route', () => {
   });
 
   it('denies access when settings permission check fails', async () => {
-    requireSettingsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireSettingsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const res = await GET(new NextRequest('http://localhost/api/action-history'));
 

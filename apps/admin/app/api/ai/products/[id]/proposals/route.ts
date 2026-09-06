@@ -6,7 +6,7 @@ import { listProductContentProposals } from '../../../../../../lib/ai-product-co
 import { requireMutationAccess } from '../../../../../../lib/rbac';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied } = await requireMutationAccess('products');
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

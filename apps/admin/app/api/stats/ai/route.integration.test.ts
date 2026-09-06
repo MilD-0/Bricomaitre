@@ -22,7 +22,10 @@ describe('GET /api/stats/ai', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasDbMock.mockReturnValue(true);
-    requireAnalyticsAccessMock.mockResolvedValue(null);
+    requireAnalyticsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     getAiStatsDataMock.mockResolvedValue({
       diagnostics: { queryDurationMs: 19, responseSizeBytes: 812 },
     });
@@ -66,12 +69,16 @@ describe('GET /api/stats/ai', () => {
   });
 
   it('enforces analytics access and database availability', async () => {
-    requireAnalyticsAccessMock.mockResolvedValueOnce(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireAnalyticsAccessMock.mockImplementationOnce(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect((await GET(new NextRequest('http://localhost/api/stats/ai'))).status).toBe(403);
 
-    requireAnalyticsAccessMock.mockResolvedValueOnce(null);
+    requireAnalyticsAccessMock.mockImplementationOnce(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     hasDbMock.mockReturnValueOnce(false);
     expect((await GET(new NextRequest('http://localhost/api/stats/ai'))).status).toBe(503);
   });

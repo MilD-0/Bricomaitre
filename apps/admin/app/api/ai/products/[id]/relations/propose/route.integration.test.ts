@@ -29,16 +29,19 @@ function request(body: unknown) {
 
 describe('admin product relation AI proposal route', () => {
   beforeEach(() => {
-    mocks.mutationAccess.mockReset().mockResolvedValue(null);
+    mocks.mutationAccess
+      .mockReset()
+      .mockImplementation(async () => ({ response: null, session: await mocks.auth() }));
     mocks.hasDb.mockReset().mockReturnValue(true);
     mocks.auth.mockReset().mockResolvedValue({ user: { email: 'admin@example.com' } });
     mocks.propose.mockReset().mockResolvedValue({ id: 9, status: 'proposed' });
   });
 
   it('derives proposal access from product management', async () => {
-    mocks.mutationAccess.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    mocks.mutationAccess.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await POST(request({ targetProductId: 2 }), {
       params: Promise.resolve({ id: '1' }),

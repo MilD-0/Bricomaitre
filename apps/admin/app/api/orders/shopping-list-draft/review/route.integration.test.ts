@@ -17,7 +17,10 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
 }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb, getDb: () => mocks.db }));
-vi.mock('../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('../../../../../lib/rbac', async (original) => ({
+  ...(await original<typeof import('../../../../../lib/rbac')>()),
+  requireMutationAccess: mocks.access,
+}));
 vi.mock('../../../../../lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('../../../../../lib/shopping-list-stock-allocations', async (original) => ({
   ...(await original<typeof import('../../../../../lib/shopping-list-stock-allocations')>()),
@@ -46,16 +49,25 @@ const postRequest = (body: unknown = payload) =>
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.access.mockResolvedValue(null);
+  mocks.access.mockImplementation(async () => ({ response: null, session: await mocks.auth() }));
   mocks.hasDb.mockReturnValue(true);
-  mocks.auth.mockResolvedValue({ user: { email: 'operator@example.com', name: 'Demo Operator' } });
+  mocks.auth.mockResolvedValue({
+    user: {
+      email: 'operator@example.com',
+      name: 'Demo Operator',
+      permissions: ['orders_write', 'products_write'],
+    },
+  });
 });
 
 describe('shopping stock review route', () => {
   it.each(['GET', 'POST'] as const)(
     'requires orders mutation access before %s work',
     async (method) => {
-      mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+      mocks.access.mockImplementation(async () => ({
+        response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+        session: null,
+      }));
       const response = method === 'GET' ? await GET(getRequest()) : await POST(postRequest());
       expect(response.status).toBe(403);
       expect(mocks.access).toHaveBeenCalledExactlyOnceWith('orders');
@@ -114,18 +126,21 @@ describe('shopping stock review route', () => {
     );
     expect(invalid.status).toBe(400);
     expect(mocks.load).not.toHaveBeenCalled();
-    mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+    mocks.access.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect((await LOOKUP(new NextRequest(`${url}/lookup`, { method: 'POST' }))).status).toBe(403);
   });
 
   it('requires products mutation access before saving an attribution', async () => {
-    mocks.access.mockImplementation(async (resource) =>
-      resource === 'products' ? NextResponse.json({ error: 'Forbidden' }, { status: 403 }) : null,
-    );
+    mocks.auth.mockResolvedValue({
+      user: { email: 'operator@example.com', permissions: ['orders_write'] },
+    });
     expect((await POST(postRequest())).status).toBe(403);
-    expect(mocks.access.mock.calls).toEqual([['orders'], ['products']]);
+    expect(mocks.access).toHaveBeenCalledExactlyOnceWith('orders');
     expect(mocks.reconcile).not.toHaveBeenCalled();
-    expect(mocks.auth).not.toHaveBeenCalled();
+    expect(mocks.auth).toHaveBeenCalledOnce();
   });
 
   it('parses the requested scope and repeated numeric order IDs before loading', async () => {
@@ -155,10 +170,9 @@ describe('shopping stock review route', () => {
     { ...payload, manualQuantity: -1 },
     { ...payload, orders: [{ orderId: 11, quantity: 1.5 }] },
     { ...payload, quantity: 4 },
-  ])('rejects invalid attribution input before actor lookup', async (body) => {
+  ])('rejects invalid attribution input before reconciliation', async (body) => {
     expect((await POST(postRequest(body))).status).toBe(400);
     expect(mocks.reconcile).not.toHaveBeenCalled();
-    expect(mocks.auth).not.toHaveBeenCalled();
   });
 
   it('rejects malformed JSON', async () => {

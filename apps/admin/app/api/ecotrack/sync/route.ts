@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-import { auth } from '../../../../lib/auth';
 import {
   ADMIN_ECOTRACK_SYNC_QUEUE,
   getLatestExportJob,
@@ -15,10 +14,9 @@ function getRequesterKey(email: string | null | undefined) {
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
-  const denied = await requireOpsAccess();
+  const { response: denied, session } = await requireOpsAccess();
   if (denied) return denied;
 
-  const session = await auth();
   try {
     return NextResponse.json(
       {
@@ -42,10 +40,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
-  const denied = await requireOpsAccess();
+  const { response: denied, session } = await requireOpsAccess();
   if (denied) return denied;
 
-  const session = await auth();
   try {
     const result = await startEcotrackSyncJob(
       getRequesterKey(session?.user?.email),

@@ -55,14 +55,18 @@ describe('app/api/orders/ecotrack/shipments/[id]/route', () => {
 
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     loadEcotrackOrderDetailMock.mockResolvedValue({ orderId: 11 });
   });
 
   it('returns RBAC denial', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await GET(
       new NextRequest('http://localhost/api/orders/ecotrack/shipments/11'),

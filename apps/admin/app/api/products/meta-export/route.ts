@@ -18,7 +18,7 @@ function parseRequestedIds(searchParams: URLSearchParams) {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }

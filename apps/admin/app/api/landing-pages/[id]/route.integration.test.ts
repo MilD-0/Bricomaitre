@@ -39,7 +39,7 @@ function request(body: unknown) {
 describe('admin landing-page revision route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.access.mockResolvedValue(null);
+    mocks.access.mockImplementation(async () => ({ response: null, session: await mocks.auth() }));
     mocks.auth.mockResolvedValue({ user: { email: 'admin@example.com' } });
     mocks.detail.mockResolvedValue({
       id: 4,

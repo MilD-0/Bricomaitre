@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { POST } from './route';
 import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list-drafts.server';
-const mocks = vi.hoisted(() => ({ access: vi.fn(), apply: vi.fn() }));
-vi.mock('../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+const mocks = vi.hoisted(() => ({
+  access: vi.fn(),
+  apply: vi.fn(),
+  permissions: ['orders_write', 'products_write'] as string[],
+}));
+vi.mock('../../../../../lib/rbac', async (original) => ({
+  ...(await original<typeof import('../../../../../lib/rbac')>()),
+  requireMutationAccess: mocks.access,
+}));
 vi.mock('../../../../../lib/auth', () => ({
-  auth: async () => ({ user: { email: 'operator@example.com' } }),
+  auth: async () => ({ user: { email: 'operator@example.com', permissions: mocks.permissions } }),
 }));
 vi.mock('@bric/db/client', () => ({ hasDb: () => true, getDb: () => ({}) }));
 vi.mock('../../../../../lib/shopping-list-inventory.server', async (original) => ({
@@ -27,12 +34,19 @@ function request(body: unknown = payload) {
 }
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.access.mockResolvedValue(null);
+  mocks.permissions = ['orders_write', 'products_write'];
+  mocks.access.mockImplementation(async () => ({
+    response: null,
+    session: await (await import('../../../../../lib/auth')).auth(),
+  }));
 });
 it.each(['orders', 'products'])('requires %s mutation permission', async (resource) => {
-  mocks.access.mockImplementation(async (value) =>
-    value === resource ? NextResponse.json({ error: 'Forbidden' }, { status: 403 }) : null,
-  );
+  mocks.permissions = mocks.permissions.filter((permission) => permission !== `${resource}_write`);
+  if (resource === 'orders')
+    mocks.access.mockResolvedValue({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    });
   expect((await POST(request())).status).toBe(403);
   expect(mocks.apply).not.toHaveBeenCalled();
 });

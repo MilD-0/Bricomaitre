@@ -28,7 +28,10 @@ describe('app/api/uploads/products/route', () => {
     process.env = { ...originalEnv };
     sendMock.mockReset();
     requireMutationAccessMock.mockReset();
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-03T09:00:00.000Z'));
   });
@@ -39,9 +42,10 @@ describe('app/api/uploads/products/route', () => {
   });
 
   it('returns 403 when RBAC blocks asset uploads', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const req = new NextRequest('http://localhost/api/uploads/products', { method: 'POST' });
     const res = await POST(req);

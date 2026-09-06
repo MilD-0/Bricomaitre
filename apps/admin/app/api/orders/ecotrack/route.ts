@@ -4,7 +4,6 @@ import { getJobSnapshot } from '@bric/runtime/jobs';
 import { parsePositiveIntegerIds } from '@bric/runtime/http-input';
 
 import { hasDb } from '@bric/db/client';
-import { auth } from '../../../../lib/auth';
 import {
   ADMIN_ORDER_ECOTRACK_QUEUE,
   cancelExportJob,
@@ -44,7 +43,7 @@ function parseRequestBody(body: unknown): {
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -56,7 +55,6 @@ export async function GET(request: Request) {
     );
   }
 
-  const session = await auth();
   const requesterKey = getRequesterKey(session);
   if (!requesterKey) {
     return NextResponse.json(
@@ -97,7 +95,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -109,7 +107,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const session = await auth();
   const requesterKey = getRequesterKey(session);
   if (!requesterKey) {
     return NextResponse.json(
@@ -166,7 +163,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: Request) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -178,7 +175,6 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const session = await auth();
   const requesterKey = getRequesterKey(session);
   if (!requesterKey) {
     return NextResponse.json(

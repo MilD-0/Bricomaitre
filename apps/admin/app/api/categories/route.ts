@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { auth } from '../../../lib/auth';
 import { readCategoriesPage } from '../../../lib/brands-categories-api';
 import { categoryFormSchema, taxonomyListQuerySchema } from '../../../lib/brands-categories';
 import { CategoryHierarchyError } from '../../../lib/category-hierarchy';
@@ -22,7 +21,7 @@ function emptyPagination() {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await requireMutationAccess('brandsCategories');
+  const { response: denied } = await requireMutationAccess('brandsCategories');
   if (denied) {
     return denied;
   }
@@ -56,7 +55,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
-  const denied = await requireMutationAccess('brandsCategories');
+  const { response: denied, session } = await requireMutationAccess('brandsCategories');
   if (denied) {
     return denied;
   }
@@ -77,7 +76,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   const data = parsed.data;
   try {

@@ -20,7 +20,9 @@ import { GET, POST } from './route';
 
 describe('admin landing pages route', () => {
   beforeEach(() => {
-    mocks.access.mockReset().mockResolvedValue(null);
+    mocks.access
+      .mockReset()
+      .mockImplementation(async () => ({ response: null, session: await mocks.auth() }));
     mocks.auth.mockReset().mockResolvedValue({ user: { email: 'admin@example.com' } });
     mocks.list.mockReset().mockResolvedValue([]);
     mocks.summaries.mockReset().mockResolvedValue([{ id: 3, active: false, currentRevision: 2 }]);
@@ -63,7 +65,10 @@ describe('admin landing pages route', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it('does not disclose data without access', async () => {
-    mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+    mocks.access.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect((await GET(new NextRequest('http://localhost/api/landing-pages'))).status).toBe(403);
     expect(mocks.list).not.toHaveBeenCalled();
   });

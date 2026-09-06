@@ -6,7 +6,7 @@ import { parseSortRuleStrings } from '../../../lib/multi-sort';
 import { requireMutationAccess } from '../../../lib/rbac';
 
 export async function GET(req: NextRequest) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }

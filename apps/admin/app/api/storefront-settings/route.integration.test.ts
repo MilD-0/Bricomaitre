@@ -23,11 +23,17 @@ vi.mock('../../../lib/storefront-revalidate', () => ({
 describe('app/api/storefront-settings/route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.authorize.mockResolvedValue(null);
+    mocks.authorize.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
   });
 
   it('protects the hidden settings API with settings_manage', async () => {
-    mocks.authorize.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+    mocks.authorize.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     const response = await GET();
     expect(response.status).toBe(403);
     expect(mocks.load).not.toHaveBeenCalled();

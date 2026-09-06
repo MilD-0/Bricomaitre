@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { auth } from './auth';
 import { EcotrackMutationConflictError } from './ecotrack-mutations';
 import { requireMutationAccess } from './rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from './sentry';
@@ -29,7 +28,7 @@ export async function handleEcotrackShipmentMutation<TPayload = undefined, TItem
   action,
 }: EcotrackShipmentMutationOptions<TPayload, TItem>) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -41,7 +40,6 @@ export async function handleEcotrackShipmentMutation<TPayload = undefined, TItem
     );
   }
 
-  const session = await auth();
   const orderId = parsePositiveIntegerId((await params).id);
   if (!orderId) {
     return NextResponse.json(

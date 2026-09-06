@@ -5,7 +5,6 @@ import {
   fetchMergedEcotrackLabels,
   parseEcotrackBulkAction,
 } from '../../../../../../lib/admin-ecotrack-orders-data';
-import { auth } from '../../../../../../lib/auth';
 import { requireMutationAccess } from '../../../../../../lib/rbac';
 import {
   captureAdminException,
@@ -15,7 +14,7 @@ import {
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -27,7 +26,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const session = await auth();
   const body = await request.json().catch(() => null);
   let parsed: ReturnType<typeof parseEcotrackBulkAction>;
   try {

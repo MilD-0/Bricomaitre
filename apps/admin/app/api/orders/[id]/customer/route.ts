@@ -10,7 +10,7 @@ import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

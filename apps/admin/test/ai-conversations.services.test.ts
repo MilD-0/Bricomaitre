@@ -7,7 +7,12 @@ import { aiConversations, aiMessages } from '@bric/db/schema';
 
 const session = vi.hoisted(() => ({ owner: '' }));
 vi.mock('../lib/auth', () => ({ auth: async () => ({ user: { email: session.owner } }) }));
-vi.mock('../lib/rbac', () => ({ requireAppAccess: async () => null }));
+vi.mock('../lib/rbac', () => ({
+  requireAppAccess: async () => ({
+    response: null,
+    session: await (await import('../lib/auth')).auth(),
+  }),
+}));
 
 import { GET as list } from '../app/api/ai/conversations/route';
 import {

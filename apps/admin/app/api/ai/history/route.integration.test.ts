@@ -16,7 +16,12 @@ vi.mock('../../../../lib/auth', () => ({
 vi.mock('../../../../lib/ai-task-followups', () => ({
   publishAiTaskTerminalMessage: mocks.publish,
 }));
-vi.mock('../../../../lib/rbac', () => ({ requireAppAccess: async () => null }));
+vi.mock('../../../../lib/rbac', () => ({
+  requireAppAccess: async () => ({
+    response: null,
+    session: await (await import('../../../../lib/auth')).auth(),
+  }),
+}));
 
 import { GET } from './route';
 

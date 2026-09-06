@@ -20,7 +20,10 @@ import { GET } from './route';
 describe('profit tracker CSV export route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireOpsMock.mockResolvedValue(null);
+    requireOpsMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     exportCsvMock.mockResolvedValue('date,profit_x\n2026-08-18,2');
   });
 
@@ -43,7 +46,10 @@ describe('profit tracker CSV export route', () => {
   });
 
   it('enforces operations access', async () => {
-    requireOpsMock.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+    requireOpsMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     const response = await GET(
       new NextRequest('http://localhost/api/stats/profit-tracker/export.csv?range=30d'),
     );

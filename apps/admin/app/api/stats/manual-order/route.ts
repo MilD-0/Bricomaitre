@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { auth } from '../../../../lib/auth';
 import { getRequestSearchParams } from '../../../../lib/request';
 import {
   createManualOrder,
@@ -14,7 +13,7 @@ import { requireAnalyticsAccess } from '../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -35,7 +34,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied, session } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -49,7 +48,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const session = await auth();
     const result = await createManualOrder(parsed.data, {
       email: session?.user?.email,
       name: session?.user?.name,

@@ -9,7 +9,7 @@ import {
 import { requireSettingsAccess } from '../../../lib/rbac';
 
 export async function GET(req: NextRequest) {
-  const denied = await requireSettingsAccess();
+  const { response: denied } = await requireSettingsAccess();
 
   if (denied) {
     return denied;

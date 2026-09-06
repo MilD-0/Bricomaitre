@@ -59,7 +59,10 @@ describe('app/api/inventory/[id]/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     requireMutationAccessMock.mockReset();
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();

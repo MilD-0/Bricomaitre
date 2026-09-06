@@ -35,8 +35,14 @@ import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-
 describe('profit tracker costs route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireOpsMock.mockResolvedValue(null);
-    requireMutationMock.mockResolvedValue(null);
+    requireOpsMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
+    requireMutationMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     listCostsMock.mockResolvedValue([]);
     createCostMock.mockImplementation(async (value) => ({ id: 1, ...value }));
     refreshFactsMock.mockResolvedValue(true);

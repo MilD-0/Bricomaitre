@@ -25,7 +25,7 @@ const getCachedProductsMeta = unstable_cache(
 );
 
 export async function GET() {
-  const denied = await requireAppAccess();
+  const { response: denied } = await requireAppAccess();
   if (denied) {
     return denied;
   }

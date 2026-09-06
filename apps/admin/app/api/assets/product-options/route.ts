@@ -10,7 +10,7 @@ function parseIds(value: string | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied } = await requireMutationAccess('assets');
   if (denied) return denied;
 
   const parsed = assetProductOptionQuerySchema.safeParse({

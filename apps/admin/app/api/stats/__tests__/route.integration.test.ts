@@ -77,7 +77,10 @@ describe('app/api/stats/route', () => {
     dismissUnmatchedReferenceMock.mockReset();
     revalidateServerTagsMock.mockReset();
 
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com' } });
     startAdminReportingRefreshJobMock.mockResolvedValue({
@@ -87,9 +90,10 @@ describe('app/api/stats/route', () => {
   });
 
   it('returns ops access denial for GET', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await GET(new NextRequest('http://localhost/api/stats'));
 

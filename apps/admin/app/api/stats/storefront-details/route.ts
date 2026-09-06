@@ -6,7 +6,7 @@ import { analyticsQuerySchema, getAnalyticsStorefrontDetails } from '../../../..
 import { requireAnalyticsAccess } from '../../../../lib/rbac';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {

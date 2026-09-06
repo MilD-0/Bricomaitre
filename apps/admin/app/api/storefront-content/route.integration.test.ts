@@ -33,7 +33,10 @@ describe('/api/storefront-content', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockResolvedValue({ user: { email: 'operator@example.com' } });
     loadStorefrontContentAdminMock.mockResolvedValue(announcement);
     saveStorefrontAnnouncementMock.mockResolvedValue(announcement);
@@ -41,9 +44,10 @@ describe('/api/storefront-content', () => {
   });
 
   it('enforces settings access for reads and writes', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     expect((await GET()).status).toBe(403);
     expect(

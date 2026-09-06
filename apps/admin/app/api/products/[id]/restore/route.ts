@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
-import { auth } from '../../../../../lib/auth';
 import {
   ProductMutationNotFoundError,
   restoreProductThroughCanonicalWorkflow,
@@ -13,7 +12,7 @@ import { CACHE_TAGS, revalidateServerTags } from '../../../../../lib/server-cach
 import { revalidateStorefrontProducts } from '../../../../../lib/storefront-revalidate';
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -24,7 +23,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   }
 
   const db = getDb();
-  const session = await auth();
+
   try {
     await restoreProductThroughCanonicalWorkflow(db, productId, {
       email: session?.user?.email,

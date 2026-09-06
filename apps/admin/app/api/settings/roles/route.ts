@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { loadAdministrationRoles } from '../../../../lib/admin-administration-data';
-import { auth } from '../../../../lib/auth';
 import { roleDefinitionFormSchema } from '../../../../lib/permissions';
 import { requireSettingsAccess } from '../../../../lib/rbac';
 import {
@@ -10,7 +9,7 @@ import {
 } from '../../../../lib/administration-mutations';
 
 export async function GET() {
-  const denied = await requireSettingsAccess();
+  const { response: denied } = await requireSettingsAccess();
   if (denied) {
     return denied;
   }
@@ -23,7 +22,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireSettingsAccess();
+  const { response: denied, session } = await requireSettingsAccess();
   if (denied) {
     return denied;
   }
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   try {
     await createAdministrationRoleDefinition(db, parsed.data, actor);

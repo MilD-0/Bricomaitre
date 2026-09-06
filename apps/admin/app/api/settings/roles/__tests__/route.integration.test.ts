@@ -32,7 +32,10 @@ describe('app/api/settings/roles/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     requireOpsAccessMock.mockReset();
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
@@ -48,9 +51,10 @@ describe('app/api/settings/roles/route', () => {
   });
 
   it('returns 403 when ops access is denied', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const res = await GET();
 

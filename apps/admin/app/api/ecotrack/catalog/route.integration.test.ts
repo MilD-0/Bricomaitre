@@ -40,13 +40,17 @@ describe('app/api/ecotrack/catalog/route', () => {
 
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({ tag: 'db' });
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
   });
 
   it('returns the RBAC denial response', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await GET();
 

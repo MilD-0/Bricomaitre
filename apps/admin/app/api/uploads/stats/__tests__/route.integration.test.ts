@@ -38,7 +38,10 @@ describe('app/api/uploads/stats/route', () => {
     getLatestExportJobMock.mockReset();
     startStatsImportJobMock.mockReset();
 
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockResolvedValue({ user: { email: 'ops@example.com' } });
     getLatestExportJobMock.mockResolvedValue(null);
     startStatsImportJobMock.mockResolvedValue({
@@ -48,9 +51,10 @@ describe('app/api/uploads/stats/route', () => {
   });
 
   it('returns ops access denial when blocked', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await POST(
       new NextRequest('http://localhost/api/uploads/stats', { method: 'POST' }),

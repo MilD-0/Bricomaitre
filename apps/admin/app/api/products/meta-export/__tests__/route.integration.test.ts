@@ -47,7 +47,10 @@ describe('app/api/products/meta-export/route', () => {
     toXlsxBufferMock.mockReset();
     buildMetaCatalogExportFileNameMock.mockReset();
 
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     hasDbMock.mockReturnValue(true);
     buildMetaCatalogExportRowsMock.mockReturnValue([{ id: '1', contentId: '1' }]);
     buildMetaCatalogWorkbookMock.mockReturnValue({ workbook: true });
@@ -56,9 +59,10 @@ describe('app/api/products/meta-export/route', () => {
   });
 
   it('returns 403 when RBAC denies access', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await GET(new NextRequest('http://localhost/api/products/meta-export?ids=1'));
 

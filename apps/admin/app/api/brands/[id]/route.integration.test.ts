@@ -63,8 +63,14 @@ describe('app/api/brands/[id]/route', () => {
     mutateEntityWithHistoryMock.mockReset();
     revalidateStorefrontProductMetaMock.mockReset().mockResolvedValue(undefined);
 
-    requireAppAccessMock.mockResolvedValue(null);
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireAppAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     getDbMock.mockReturnValue({});
     readBrandMock.mockResolvedValue({
@@ -86,9 +92,10 @@ describe('app/api/brands/[id]/route', () => {
   });
 
   it('returns 401 when app access is denied', async () => {
-    requireAppAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-    );
+    requireAppAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      session: null,
+    }));
 
     const response = await GET(new Request('http://localhost/api/brands/7'), {
       params: Promise.resolve({ id: '7' }),

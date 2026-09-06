@@ -33,7 +33,10 @@ function request(body: unknown) {
 
 describe('POST /api/ai/jobs/cancel', () => {
   beforeEach(() => {
-    mocks.denied.mockReset().mockResolvedValue(null);
+    mocks.denied.mockReset().mockImplementation(async () => ({
+      response: null,
+      session: await (await import('../../../../../lib/auth')).auth(),
+    }));
     mocks.cancel.mockReset().mockResolvedValue({ id: 'job-1', status: 'cancelled' });
     mocks.cancelExact
       .mockReset()

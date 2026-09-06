@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '../../../../lib/auth';
 import { uploadImages } from '../../../../lib/image-uploads';
 import { requireMutationAccess } from '../../../../lib/rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../../lib/sentry';
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) {
     return denied;
   }
-  const session = await auth();
 
   try {
     const result = await uploadImages(req, 'assets');

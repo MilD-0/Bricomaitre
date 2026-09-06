@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '../../../../lib/auth';
 import {
   ActionHistoryConflictError,
   ActionHistoryEntityNotFoundError,
@@ -11,7 +10,7 @@ import { assetReorderSchema } from '../../../../lib/assets';
 import { requireMutationAccess } from '../../../../lib/rbac';
 
 export async function POST(req: NextRequest) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) {
     return denied;
   }
@@ -26,7 +25,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const session = await auth();
   try {
     await reorderAdminAssets(getDb(), parsed.data, {
       email: session?.user?.email,

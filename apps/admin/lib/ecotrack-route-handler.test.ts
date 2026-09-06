@@ -62,7 +62,10 @@ describe('handleEcotrackShipmentMutation', () => {
     requireMutationAccessMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
     hasDbMock.mockReturnValue(true);
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
   });
 
   it('runs a validated action with the authenticated actor and request id', async () => {
@@ -93,12 +96,16 @@ describe('handleEcotrackShipmentMutation', () => {
 
   it('returns controlled boundary responses before calling the action', async () => {
     const action = vi.fn();
-    requireMutationAccessMock.mockResolvedValueOnce(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementationOnce(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect((await runMutation({ action })).status).toBe(403);
 
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     hasDbMock.mockReturnValueOnce(false);
     expect((await runMutation({ action })).status).toBe(503);
     expect((await runMutation({ id: 'invalid', action })).status).toBe(400);

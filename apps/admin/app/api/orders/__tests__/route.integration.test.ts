@@ -48,7 +48,10 @@ describe('app/api/orders/route', () => {
     canMutateResourceMock.mockReset();
     canMutateResourceMock.mockReturnValue(true);
     requireMutationAccessMock.mockReset();
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     createAdminOrderMock.mockReset().mockResolvedValue({
       item: { id: 91 },
       duplicateCandidates: [],

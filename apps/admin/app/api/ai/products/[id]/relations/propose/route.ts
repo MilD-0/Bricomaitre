@@ -8,7 +8,6 @@ import {
   proposeProductRelation,
   UnsupportedProductRelationError,
 } from '../../../../../../../lib/ai-product-knowledge';
-import { auth } from '../../../../../../../lib/auth';
 import { requireMutationAccess } from '../../../../../../../lib/rbac';
 
 const requestSchema = z.object({
@@ -17,7 +16,7 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -36,7 +35,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const session = await auth();
     const proposal = await proposeProductRelation({
       sourceProductId,
       targetProductId: parsed.data.targetProductId,

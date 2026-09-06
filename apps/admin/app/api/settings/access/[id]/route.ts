@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
-import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { userAccessGrantFormSchema } from '../../../../../lib/permissions';
 import { requireSettingsAccess } from '../../../../../lib/rbac';
@@ -12,7 +11,7 @@ import {
 } from '../../../../../lib/administration-mutations';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireSettingsAccess();
+  const { response: denied, session } = await requireSettingsAccess();
   if (denied) {
     return denied;
   }
@@ -32,7 +31,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Invalid access grant id' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   try {
     await updateAdministrationAccessGrant(db, grantId, parsed.data, actor);
@@ -53,7 +52,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireSettingsAccess();
+  const { response: denied, session } = await requireSettingsAccess();
   if (denied) {
     return denied;
   }
@@ -68,7 +67,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Invalid access grant id' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   try {
     await deleteAdministrationAccessGrant(db, grantId, actor);

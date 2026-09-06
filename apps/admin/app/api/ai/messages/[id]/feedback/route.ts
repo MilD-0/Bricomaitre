@@ -4,14 +4,13 @@ import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
-import { auth } from '../../../../../../lib/auth';
 import { requireAppAccess } from '../../../../../../lib/rbac';
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() });
 const feedbackSchema = z.object({ feedback: z.enum(['helpful', 'not_helpful']) }).strict();
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -22,7 +21,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const feedback = feedbackSchema.safeParse(body);
   if (!params.success || !feedback.success)
     return NextResponse.json({ error: 'Invalid assistant feedback.' }, { status: 400 });
-  const session = await auth();
+
   const owner = session?.user?.email;
   if (!owner) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 

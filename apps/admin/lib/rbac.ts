@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { auth } from './auth';
+import { auth, type AdminSession } from './auth';
 import { hasPermission, normalizePermissions, type PermissionKey } from './permissions';
 
 export type MutationResource =
@@ -31,24 +31,24 @@ export function canMutateResource(
   return hasPermission(access ?? [], resourcePermissions[resource]);
 }
 
-async function requirePermissionAccess(permission: PermissionKey) {
+type AccessResult =
+  { session: AdminSession; response: null } | { session: null; response: NextResponse };
+
+async function requirePermissionAccess(permission?: PermissionKey): Promise<AccessResult> {
   const session = await auth();
-
   if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return {
+      session: null,
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    };
   }
-
-  if (!session.user.isAllowed) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (
+    !session.user.isAllowed ||
+    (permission && !hasPermission(normalizePermissions(session.user.permissions), permission))
+  ) {
+    return { session: null, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
-
-  const permissions = normalizePermissions(session.user.permissions);
-
-  if (!hasPermission(permissions, permission)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  return null;
+  return { session, response: null };
 }
 
 export async function requireAnalyticsAccess() {
@@ -68,15 +68,5 @@ export async function requireMutationAccess(resource: MutationResource) {
 }
 
 export async function requireAppAccess() {
-  const session = await auth();
-
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  if (!session.user.isAllowed) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  return null;
+  return requirePermissionAccess();
 }

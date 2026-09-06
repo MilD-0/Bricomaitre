@@ -32,7 +32,10 @@ describe('app/api/settings/roles/[id]/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     requireOpsAccessMock.mockReset();
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
@@ -40,9 +43,10 @@ describe('app/api/settings/roles/[id]/route', () => {
   });
 
   it('returns 401 when ops access is denied', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      session: null,
+    }));
 
     const res = await PUT(
       new NextRequest('http://localhost/api/settings/roles/5', {

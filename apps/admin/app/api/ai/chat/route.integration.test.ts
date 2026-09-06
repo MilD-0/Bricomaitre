@@ -88,7 +88,15 @@ vi.mock('../../../../lib/auth', () => ({
       : undefined,
   }),
 }));
-vi.mock('../../../../lib/rbac', () => ({ requireAppAccess: async () => mocks.denied }));
+vi.mock('../../../../lib/rbac', () => ({
+  requireAppAccess: async () => {
+    const response = mocks.denied;
+    return {
+      response,
+      session: response ? null : await (await import('../../../../lib/auth')).auth(),
+    };
+  },
+}));
 import { POST } from './route';
 
 const conversationKey = '8f572d91-3ed6-4ad5-b2a5-e1928a2c3c82';

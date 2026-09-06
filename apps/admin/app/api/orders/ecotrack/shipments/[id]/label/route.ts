@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { fetchSingleEcotrackLabel } from '../../../../../../../lib/admin-ecotrack-orders-data';
-import { auth } from '../../../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../../../lib/rbac';
 import {
@@ -13,7 +12,7 @@ import {
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -25,7 +24,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
-  const session = await auth();
   const { id } = await params;
   const orderId = parsePositiveIntegerId(id);
   if (!orderId) {

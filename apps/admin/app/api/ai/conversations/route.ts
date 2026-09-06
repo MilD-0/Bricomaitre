@@ -3,15 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
-import { auth } from '../../../../lib/auth';
 import { requireAppAccess } from '../../../../lib/rbac';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
-  const session = await auth();
+
   const owner = session?.user?.email;
   if (!owner) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 

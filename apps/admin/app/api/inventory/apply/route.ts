@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { applyAdminInventoryBatch } from '../../../../lib/admin-inventory-workflow';
-import { auth } from '../../../../lib/auth';
 import { inventoryApplyRequestSchema } from '../../../../lib/inventory';
 import { requireMutationAccess } from '../../../../lib/rbac';
 import { AdminMutationIdempotencyConflictError } from '../../../../lib/admin-mutation-idempotency';
 
 export async function POST(req: NextRequest) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }
@@ -23,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   let result;
   try {

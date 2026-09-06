@@ -12,11 +12,18 @@ const request = (body: unknown) =>
   });
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.access.mockResolvedValue({
+    response: null,
+    session: { user: { permissions: ['orders_write'] } },
+  });
   mocks.hasDb.mockReturnValue(true);
 });
 
 it('checks order access before reading catalog details', async () => {
-  mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+  mocks.access.mockImplementation(async () => ({
+    response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    session: null,
+  }));
   expect((await POST(request({ productIds: [1], brandIds: [] }))).status).toBe(403);
   expect(mocks.getDb).not.toHaveBeenCalled();
 });

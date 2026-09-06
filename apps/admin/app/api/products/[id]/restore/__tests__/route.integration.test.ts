@@ -36,7 +36,10 @@ describe('POST /api/products/[id]/restore', () => {
     vi.clearAllMocks();
     mocks.hasDb.mockReturnValue(true);
     mocks.getDb.mockReturnValue('database');
-    mocks.requireMutationAccess.mockResolvedValue(null);
+    mocks.requireMutationAccess.mockImplementation(async () => ({
+      response: null,
+      session: await mocks.auth(),
+    }));
     mocks.auth.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mocks.restore.mockResolvedValue({
       id: 21,
@@ -64,9 +67,10 @@ describe('POST /api/products/[id]/restore', () => {
   });
 
   it('returns the canonical access, database, input, and missing-product failures', async () => {
-    mocks.requireMutationAccess.mockResolvedValueOnce(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    mocks.requireMutationAccess.mockImplementationOnce(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect(
       (
         await POST(new Request('http://localhost/api/products/21/restore'), {
@@ -75,7 +79,10 @@ describe('POST /api/products/[id]/restore', () => {
       ).status,
     ).toBe(403);
 
-    mocks.requireMutationAccess.mockResolvedValue(null);
+    mocks.requireMutationAccess.mockImplementation(async () => ({
+      response: null,
+      session: await mocks.auth(),
+    }));
     mocks.hasDb.mockReturnValueOnce(false);
     expect(
       (

@@ -3,19 +3,17 @@ import { getDb, hasDb } from '@bric/db/client';
 import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
 import { loadOrdersPageData } from '../../../lib/admin-orders-data';
 import { createAdminOrder } from '../../../lib/admin-order-lifecycle';
-import { auth } from '../../../lib/auth';
 import { orderListQuerySchema } from '../../../lib/orders';
 import { OrderSearchTimeoutError } from '../../../lib/order-search';
 import { getRequestSearchParams } from '../../../lib/request';
 import { canMutateResource, requireMutationAccess } from '../../../lib/rbac';
 
 export async function GET(req: NextRequest) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
 
-  const session = await auth();
   const writable = canMutateResource(session?.user?.permissions, 'orders');
 
   if (!hasDb()) {
@@ -67,7 +65,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -79,7 +77,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   const result = await createAdminOrder(db, parsed.data, actor);
   return NextResponse.json({ ok: true, ...result }, { status: 201 });

@@ -20,7 +20,10 @@ import { GET } from './route';
 describe('GET /api/stats/profit-tracker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     getReportMock.mockResolvedValue({ summary: { profitX: 3.2 }, days: [] });
   });
 
@@ -46,9 +49,10 @@ describe('GET /api/stats/profit-tracker', () => {
   });
 
   it('enforces operations access', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     const response = await GET(new NextRequest('http://localhost/api/stats/profit-tracker'));
     expect(response.status).toBe(403);
     expect(getReportMock).not.toHaveBeenCalled();

@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { auth } from '../../../../../lib/auth';
 import { deleteManualOrder } from '../../../../../lib/manual-orders';
 import { requireAnalyticsAccess } from '../../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../../lib/reporting-refresh-trigger';
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied, session } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -20,7 +19,6 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid manual order id' }, { status: 400 });
   }
 
-  const session = await auth();
   const deleted = await deleteManualOrder(id, {
     email: session?.user?.email,
     name: session?.user?.name,

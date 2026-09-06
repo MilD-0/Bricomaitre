@@ -33,7 +33,10 @@ describe('app/api/orders/ecotrack/preview/route', () => {
 
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({ db: true });
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     buildEcotrackPostingPreviewMock.mockResolvedValue({
       totalRequested: 2,
       eligible: [{ orderId: 11 }],
@@ -43,9 +46,10 @@ describe('app/api/orders/ecotrack/preview/route', () => {
   });
 
   it('returns RBAC denial', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await POST(
       new NextRequest('http://localhost/api/orders/ecotrack/preview', {

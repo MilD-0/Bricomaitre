@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { auth } from '../../../../lib/auth';
 import {
   adCostEntrySchema,
   deleteAdCostEntry,
@@ -16,7 +15,7 @@ import { requireAnalyticsAccess } from '../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -41,7 +40,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied, session } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -54,7 +53,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const session = await auth();
   const row = await upsertAdCostEntry(parsed.data, {
     email: session?.user?.email,
     name: session?.user?.name,
@@ -64,7 +62,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied, session } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -88,7 +86,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid ad cost entry id' }, { status: 400 });
   }
 
-  const session = await auth();
   const deleted = await deleteAdCostEntry(id, {
     email: session?.user?.email,
     name: session?.user?.name,

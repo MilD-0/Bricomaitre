@@ -19,7 +19,10 @@ import { POST } from './route';
 describe('POST /api/stats/search-console/sync', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireMutationMock.mockResolvedValue(null);
+    requireMutationMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     syncMock.mockResolvedValue({ since: '2026-08-10', until: '2026-08-17', totals: 8 });
   });
 

@@ -6,7 +6,7 @@ import { inventoryScanQuerySchema } from '../../../../lib/inventory';
 import { requireMutationAccess } from '../../../../lib/rbac';
 
 export async function POST(req: NextRequest) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }

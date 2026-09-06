@@ -26,7 +26,7 @@ function parseRequestBody(body: unknown): {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }

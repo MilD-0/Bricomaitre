@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { hasDb } from '@bric/db/client';
-import { auth } from '../../../lib/auth';
 import { ADMIN_STATS_IMPORT_QUEUE, getLatestExportJob } from '../../../lib/background-jobs';
 import {
   deleteImportBatch,
@@ -19,7 +18,7 @@ const importHistoryQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().max(50).default(IMPORT_HISTORY_PAGE_SIZE),
 });
 export async function GET(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied, session } = await requireAnalyticsAccess();
 
   if (denied) {
     return denied;
@@ -48,7 +47,6 @@ export async function GET(request: NextRequest) {
   }
 
   if (jobOnly) {
-    const session = await auth();
     return NextResponse.json({
       job: await getLatestExportJob(
         ADMIN_STATS_IMPORT_QUEUE,
@@ -64,7 +62,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied } = await requireAnalyticsAccess();
 
   if (denied) {
     return denied;
@@ -93,7 +91,7 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied } = await requireAnalyticsAccess();
 
   if (denied) {
     return denied;

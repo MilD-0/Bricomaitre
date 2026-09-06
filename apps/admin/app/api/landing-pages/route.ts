@@ -1,7 +1,6 @@
 import { landingPageCreateSchema } from '@bric/storefront-core/landing-pages';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '../../../lib/auth';
 import {
   createLandingPage,
   listLandingPages,
@@ -10,7 +9,7 @@ import {
 import { requireMutationAccess } from '../../../lib/rbac';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied } = await requireMutationAccess('assets');
   if (denied) return denied;
   const summariesOnly = request.nextUrl.searchParams.get('view') === 'index';
   return NextResponse.json({
@@ -19,14 +18,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) return denied;
   const parsed = landingPageCreateSchema
     .extend({ document: landingPageCreateSchema.shape.document.optional() })
     .strict()
     .safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const session = await auth();
+
   try {
     return NextResponse.json(
       await createLandingPage({ ...parsed.data, actorId: session?.user?.email }),

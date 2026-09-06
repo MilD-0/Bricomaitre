@@ -32,7 +32,10 @@ const detail = {
 describe('app/api/action-history/[id]/route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireSettingsAccess.mockResolvedValue(null);
+    mocks.requireSettingsAccess.mockImplementation(async () => ({
+      response: null,
+      session: await mocks.auth(),
+    }));
     mocks.hasDb.mockReturnValue(true);
     mocks.getDb.mockReturnValue({ marker: 'db' });
     mocks.loadDetail.mockResolvedValue(detail);
@@ -42,9 +45,10 @@ describe('app/api/action-history/[id]/route', () => {
   });
 
   it('requires settings access before reading history details', async () => {
-    mocks.requireSettingsAccess.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    mocks.requireSettingsAccess.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     const response = await GET(new Request('http://localhost/api/action-history/9'), {
       params: Promise.resolve({ id: '9' }),
     });

@@ -5,7 +5,6 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import { getDb, hasDb } from '@bric/db/client';
 import { orders, products } from '@bric/db/schema';
 import { CONFIRMED_LIFECYCLE_ORDER_STATUSES } from '@bric/storefront-core/order-domain';
-import { auth } from '../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../lib/background-jobs';
 import { productListQuerySchema, productPayloadSchema } from '../../../lib/products';
 import {
@@ -275,7 +274,7 @@ const getCachedPaginatedProducts = unstable_cache(loadPaginatedProducts, ['admin
 });
 
 export async function GET(req: NextRequest) {
-  const denied = await requireMutationAccess('products');
+  const { response: denied } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }
@@ -325,7 +324,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }
@@ -340,7 +339,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {

@@ -59,7 +59,10 @@ describe('app/api/categories/route', () => {
     mutateEntityWithHistoryMock.mockReset();
     revalidateStorefrontProductMetaMock.mockReset().mockResolvedValue(undefined);
 
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     getDbMock.mockReturnValue({});

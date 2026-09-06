@@ -45,7 +45,10 @@ describe('app/api/assets/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     requireMutationAccessMock.mockReset();
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
@@ -55,9 +58,10 @@ describe('app/api/assets/route', () => {
   });
 
   it('returns 401 when assets mutation access is denied', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      session: null,
+    }));
 
     const req = new NextRequest('http://localhost/api/assets', {
       method: 'POST',

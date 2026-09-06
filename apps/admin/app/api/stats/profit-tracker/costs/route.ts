@@ -11,7 +11,7 @@ import {
 import { requireAnalyticsAccess, requireMutationAccess } from '../../../../../lib/rbac';
 
 export async function GET() {
-  const denied = await requireAnalyticsAccess();
+  const { response: denied } = await requireAnalyticsAccess();
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -20,7 +20,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const denied = await requireMutationAccess('stats');
+  const { response: denied } = await requireMutationAccess('stats');
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

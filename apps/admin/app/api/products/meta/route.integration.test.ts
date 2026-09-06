@@ -27,13 +27,17 @@ vi.mock('../../../../lib/server-cache', () => ({
 describe('app/api/products/meta/route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireAppAccessMock.mockResolvedValue(null);
+    requireAppAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
   });
 
   it('returns 401 when app access is denied', async () => {
-    requireAppAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-    );
+    requireAppAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      session: null,
+    }));
 
     const response = await GET();
 

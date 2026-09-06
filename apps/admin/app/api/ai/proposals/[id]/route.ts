@@ -8,8 +8,7 @@ import {
   AiProposalReviewConflictError,
   aiProposalReviewConflictPayload,
 } from '../../../../../lib/ai-proposal-review';
-import { auth } from '../../../../../lib/auth';
-import { requireAppAccess, requireMutationAccess } from '../../../../../lib/rbac';
+import { requireAppAccess, canMutateResource } from '../../../../../lib/rbac';
 import {
   AiProposalReviewNotFoundError,
   AiProposalExpiredDeletionConflictError,
@@ -27,17 +26,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const proposalId = parsePositiveIntegerId((await params).id);
   if (!parsed.success || proposalId === null)
     return NextResponse.json({ error: 'Invalid proposal review request.' }, { status: 400 });
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
 
   try {
-    const session = await auth();
     const proposal = await readAiProposalReviewTarget(proposalId);
     const resource = aiProposalReviewResource(proposal);
-    const mutationDenied = await requireMutationAccess(resource);
-    if (mutationDenied) return mutationDenied;
+    if (!canMutateResource(session.user.permissions, resource))
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     const result = await executeAiProposalReview({
       proposalId,
       action: parsed.data.action,
@@ -64,7 +62,7 @@ export async function DELETE(
   const proposalId = parsePositiveIntegerId((await params).id);
   if (proposalId === null)
     return NextResponse.json({ error: 'Invalid proposal id.' }, { status: 400 });
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -72,8 +70,8 @@ export async function DELETE(
   try {
     const proposal = await readAiProposalReviewTarget(proposalId);
     const resource = aiProposalReviewResource(proposal);
-    const mutationDenied = await requireMutationAccess(resource);
-    if (mutationDenied) return mutationDenied;
+    if (!canMutateResource(session.user.permissions, resource))
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     return NextResponse.json({ deleted: await deleteExpiredAiProposal(proposalId) });
   } catch (error) {

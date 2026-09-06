@@ -19,7 +19,10 @@ describe('GET /api/stats/workspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasDbMock.mockReturnValue(true);
-    requireAnalyticsAccessMock.mockResolvedValue(null);
+    requireAnalyticsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     getAnalyticsDataMock.mockResolvedValue({
       diagnostics: { queryDurationMs: 37, responseSizeBytes: 100, cache: { state: 'fresh' } },
       warnings: [],
@@ -68,12 +71,16 @@ describe('GET /api/stats/workspace', () => {
   });
 
   it('enforces analytics access and database availability', async () => {
-    requireAnalyticsAccessMock.mockResolvedValueOnce(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireAnalyticsAccessMock.mockImplementationOnce(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     expect((await GET(new NextRequest('http://localhost/api/stats/workspace'))).status).toBe(403);
 
-    requireAnalyticsAccessMock.mockResolvedValueOnce(null);
+    requireAnalyticsAccessMock.mockImplementationOnce(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     hasDbMock.mockReturnValueOnce(false);
     expect((await GET(new NextRequest('http://localhost/api/stats/workspace'))).status).toBe(503);
   });

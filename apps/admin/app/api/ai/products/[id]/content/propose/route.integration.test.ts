@@ -20,7 +20,9 @@ import { POST } from './route';
 
 describe('AI product content proposal route', () => {
   beforeEach(() => {
-    mocks.access.mockReset().mockResolvedValue(null);
+    mocks.access
+      .mockReset()
+      .mockImplementation(async () => ({ response: null, session: await mocks.auth() }));
     mocks.hasDb.mockReset().mockReturnValue(true);
     mocks.auth.mockReset().mockResolvedValue({ user: { email: 'admin@example.com' } });
     mocks.propose.mockReset().mockResolvedValue({ id: 3, status: 'proposed' });
@@ -34,7 +36,10 @@ describe('AI product content proposal route', () => {
     });
 
   it('requires product management permission', async () => {
-    mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+    mocks.access.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     const response = await POST(request({}), { params: Promise.resolve({ id: '1' }) });
     expect(response.status).toBe(403);
     expect(mocks.propose).not.toHaveBeenCalled();

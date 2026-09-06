@@ -59,7 +59,10 @@ describe('app/api/brands/route', () => {
     mutateEntityWithHistoryMock.mockReset();
     revalidateStorefrontProductMetaMock.mockReset().mockResolvedValue(undefined);
 
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     getDbMock.mockReturnValue({});
@@ -68,9 +71,10 @@ describe('app/api/brands/route', () => {
   });
 
   it('rejects unauthorized list access', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await GET(new NextRequest('http://localhost/api/brands'));
 

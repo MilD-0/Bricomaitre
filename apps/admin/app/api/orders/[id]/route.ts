@@ -11,13 +11,12 @@ import {
 import { ensureAdminOrderPublicToken } from '../../../../lib/admin-order-tracking';
 import { AdminOrderNotFoundError, updateAdminOrder } from '../../../../lib/admin-order-update';
 import { loadOrderDetail } from '../../../../lib/admin-orders-data';
-import { auth } from '../../../../lib/auth';
 import { EcotrackMutationConflictError } from '../../../../lib/ecotrack-mutations';
 import { orderPatchSchema } from '../../../../lib/orders';
 import { requireMutationAccess } from '../../../../lib/rbac';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -41,7 +40,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 }
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -67,7 +66,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -87,7 +86,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Invalid order id' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   try {
     return NextResponse.json({
@@ -107,7 +106,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -122,7 +121,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid order id' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {

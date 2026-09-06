@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
-import { auth } from '../../../../../lib/auth';
-import { requireMutationAccess } from '../../../../../lib/rbac';
+import { requireMutationAccess, canMutateResource } from '../../../../../lib/rbac';
 import { shoppingListDraftQuerySchema } from '../../../../../lib/shopping-list-drafts';
 import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list-drafts.server';
 import {
@@ -14,7 +13,7 @@ import {
 } from '../../../../../lib/shopping-list-stock-allocations';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -27,17 +26,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) return denied;
-  const productsDenied = await requireMutationAccess('products');
-  if (productsDenied) return productsDenied;
+  if (!canMutateResource(session.user.permissions, 'products'))
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   const parsed = shoppingListAllocationReviewSchema.safeParse(
     await request.json().catch(() => null),
   );
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const session = await auth();
   try {
     return NextResponse.json(
       await reconcileShoppingListAllocationReview(getDb(), parsed.data, {

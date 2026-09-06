@@ -30,7 +30,10 @@ describe('app/api/inventory/scan/route', () => {
     requireMutationAccessMock.mockReset();
     loadOrderDetailMock.mockReset();
 
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     hasDbMock.mockReturnValue(true);
   });
 
@@ -151,9 +154,10 @@ describe('app/api/inventory/scan/route', () => {
   });
 
   it('returns RBAC denial when access is forbidden', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const res = await POST(
       new NextRequest('http://localhost/api/inventory/scan', {

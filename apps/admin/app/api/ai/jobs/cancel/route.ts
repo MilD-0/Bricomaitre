@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { auth } from '../../../../../lib/auth';
 import {
   ADMIN_BACKGROUND_JOB_TYPES,
   allowedAdminBackgroundJobTypes,
@@ -21,12 +20,12 @@ const requestSchema = z.union([
 ]);
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json({ error: 'Invalid AI job cancellation request.' }, { status: 400 });
-  const session = await auth();
+
   const permissions = normalizePermissions(session?.user?.permissions);
   if ('type' in parsed.data) {
     if (!allowedAdminBackgroundJobTypes(permissions).includes(parsed.data.type)) {

@@ -3,7 +3,6 @@ import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { auth } from '../../../../lib/auth';
 import {
   getLandingPageDetail,
   LandingPageConflictError,
@@ -43,7 +42,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied } = await requireMutationAccess('assets');
   if (denied) return denied;
   const id = parsePositiveIntegerId((await params).id);
   if (id === null) return NextResponse.json({ error: 'Invalid landing-page id.' }, { status: 400 });
@@ -69,13 +68,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) return denied;
   const id = parsePositiveIntegerId((await params).id);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (id === null || !parsed.success)
     return NextResponse.json({ error: 'Invalid landing-page update.' }, { status: 400 });
-  const session = await auth();
+
   try {
     if (parsed.data.action === 'save-active') {
       const result = await saveLandingPage({

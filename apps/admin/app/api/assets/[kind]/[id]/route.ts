@@ -8,7 +8,6 @@ import {
   assetReplacementRequestSchema,
   featuredProductGroupToggleSchema,
 } from '../../../../../lib/assets';
-import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 import {
@@ -22,7 +21,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ kind: string; id: string }> },
 ) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) {
     return denied;
   }
@@ -45,7 +44,7 @@ export async function PATCH(
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   const parsed = (
@@ -74,7 +73,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ kind: string; id: string }> },
 ) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) {
     return denied;
   }
@@ -96,7 +95,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {
@@ -116,7 +115,7 @@ export async function DELETE(
   _: NextRequest,
   { params }: { params: Promise<{ kind: string; id: string }> },
 ) {
-  const denied = await requireMutationAccess('assets');
+  const { response: denied, session } = await requireMutationAccess('assets');
   if (denied) {
     return denied;
   }
@@ -134,7 +133,7 @@ export async function DELETE(
   if (!resolvedKind.success)
     return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {

@@ -44,7 +44,10 @@ describe('app/api/stats/ad-costs/import/route', () => {
     getLatestExportJobMock.mockReset();
     startAdCostsImportJobMock.mockReset();
 
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
     getLatestExportJobMock.mockResolvedValue(null);
     startAdCostsImportJobMock.mockResolvedValue({
@@ -179,9 +182,10 @@ describe('app/api/stats/ad-costs/import/route', () => {
   });
 
   it('returns the RBAC denial response', async () => {
-    requireOpsAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const response = await POST(
       new NextRequest('http://localhost/api/stats/ad-costs/import', { method: 'POST' }),

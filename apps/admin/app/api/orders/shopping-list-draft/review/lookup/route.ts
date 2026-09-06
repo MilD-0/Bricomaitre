@@ -6,7 +6,7 @@ import { shoppingListDraftQuerySchema } from '../../../../../../lib/shopping-lis
 import { loadShoppingListAllocationReview } from '../../../../../../lib/shopping-list-stock-allocations';
 
 export async function POST(request: NextRequest) {
-  const denied = await requireMutationAccess('orders');
+  const { response: denied } = await requireMutationAccess('orders');
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

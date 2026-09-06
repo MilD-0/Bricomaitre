@@ -2,7 +2,6 @@ import { ActionHistoryEntityNotFoundError } from '../../../../lib/action-history
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { auth } from '../../../../lib/auth';
 import { readCategory } from '../../../../lib/brands-categories-api';
 import { categoryUpdateSchema } from '../../../../lib/brands-categories';
 import { CategoryHierarchyError } from '../../../../lib/category-hierarchy';
@@ -15,7 +14,7 @@ import {
 } from '../../../../lib/taxonomy-mutations';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAppAccess();
+  const { response: denied } = await requireAppAccess();
   if (denied) {
     return denied;
   }
@@ -39,7 +38,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('brandsCategories');
+  const { response: denied, session } = await requireMutationAccess('brandsCategories');
   if (denied) {
     return denied;
   }
@@ -60,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
   try {
     await updateCategoryThroughCanonicalWorkflow(db, numericId, parsed.data, actor);
@@ -80,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('brandsCategories');
+  const { response: denied, session } = await requireMutationAccess('brandsCategories');
   if (denied) {
     return denied;
   }
@@ -96,7 +95,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {

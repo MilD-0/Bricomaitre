@@ -66,8 +66,14 @@ describe('app/api/categories/[id]/route', () => {
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({});
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
-    requireAppAccessMock.mockResolvedValue(null);
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireAppAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     readCategoryMock.mockResolvedValue({
       id: '10',
       name: 'Paint',

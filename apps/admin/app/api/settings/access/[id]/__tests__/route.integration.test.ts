@@ -32,7 +32,10 @@ describe('app/api/settings/access/[id]/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     requireOpsAccessMock.mockReset();
-    requireOpsAccessMock.mockResolvedValue(null);
+    requireOpsAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();

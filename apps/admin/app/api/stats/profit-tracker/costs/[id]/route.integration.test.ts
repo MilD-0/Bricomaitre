@@ -42,7 +42,10 @@ const cost = {
 describe('profit tracker cost detail route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireMutationMock.mockResolvedValue(null);
+    requireMutationMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     updateCostMock.mockResolvedValue({
       previous: { id: 12, ...cost },
       current: { id: 12, ...cost },

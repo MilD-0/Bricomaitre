@@ -44,7 +44,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.hasDb.mockReturnValue(true);
   mocks.getDb.mockReturnValue(db);
-  mocks.access.mockResolvedValue(null);
+  mocks.access.mockImplementation(async () => ({ response: null, session: await mocks.auth() }));
   mocks.auth.mockResolvedValue({ user: actor });
 });
 
@@ -52,7 +52,10 @@ describe('order detail HTTP boundary', () => {
   it.each([GET, POST, PATCH, DELETE])(
     'checks authority before parsing or loading',
     async (handler) => {
-      mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+      mocks.access.mockImplementation(async () => ({
+        response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+        session: null,
+      }));
       expect((await handler(request('PATCH', { note: 'changed' }), context())).status).toBe(403);
       expect(mocks.access).toHaveBeenCalledWith('orders');
       expect(mocks.getDb).not.toHaveBeenCalled();

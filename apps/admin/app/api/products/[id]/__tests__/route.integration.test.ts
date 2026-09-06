@@ -85,9 +85,15 @@ describe('app/api/products/[id]/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     requireAppAccessMock.mockReset();
-    requireAppAccessMock.mockResolvedValue(null);
+    requireAppAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     requireMutationAccessMock.mockReset();
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
@@ -160,9 +166,10 @@ describe('app/api/products/[id]/route', () => {
   });
 
   it('returns 401 for GET when app access is denied', async () => {
-    requireAppAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-    );
+    requireAppAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      session: null,
+    }));
 
     const res = await GET(new NextRequest('http://localhost/api/products/1'), {
       params: Promise.resolve({ id: '1' }),
@@ -213,9 +220,10 @@ describe('app/api/products/[id]/route', () => {
   });
 
   it('returns 403 for PUT when caller lacks RBAC access', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const res = await PUT(
       new NextRequest('http://localhost/api/products/4', {

@@ -16,7 +16,7 @@ async function costId(params: Promise<{ id: string }>) {
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('stats');
+  const { response: denied } = await requireMutationAccess('stats');
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -38,7 +38,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMutationAccess('stats');
+  const { response: denied } = await requireMutationAccess('stats');
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

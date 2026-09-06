@@ -38,16 +38,20 @@ describe('app/api/inventory/apply/route', () => {
     authMock.mockReset();
     applyAdminInventoryBatchMock.mockReset();
 
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: await authMock(),
+    }));
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({ marker: 'db' });
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
   });
 
   it('returns RBAC denial when access is forbidden', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const res = await POST(
       new NextRequest('http://localhost/api/inventory/apply', {

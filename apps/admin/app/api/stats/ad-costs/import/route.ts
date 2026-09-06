@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '../../../../../lib/auth';
 import {
   ADMIN_AD_COST_IMPORT_QUEUE,
   getLatestExportJob,
@@ -23,10 +22,9 @@ function getRequesterKey(email: string | null | undefined) {
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
-  const denied = await requireAnalyticsAccess();
+  const { response: denied, session } = await requireAnalyticsAccess();
   if (denied) return denied;
 
-  const session = await auth();
   try {
     return NextResponse.json(
       {
@@ -50,7 +48,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
-  const denied = await requireAnalyticsAccess();
+  const { response: denied, session } = await requireAnalyticsAccess();
   if (denied) return denied;
 
   const requestLengthError = validateSpreadsheetRequestLength(request);
@@ -97,7 +95,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const session = await auth();
   try {
     const startResult = await startAdCostsImportJob(
       getRequesterKey(session?.user?.email),

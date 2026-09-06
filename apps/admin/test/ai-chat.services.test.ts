@@ -9,7 +9,12 @@ const state = vi.hoisted(() => ({ actor: '', finish: null as Promise<void> | nul
 vi.mock('../lib/auth', () => ({
   auth: async () => ({ user: { email: state.actor, permissions: [] } }),
 }));
-vi.mock('../lib/rbac', () => ({ requireAppAccess: async () => null }));
+vi.mock('../lib/rbac', () => ({
+  requireAppAccess: async () => ({
+    response: null,
+    session: await (await import('../lib/auth')).auth(),
+  }),
+}));
 vi.mock('@bric/ai-core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@bric/ai-core')>()),
   createAiLanguageModel: () => 'local-test-model',

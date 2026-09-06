@@ -35,8 +35,14 @@ import { GET, POST } from './route';
 describe('profit tracker days route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireOpsMock.mockResolvedValue(null);
-    requireMutationMock.mockResolvedValue(null);
+    requireOpsMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
+    requireMutationMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     getReportMock.mockResolvedValue({ days: [{ date: '2026-08-15' }] });
     upsertDayMock.mockImplementation(async (value) => value);
     refreshFactsMock.mockResolvedValue(true);

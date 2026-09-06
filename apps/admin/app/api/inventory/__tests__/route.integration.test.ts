@@ -23,13 +23,17 @@ describe('app/api/inventory/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     requireMutationAccessMock.mockReset();
-    requireMutationAccessMock.mockResolvedValue(null);
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
   });
 
   it('returns RBAC denial when caller cannot access inventory', async () => {
-    requireMutationAccessMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationAccessMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
 
     const res = await GET(new NextRequest('http://localhost/api/inventory'));
 

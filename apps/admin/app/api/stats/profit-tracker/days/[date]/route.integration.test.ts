@@ -23,7 +23,10 @@ import { DELETE } from './route';
 describe('profit tracker day detail route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireMutationMock.mockResolvedValue(null);
+    requireMutationMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     refreshFactsMock.mockResolvedValue(true);
     deleteDayMock.mockImplementation(async (date: string) => {
       return date;

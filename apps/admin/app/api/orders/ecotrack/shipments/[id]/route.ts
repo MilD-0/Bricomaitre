@@ -9,7 +9,6 @@ import {
   parseEcotrackShipmentUpdateDraft,
   updatePostedEcotrackOrder,
 } from '../../../../../../lib/admin-ecotrack-orders-data';
-import { auth } from '../../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../../lib/rbac';
 import {
@@ -25,7 +24,7 @@ async function readOrderId(params: Promise<{ id: string }>) {
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -37,7 +36,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
-  const session = await auth();
   const orderId = await readOrderId(params);
   if (!orderId) {
     return NextResponse.json(
@@ -95,7 +93,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const requestId = getRequestId(request);
-  const denied = await requireMutationAccess('orders');
+  const { response: denied, session } = await requireMutationAccess('orders');
   if (denied) {
     return denied;
   }
@@ -107,7 +105,6 @@ export async function DELETE(
     );
   }
 
-  const session = await auth();
   const orderId = await readOrderId(params);
   if (!orderId) {
     return NextResponse.json(

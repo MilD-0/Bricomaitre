@@ -1,15 +1,9 @@
-import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { authMock } = vi.hoisted(() => ({
-  authMock: vi.fn(),
-}));
+const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
+vi.mock('./auth', () => ({ auth: authMock }));
 
-vi.mock('./auth', () => ({
-  auth: authMock,
-}));
-
-import { normalizePermissions, normalizeRole } from './permissions';
+import { normalizePermissions, normalizeRole, type PermissionKey } from './permissions';
 import {
   canMutateResource,
   requireAnalyticsAccess,
@@ -19,120 +13,93 @@ import {
   requireSettingsAccess,
 } from './rbac';
 
-describe('rbac helpers', () => {
-  beforeEach(() => {
-    authMock.mockReset();
-  });
+const guards = [
+  {
+    name: 'products',
+    permission: 'products_write',
+    check: () => requireMutationAccess('products'),
+  },
+  { name: 'assets', permission: 'assets_write', check: () => requireMutationAccess('assets') },
+  {
+    name: 'stats mutations',
+    permission: 'analytics_manage',
+    check: () => requireMutationAccess('stats'),
+  },
+  { name: 'analytics', permission: 'analytics_manage', check: requireAnalyticsAccess },
+  { name: 'settings', permission: 'settings_manage', check: requireSettingsAccess },
+  { name: 'operations', permission: 'ops_view', check: requireOpsAccess },
+] as const;
 
-  it('normalizes unknown roles to viewer', () => {
-    expect(normalizeRole('admin')).toBe('admin');
-    expect(normalizeRole('something-else')).toBe('something-else');
+describe('RBAC authorization results', () => {
+  beforeEach(() => authMock.mockReset());
+
+  it('normalizes unknown role input and drops unsupported permissions', () => {
     expect(normalizeRole(undefined)).toBe('viewer');
-  });
-
-  it('normalizes unsupported permissions away', () => {
+    expect(normalizeRole('custom-role')).toBe('custom-role');
     expect(normalizePermissions(['products_write', 'unknown_permission'])).toEqual([
       'products_write',
     ]);
-  });
-
-  it('enforces edit vs ops permissions by role', () => {
-    expect(canMutateResource(['products_write'], 'products')).toBe(true);
-    expect(canMutateResource(['orders_write'], 'orders')).toBe(true);
     expect(canMutateResource(['products_write'], 'assets')).toBe(false);
     expect(canMutateResource(['assets_write'], 'assets')).toBe(true);
-    expect(canMutateResource(['bulletin_moderate'], 'bulletin')).toBe(true);
   });
 
-  it('returns 401 when the user is not authenticated', async () => {
+  it.each(guards)(
+    '$name returns the same authorized session after one authentication',
+    async ({ permission, check }) => {
+      const session = {
+        user: { isAllowed: true, permissions: [permission], email: 'operator@example.com' },
+      };
+      authMock.mockResolvedValue(session);
+      const result = await check();
+      expect(result.response).toBeNull();
+      expect(result.session).toBe(session);
+      expect(authMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(guards)(
+    '$name rejects missing, revoked and insufficient access without exposing a session',
+    async ({ permission, check }) => {
+      for (const [session, status] of [
+        [null, 401],
+        [{ user: { isAllowed: false, permissions: [permission] } }, 403],
+        [{ user: { isAllowed: true, permissions: [] } }, 403],
+        [{ user: { isAllowed: true, permissions: ['unknown_permission'] } }, 403],
+      ] as const) {
+        authMock.mockResolvedValue(session);
+        const result = await check();
+        expect(result.session).toBeNull();
+        expect(result.response?.status).toBe(status);
+        await expect(result.response?.json()).resolves.toEqual({
+          error: status === 401 ? 'Unauthorized' : 'Forbidden',
+        });
+      }
+    },
+  );
+
+  it('keeps analytics, settings and operations permissions independent', async () => {
+    for (const [permission, allowed] of [
+      ['analytics_manage', requireAnalyticsAccess],
+      ['settings_manage', requireSettingsAccess],
+      ['ops_view', requireOpsAccess],
+    ] as const) {
+      authMock.mockResolvedValue({
+        user: { isAllowed: true, permissions: [permission] as PermissionKey[] },
+      });
+      for (const check of [requireAnalyticsAccess, requireSettingsAccess, requireOpsAccess]) {
+        expect((await check()).response?.status ?? null).toBe(check === allowed ? null : 403);
+      }
+    }
+  });
+
+  it('allows an approved viewer into the app without granting mutation permissions', async () => {
+    const session = { user: { isAllowed: true, permissions: [] } };
+    authMock.mockResolvedValue(session);
+    expect((await requireAppAccess()).session).toBe(session);
+    expect((await requireMutationAccess('products')).response?.status).toBe(403);
     authMock.mockResolvedValue(null);
-
-    const res = await requireMutationAccess('products');
-
-    expect(res).toBeInstanceOf(NextResponse);
-    expect(res?.status).toBe(401);
-    await expect(res?.json()).resolves.toEqual({ error: 'Unauthorized' });
-  });
-
-  it('returns 403 when the user lacks permission for the resource', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['products_write'] },
-    });
-
-    const res = await requireMutationAccess('assets');
-
-    expect(res?.status).toBe(403);
-    await expect(res?.json()).resolves.toEqual({ error: 'Forbidden' });
-  });
-
-  it('allows ops users through requireOpsAccess', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'developer', permissions: ['ops_view'] },
-    });
-
-    await expect(requireOpsAccess()).resolves.toBeNull();
-  });
-
-  it('keeps analytics and administration settings access independent from ops', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['analytics_manage'] },
-    });
-    await expect(requireAnalyticsAccess()).resolves.toBeNull();
-    expect((await requireOpsAccess())?.status).toBe(403);
-    expect((await requireSettingsAccess())?.status).toBe(403);
-
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['settings_manage'] },
-    });
-    await expect(requireSettingsAccess()).resolves.toBeNull();
-    expect((await requireAnalyticsAccess())?.status).toBe(403);
-  });
-
-  it('requires analytics_manage for stats mutations', () => {
-    expect(canMutateResource(['analytics_manage'], 'stats')).toBe(true);
-    expect(canMutateResource(['ops_view'], 'stats')).toBe(false);
-  });
-
-  it('allows settings managers through requireSettingsAccess', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'operations-manager', permissions: ['settings_manage'] },
-    });
-
-    await expect(requireSettingsAccess()).resolves.toBeNull();
-  });
-
-  it('makes the AI assistant available to every allowed user', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'viewer', permissions: [] },
-    });
-    await expect(requireAppAccess()).resolves.toBeNull();
-  });
-
-  it('rejects users without settings permission through requireSettingsAccess', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['ops_view'] },
-    });
-
-    const res = await requireSettingsAccess();
-
-    expect(res?.status).toBe(403);
-    await expect(res?.json()).resolves.toEqual({ error: 'Forbidden' });
-  });
-
-  it('returns null when the user is authorized', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'admin', permissions: ['assets_write'] },
-    });
-
-    await expect(requireMutationAccess('assets')).resolves.toBeNull();
-  });
-
-  it('blocks authenticated but disallowed users', async () => {
-    authMock.mockResolvedValue({ user: { isAllowed: false, role: 'viewer', permissions: [] } });
-
-    const res = await requireOpsAccess();
-
-    expect(res?.status).toBe(403);
-    await expect(res?.json()).resolves.toEqual({ error: 'Forbidden' });
+    expect((await requireAppAccess()).response?.status).toBe(401);
+    authMock.mockResolvedValue({ user: { isAllowed: false, permissions: [] } });
+    expect((await requireAppAccess()).response?.status).toBe(403);
   });
 });

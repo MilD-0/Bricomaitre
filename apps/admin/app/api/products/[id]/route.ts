@@ -7,7 +7,6 @@ import {
   ActionHistoryEntityNotFoundError,
   mutateEntityWithHistory,
 } from '../../../../lib/action-history';
-import { auth } from '../../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
@@ -43,7 +42,7 @@ function toProductPromoResponse(row: typeof productPromoCodes.$inferSelect) {
 }
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) {
     return denied;
   }
@@ -69,7 +68,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .from(productPromoCodes)
     .where(eq(productPromoCodes.productId, numericId));
 
-  const session = await auth();
   const permissions = normalizePermissions(session?.user?.permissions);
   const canReadCost =
     hasPermission(permissions, 'products_write') || hasPermission(permissions, 'orders_write');
@@ -85,7 +83,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId(req);
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }
@@ -106,7 +104,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {
@@ -143,7 +141,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId(req);
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }
@@ -164,7 +162,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {
@@ -216,7 +214,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId();
-  const denied = await requireMutationAccess('products');
+  const { response: denied, session } = await requireMutationAccess('products');
   if (denied) {
     return denied;
   }
@@ -231,7 +229,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
   }
   const db = getDb();
-  const session = await auth();
+
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   try {

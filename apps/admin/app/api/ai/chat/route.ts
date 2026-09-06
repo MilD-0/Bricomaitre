@@ -16,7 +16,6 @@ import {
   adminAiRuntimeInstructions,
   adminAiToolErrorCode,
 } from '../../../../lib/admin-ai-runtime';
-import { auth } from '../../../../lib/auth';
 import {
   adminAiChatStreamEventSchema,
   type AdminAiChatStreamEvent,
@@ -79,7 +78,7 @@ function hasSuccessfulMutation(toolResults: unknown[]) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAppAccess();
+  const { response: denied, session } = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -92,7 +91,6 @@ export async function POST(request: NextRequest) {
 
   let runId: number | null = null;
   try {
-    const session = await auth();
     const actorId = session?.user?.email;
     if (!actorId) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });

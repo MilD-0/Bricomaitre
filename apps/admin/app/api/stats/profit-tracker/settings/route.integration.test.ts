@@ -40,8 +40,14 @@ import { GET, PUT } from './route';
 describe('profit tracker settings route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireOpsMock.mockResolvedValue(null);
-    requireMutationMock.mockResolvedValue(null);
+    requireOpsMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
+    requireMutationMock.mockImplementation(async () => ({
+      response: null,
+      session: { user: { isAllowed: true, permissions: [] } },
+    }));
     getSettingsMock.mockResolvedValue({ fxRate: 280, defaultReturnRate: 10, restFrom: null });
     updateSettingsMock.mockImplementation(async (value) => ({ previous: {}, current: value }));
     refreshFactsMock.mockResolvedValue(true);
@@ -82,9 +88,10 @@ describe('profit tracker settings route', () => {
   });
 
   it('stops at authorization failures', async () => {
-    requireMutationMock.mockResolvedValue(
-      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    );
+    requireMutationMock.mockImplementation(async () => ({
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    }));
     const response = await PUT(
       new Request('http://localhost/api/stats/profit-tracker/settings', {
         method: 'PUT',
