@@ -16,7 +16,7 @@ import type {
   EcotrackShipmentSortDirection,
   EcotrackShipmentSortKey,
 } from '../../lib/ecotrack-admin-contracts';
-import { ORDER_STATUS, parseNumericAmount } from '../../lib/orders';
+import { parseNumericAmount } from '../../lib/orders';
 import { toast } from '../../lib/toast';
 import type { SplitActionOption } from '../split-action-button';
 import { buildEditableProducts } from './order-products-editor';
@@ -133,7 +133,15 @@ export function OrdersEcotrackManager({
         `/api/orders/ecotrack/shipments?page=${page}&limit=25&search=${encodeURIComponent(deferredSearch)}&status=${encodeURIComponent(deferredStatusFilter)}&staleOnly=${deferredStaleOnly ? 'true' : 'false'}&sortKey=${sortKey}&sortDirection=${sortDirection}`,
         { signal },
       ),
-    initialData: initialOrders,
+    initialData:
+      page === (initialOrders?.pagination.page ?? 1) &&
+      deferredSearch === '' &&
+      deferredStatusFilter === 'all' &&
+      !deferredStaleOnly &&
+      sortKey === 'createdAt' &&
+      sortDirection === 'desc'
+        ? initialOrders
+        : undefined,
     initialDataUpdatedAt: initialOrdersUpdatedAt,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -370,57 +378,14 @@ export function OrdersEcotrackManager({
       city: item.city ?? '',
       homeAddress: item.homeAddress ?? '',
       note: item.note ?? '',
-      cartProducts: item.orderProducts.flatMap((product) =>
-        Array.from(
-          { length: product.quantity },
-          () => product.rawValue ?? String(product.productId ?? product.title),
-        ),
-      ),
       editableProducts: buildEditableProducts({
-        id: item.orderId,
-        fullName: item.fullName,
-        firstName: item.firstName,
-        lastName: item.lastName,
-        phoneNumber1: item.phoneNumber1,
-        phoneNumber2: item.phoneNumber2,
         cartProducts: item.orderProducts.flatMap((product) =>
-          Array.from(
-            { length: product.quantity },
-            () => product.rawValue ?? String(product.productId ?? product.title),
-          ),
+          Array.from({ length: product.quantity }, () => product.rawValue),
         ),
-        orderProducts: item.orderProducts.map((product) => ({
-          rawValue: product.rawValue ?? String(product.productId ?? product.title),
-          productId: product.productId ?? null,
-          title: product.title,
-          unitPrice: product.unitPrice ?? product.lineTotal / Math.max(product.quantity, 1),
-          quantity: product.quantity,
-          lineTotal: product.lineTotal,
-          thumbnailUrl: product.thumbnailUrl ?? null,
-          missing: false,
-        })),
-        delivery: item.delivery,
-        state: item.state,
-        city: item.city,
-        homeAddress: item.homeAddress,
-        subtotalOverride: item.subtotalOverride,
-        productSubtotal: item.productSubtotal,
-        deliveryFee: item.deliveryFee,
-        totalAmount: item.totalAmount,
-        note: item.note,
-        inHouseStatus: ORDER_STATUS.DISPATCHED,
-        noAnswerCount: 0,
-        confirmedBy: null,
-        confirmedByName: null,
-        confirmedAt: null,
-        hasStatusHistory: false,
-        statusHistory: [],
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
+        orderProducts: item.orderProducts,
       }),
       search: '',
       subtotalInput: formatAmountInput(item.productSubtotal),
-      subtotalOverride: item.subtotalOverride,
       hasManualSubtotalOverride: item.subtotalOverride !== null,
       deliveryFeeInput: formatAmountInput(item.deliveryFee),
     });

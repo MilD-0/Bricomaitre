@@ -192,6 +192,31 @@ describe('OrdersEcotrackManager', () => {
     surfaceDetailsMock.mockReset();
   });
 
+  it('fetches a changed filter immediately instead of seeding it with the initial unfiltered page', async () => {
+    const filtered = buildInitialOrders(2);
+    filtered.items = [filtered.items[1]!];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      return Response.json(url.includes('/recovery') ? { items: [] } : filtered);
+    });
+    renderOrdersEcotrackManager({ initialOrders: buildInitialOrders() });
+    expect(screen.getAllByText(/Ada Lovelace/).length).toBeGreaterThan(0);
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'ordersEcotrackManager.filters.statusLabel' }),
+      {
+        target: { value: 'payed' },
+      },
+    );
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('status=payed'),
+        expect.any(Object),
+      ),
+    );
+    await waitFor(() => expect(screen.queryByText(/Ada Lovelace/)).not.toBeInTheDocument());
+    expect(screen.getAllByText(/Grace Hopper/).length).toBeGreaterThan(0);
+  });
+
   it('publishes the live shipment filters and selection to the admin assistant', () => {
     renderOrdersEcotrackManager({
       initialOrders: buildInitialOrders(2),

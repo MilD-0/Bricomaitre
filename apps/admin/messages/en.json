@@ -301,7 +301,9 @@
       "fulfillment": "Fulfillment",
       "orderContents": "Order contents",
       "selectOrder": "Select an order to inspect and edit",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "changedElsewhere": "This order changed elsewhere. Your unsaved edits are preserved.",
+      "loadLatest": "Discard edits and load latest"
     }
   },
   "roles": {

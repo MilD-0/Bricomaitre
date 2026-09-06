@@ -40,7 +40,7 @@ export type EditableOrderProduct = {
   missing: boolean;
 };
 
-function findProductSummary(order: OrderRecord, rawValue: string) {
+function findProductSummary(order: Pick<OrderRecord, 'orderProducts'>, rawValue: string) {
   const trimmed = rawValue.trim();
   const numericId = /^\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : null;
 
@@ -52,7 +52,9 @@ function findProductSummary(order: OrderRecord, rawValue: string) {
   );
 }
 
-export function buildEditableProducts(order: OrderRecord): EditableOrderProduct[] {
+export function buildEditableProducts(
+  order: Pick<OrderRecord, 'cartProducts' | 'orderProducts'>,
+): EditableOrderProduct[] {
   return order.cartProducts.map((rawValue) => {
     const product = findProductSummary(order, rawValue);
 

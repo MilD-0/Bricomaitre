@@ -130,6 +130,7 @@ function renderWorkspace(
     initialOverview?: DailyOrderStatusOverview | null;
     completedOrderCount?: number;
     overviewResponse?: Promise<Response>;
+    queryClient?: QueryClient;
   } = {},
 ) {
   server.use(
@@ -146,9 +147,11 @@ function renderWorkspace(
       HttpResponse.json({ completedOrderCount: options.completedOrderCount ?? 0 }),
     ),
   );
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient =
+    options.queryClient ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
   return render(
     <QueryClientProvider client={queryClient}>
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -552,7 +555,11 @@ describe('OrdersWorkspace', () => {
   it('shows note evidence and links directly to public tracking from each order row', () => {
     renderWorkspace();
 
-    expect(screen.getByText('Call before delivery.')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Order queue' })).getByText(
+        'Call before delivery.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open tracking for Customer One' })).toHaveAttribute(
       'href',
       'https://bricomaitre.com/fr/thank-you?token=token-1',
@@ -720,6 +727,73 @@ describe('OrdersWorkspace', () => {
         note: 'Door.',
       }),
     );
+  });
+
+  it('preserves a dirty order during background refresh and saves only the edited fields against its original baseline', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderWorkspace({ queryClient: client });
+    const name = await screen.findByLabelText('Customer name');
+    fireEvent.change(name, { target: { value: 'My draft' } });
+    const remote = {
+      ...orders[0]!,
+      note: 'Changed by another operator',
+      updatedAt: '2026-08-18T12:00:00Z',
+    };
+    let resolveDetail!: (response: Response) => void;
+    server.use(
+      http.get(
+        '/api/orders/1',
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveDetail = resolve;
+          }),
+      ),
+    );
+    const refresh = client.invalidateQueries({ queryKey: ['orders-workspace-detail', 1] });
+    await waitFor(() => expect(resolveDetail).toBeTypeOf('function'));
+    expect(name).toHaveValue('My draft');
+    resolveDetail(HttpResponse.json({ ok: true, item: remote }));
+    await refresh;
+    expect(
+      await screen.findByText(messages.adminWorkspace.orders.changedElsewhere),
+    ).toBeInTheDocument();
+    expect(name).toHaveValue('My draft');
+    const saved = {
+      ...remote,
+      firstName: 'My',
+      lastName: 'draft',
+      fullName: 'My draft',
+      updatedAt: '2026-08-18T13:00:00Z',
+    };
+    let body: unknown;
+    server.use(
+      http.patch('/api/orders/1', async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ ok: true, item: saved });
+      }),
+      http.get('/api/orders', () =>
+        HttpResponse.json({ ...initialOrders, items: [saved, orders[1]!] }),
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(body).toEqual({ firstName: 'My', lastName: 'draft' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled(),
+    );
+    expect(screen.getByLabelText('Notes')).toHaveValue(remote.note);
+    expect(
+      screen.queryByText(messages.adminWorkspace.orders.changedElsewhere),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Customer name'), { target: { value: 'Discard this' } });
+    client.setQueryData(['orders-workspace-detail', 1], {
+      ok: true,
+      item: { ...saved, fullName: 'Newest name', updatedAt: '2026-08-18T14:00:00Z' },
+    });
+    fireEvent.click(
+      await screen.findByRole('button', { name: messages.adminWorkspace.orders.loadLatest }),
+    );
+    expect(screen.getByLabelText('Customer name')).toHaveValue('Newest name');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   });
 
   it('locks the complete editor while saving and preserves the draft after a failed response', async () => {

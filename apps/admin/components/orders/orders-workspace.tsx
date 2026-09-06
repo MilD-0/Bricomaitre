@@ -36,7 +36,7 @@ import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { Spinner } from '../ui/spinner';
 import { WorkspacePagination } from '../ui/workspace-pagination';
 import {
@@ -229,9 +229,11 @@ export function OrdersWorkspace({
   });
   const saveOrder = async (order: OrderRecord, patch: OrderPatch) => {
     try {
-      await patchMutation.mutateAsync({ id: order.id, patch });
+      const response = await patchMutation.mutateAsync({ id: order.id, patch });
+      return response.item;
     } catch {
       // The mutation reports the failure; keep the editor draft available for retry.
+      return null;
     }
   };
   const bulkStatusMutation = useMutation({
@@ -414,13 +416,11 @@ export function OrdersWorkspace({
               );
             }}
           >
-            <NativeSelectOption value="all">
-              {t('ordersManager.filters.allStatuses')}
-            </NativeSelectOption>
+            <option value="all">{t('ordersManager.filters.allStatuses')}</option>
             {orderStatusOptions.map((status) => (
-              <NativeSelectOption key={status} value={status}>
+              <option key={status} value={status}>
                 {t(`ordersManager.status.${getOrderStatusLabelKey(status)}`)}
-              </NativeSelectOption>
+              </option>
             ))}
           </NativeSelect>
           <Button
@@ -555,9 +555,9 @@ export function OrdersWorkspace({
                   {orderStatusOptions
                     .filter((status) => status !== ORDER_STATUS.POSTED)
                     .map((status) => (
-                      <NativeSelectOption key={status} value={status}>
+                      <option key={status} value={status}>
                         {t(`ordersManager.status.${getOrderStatusLabelKey(status)}`)}
-                      </NativeSelectOption>
+                      </option>
                     ))}
                 </NativeSelect>
                 <Button

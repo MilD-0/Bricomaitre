@@ -35,7 +35,7 @@ import { buildStorefrontProductHref } from '../products/storefront-links';
 import { Button } from '../ui/button';
 import { FormSection } from '../ui/form-section';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { Spinner } from '../ui/spinner';
 import { Textarea } from '../ui/textarea';
 import {
@@ -105,7 +105,8 @@ function buildOrderChanges(
     changes.firstName = name.firstName;
     changes.lastName = name.lastName;
   }
-  if (phoneNumber1 !== order.phoneNumber1) changes.phoneNumber1 = phoneNumber1;
+  if (phoneNumber1 !== normalizeOrderPhoneForStorage(order.phoneNumber1))
+    changes.phoneNumber1 = phoneNumber1;
   if (draft.inHouseStatus !== order.inHouseStatus) {
     changes.inHouseStatus = draft.inHouseStatus;
   }
@@ -157,11 +158,12 @@ function OrderEditorBody({
   catalog?: EcotrackCatalogResponse;
   writable: boolean;
   pending: boolean;
-  onSave: (order: OrderRecord, patch: OrderPatch) => Promise<void>;
+  onSave: (order: OrderRecord, patch: OrderPatch) => Promise<OrderRecord | null>;
 }) {
   const locale = useLocale();
   const storefrontBaseUrl = useStorefrontBaseUrl();
   const t = useTranslations();
+  const [baseline, setBaseline] = useState(order);
   const [draft, setDraft] = useState(() => buildDraft(order, catalog));
   const [productSearch, setProductSearch] = useState('');
   const deferredProductSearch = useDeferredValue(productSearch.trim());
@@ -195,10 +197,26 @@ function OrderEditorBody({
     ? (catalog?.communes.filter((entry) => entry.wilayaId === wilayaId) ?? [])
     : [];
   const dirty = useMemo(
-    () => Object.keys(buildOrderChanges(order, draft, catalog)).length > 0,
-    [catalog, draft, order],
+    () => Object.keys(buildOrderChanges(baseline, draft, catalog)).length > 0,
+    [catalog, draft, baseline],
   );
-  const valid = normalizeOrderPhoneForStorage(draft.phoneNumber1).length > 0;
+  const valid = orderPatchSchema.safeParse(buildOrderChanges(baseline, draft, catalog)).success;
+  const changedElsewhere = baseline.updatedAt !== order.updatedAt;
+  if (baseline !== order && !dirty && !pending) {
+    setBaseline(order);
+    setDraft(buildDraft(order, catalog));
+  }
+  const loadLatest = () => {
+    setBaseline(order);
+    setDraft(buildDraft(order, catalog));
+  };
+  const save = async () => {
+    const saved = await onSave(baseline, buildPatch(baseline, draft, catalog));
+    if (saved) {
+      setBaseline(saved);
+      setDraft(buildDraft(saved, catalog));
+    }
+  };
 
   const change = <K extends keyof OrderEditorDraft>(key: K, value: OrderEditorDraft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -240,10 +258,24 @@ function OrderEditorBody({
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (dirty && valid && writable && !pending)
-          void onSave(order, buildPatch(order, draft, catalog));
+        if (dirty && valid && writable && !pending) void save();
       }}
     >
+      {changedElsewhere && dirty ? (
+        <div role="status" className="border-b border-border px-4 py-3 text-sm sm:px-5">
+          <p>{t('adminWorkspace.orders.changedElsewhere')}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            disabled={pending}
+            onClick={loadLatest}
+          >
+            {t('adminWorkspace.orders.loadLatest')}
+          </Button>
+        </div>
+      ) : null}
       <fieldset disabled={pending} aria-busy={pending} className="contents">
         <FormSection title={t('adminWorkspace.orders.customerDetails')}>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -308,13 +340,9 @@ function OrderEditorBody({
                 }}
               >
                 {orderStatusOptions.map((status) => (
-                  <NativeSelectOption
-                    key={status}
-                    value={status}
-                    disabled={status === ORDER_STATUS.POSTED}
-                  >
+                  <option key={status} value={status} disabled={status === ORDER_STATUS.POSTED}>
                     {t(`ordersManager.status.${getOrderStatusLabelKey(status)}`)}
-                  </NativeSelectOption>
+                  </option>
                 ))}
               </NativeSelect>
             </label>
@@ -383,12 +411,8 @@ function OrderEditorBody({
                 disabled={!writable}
                 onChange={(event) => change('delivery', Number(event.target.value) as 0 | 1)}
               >
-                <NativeSelectOption value="0">
-                  {t('ordersManager.delivery.home')}
-                </NativeSelectOption>
-                <NativeSelectOption value="1">
-                  {t('ordersManager.delivery.office')}
-                </NativeSelectOption>
+                <option value="0">{t('ordersManager.delivery.home')}</option>
+                <option value="1">{t('ordersManager.delivery.office')}</option>
               </NativeSelect>
             </label>
             <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
@@ -405,13 +429,11 @@ function OrderEditorBody({
                   }));
                 }}
               >
-                <NativeSelectOption value="">
-                  {t('ordersManager.placeholders.region')}
-                </NativeSelectOption>
+                <option value="">{t('ordersManager.placeholders.region')}</option>
                 {catalog?.wilayas.map((wilaya) => (
-                  <NativeSelectOption key={wilaya.wilayaId} value={wilaya.wilayaId}>
+                  <option key={wilaya.wilayaId} value={wilaya.wilayaId}>
                     {wilaya.name}
-                  </NativeSelectOption>
+                  </option>
                 ))}
               </NativeSelect>
             </label>
@@ -422,19 +444,15 @@ function OrderEditorBody({
                 disabled={!writable || !draft.state}
                 onChange={(event) => change('city', event.target.value)}
               >
-                <NativeSelectOption value="">
-                  {t('ordersManager.placeholders.city')}
-                </NativeSelectOption>
+                <option value="">{t('ordersManager.placeholders.city')}</option>
                 {communeOptions.map((commune) => (
-                  <NativeSelectOption key={commune.communeId} value={commune.communeId}>
+                  <option key={commune.communeId} value={commune.communeId}>
                     {commune.name}
-                  </NativeSelectOption>
+                  </option>
                 ))}
                 {draft.city &&
                 !communeOptions.some((commune) => String(commune.communeId) === draft.city) ? (
-                  <NativeSelectOption value={draft.city}>
-                    {order.city ?? draft.city}
-                  </NativeSelectOption>
+                  <option value={draft.city}>{order.city ?? draft.city}</option>
                 ) : null}
               </NativeSelect>
             </label>
@@ -636,12 +654,7 @@ function OrderEditorBody({
           <p className="me-auto text-xs text-muted-foreground">
             {dirty ? t('adminWorkspace.common.unsaved') : t('adminWorkspace.common.upToDate')}
           </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!dirty || pending}
-            onClick={() => setDraft(buildDraft(order, catalog))}
-          >
+          <Button type="button" variant="outline" disabled={!dirty || pending} onClick={loadLatest}>
             {t('actions.cancel')}
           </Button>
           <Button type="submit" disabled={!writable || !dirty || !valid || pending}>
@@ -665,7 +678,7 @@ export function OrderEditor({
   catalog?: EcotrackCatalogResponse;
   writable: boolean;
   pending: boolean;
-  onSave: (order: OrderRecord, patch: OrderPatch) => Promise<void>;
+  onSave: (order: OrderRecord, patch: OrderPatch) => Promise<OrderRecord | null>;
 }) {
   const locale = useLocale();
   const t = useTranslations();
@@ -683,17 +696,6 @@ export function OrderEditor({
     return (
       <div className="grid min-h-80 place-items-center px-6 text-center text-sm text-muted-foreground">
         {t('adminWorkspace.orders.selectOrder')}
-      </div>
-    );
-  }
-
-  if (detailQuery.isFetching) {
-    return (
-      <div className="grid min-h-[32rem] place-items-center px-6 text-sm text-muted-foreground">
-        <span className="flex items-center gap-2">
-          <Spinner className="size-4" />
-          {t('labels.loading')}
-        </span>
       </div>
     );
   }
@@ -723,7 +725,7 @@ export function OrderEditor({
         </div>
       </header>
       <OrderEditorBody
-        key={`${detail.id}:${detail.updatedAt}`}
+        key={detail.id}
         order={detail}
         catalog={catalog}
         writable={writable}

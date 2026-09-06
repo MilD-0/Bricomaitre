@@ -17,7 +17,7 @@ import {
 } from '../ui/dialog';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '../ui/field';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
 import {
@@ -44,11 +44,9 @@ export type EditDialogState = {
   city: string;
   homeAddress: string;
   note: string;
-  cartProducts: string[];
   editableProducts: EditableOrderProduct[];
   search: string;
   subtotalInput: string;
-  subtotalOverride: number | null;
   hasManualSubtotalOverride: boolean;
   deliveryFeeInput: string;
 };
@@ -88,9 +86,7 @@ function updateProducts(current: EditDialogState, editableProducts: EditableOrde
   return {
     ...current,
     editableProducts,
-    cartProducts: editableProducts.map((item) => item.rawValue),
     subtotalInput: formatAmountInput(subtotal),
-    subtotalOverride: null,
     hasManualSubtotalOverride: false,
   };
 }
@@ -221,12 +217,8 @@ export function EcotrackEditDialog({
                   )
                 }
               >
-                <NativeSelectOption value="0">
-                  {t('ordersManager.delivery.home')}
-                </NativeSelectOption>
-                <NativeSelectOption value="1">
-                  {t('ordersManager.delivery.office')}
-                </NativeSelectOption>
+                <option value="0">{t('ordersManager.delivery.home')}</option>
+                <option value="1">{t('ordersManager.delivery.office')}</option>
               </NativeSelect>
             </Field>
             <Field>
@@ -243,13 +235,11 @@ export function EcotrackEditDialog({
                   }))
                 }
               >
-                <NativeSelectOption value="">
-                  {t('ordersEcotrackManager.fields.statePlaceholder')}
-                </NativeSelectOption>
+                <option value="">{t('ordersEcotrackManager.fields.statePlaceholder')}</option>
                 {(catalog?.wilayas ?? []).map((wilaya) => (
-                  <NativeSelectOption key={wilaya.wilayaId} value={String(wilaya.wilayaId)}>
+                  <option key={wilaya.wilayaId} value={String(wilaya.wilayaId)}>
                     {wilaya.name}
-                  </NativeSelectOption>
+                  </option>
                 ))}
               </NativeSelect>
             </Field>
@@ -267,13 +257,11 @@ export function EcotrackEditDialog({
                     onChange((current) => ({ ...current, city: event.target.value }))
                   }
                 >
-                  <NativeSelectOption value="">
-                    {t('ordersEcotrackManager.fields.cityPlaceholder')}
-                  </NativeSelectOption>
+                  <option value="">{t('ordersEcotrackManager.fields.cityPlaceholder')}</option>
                   {communeOptions.map((commune) => (
-                    <NativeSelectOption key={commune.communeId} value={commune.name}>
+                    <option key={commune.communeId} value={commune.name}>
                       {commune.name}
-                    </NativeSelectOption>
+                    </option>
                   ))}
                 </NativeSelect>
               ) : (
@@ -376,7 +364,6 @@ export function EcotrackEditDialog({
                       onChange((current) => ({
                         ...current,
                         subtotalInput: event.target.value,
-                        subtotalOverride: parseNumericAmount(event.target.value),
                         hasManualSubtotalOverride: true,
                       }))
                     }

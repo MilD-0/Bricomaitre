@@ -301,7 +301,9 @@
       "fulfillment": "Livraison",
       "orderContents": "Contenu de la commande",
       "selectOrder": "Sélectionnez une commande à consulter et modifier",
-      "saveChanges": "Enregistrer"
+      "saveChanges": "Enregistrer",
+      "changedElsewhere": "Cette commande a été modifiée ailleurs. Vos modifications non enregistrées sont conservées.",
+      "loadLatest": "Abandonner les modifications et charger la dernière version"
     }
   },
   "roles": {
