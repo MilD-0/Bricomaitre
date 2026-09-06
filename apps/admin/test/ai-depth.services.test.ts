@@ -34,6 +34,8 @@ import {
   loadEconomicsPair,
   loadMaterializedEconomicsReport,
 } from '../lib/analytics/economics-data';
+import { loadAssumptionsView } from '../lib/analytics/assumptions-search-views';
+import { loadFulfillmentView } from '../lib/analytics/acquisition-fulfillment-views';
 import { resolveAnalyticsFilters, clipAnalyticsFilters } from '../lib/analytics/date-range';
 import { ANALYTICS_FACT_SEMANTICS_VERSION } from '../lib/analytics-fact-contract';
 import { getAiStatsData } from '../lib/ai-stats';
@@ -98,6 +100,24 @@ describe('durable AI evidence', () => {
     expect(report.current.days).toEqual([]);
     expect(report.current.summary).toMatchObject({ postedOrders: 0, grossProfitDzd: 0 });
     expect(report.previous).toBeNull();
+    const cutoffs = {
+      orders: '2091-02-01',
+      ordersFrom: '2091-02-01',
+      posted: '2091-02-01',
+      postedFrom: '2091-02-01',
+      ecotrack: '2091-02-01',
+      ecotrackFrom: '2091-02-01',
+      paidFrom: '2091-02-01',
+      meta: '2091-02-01',
+      metaFrom: '2091-02-01',
+      storefront: null,
+      storefrontFrom: null,
+    };
+    const assumptions = await loadAssumptionsView(db, requested, cutoffs);
+    expect(assumptions.data.days).toEqual([]);
+    const fulfillment = await loadFulfillmentView(db, requested, cutoffs);
+    expect(fulfillment.data.summary.postedOrders).toBe(0);
+
     await expect(
       getProfitTrackerReport(
         { range: 'custom', startDate: clipped.startDate!, endDate: clipped.endDate },

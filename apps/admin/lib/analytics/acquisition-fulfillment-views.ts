@@ -1,4 +1,4 @@
-import { getProfitTrackerReport } from '../profit-tracker';
+import { loadProfitTrackerReportForRange } from '../profit-tracker';
 import { loadAcquisitionDiagnostics } from './acquisition-diagnostics';
 import { loadMetaBreakdowns, loadMetaPerformance, publicMetaEntity } from './acquisition-data';
 import { cohortCompletionCovers, loadCohortCompletionPair } from './cohort-completion';
@@ -31,7 +31,6 @@ import {
 } from './fulfillment-data';
 import {
   type Database,
-  economicsInput,
   effectiveRange,
   metric,
   metricWithProjectedComparison,
@@ -197,10 +196,7 @@ export async function loadFulfillmentView(
   );
   const economics =
     (await loadMaterializedEconomicsReport(db, operationalFilters)) ??
-    (await getProfitTrackerReport(
-      economicsInput(operationalFilters.startDate, operationalFilters.endDate),
-      { db },
-    ));
+    (await loadProfitTrackerReportForRange(db, operationalFilters));
   const [fulfillment, previousSummary, completion, sources] = await Promise.all([
     loadFulfillmentData(db, operationalFilters, economics),
     prior ? loadFulfillmentSummary(db, prior.startDate, prior.endDate) : Promise.resolve(null),

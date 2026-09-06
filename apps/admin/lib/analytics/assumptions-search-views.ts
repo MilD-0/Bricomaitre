@@ -1,17 +1,11 @@
-import { getProfitTrackerReport } from '../profit-tracker';
+import { loadProfitTrackerReportForRange } from '../profit-tracker';
 import { loadSearchAnalytics, loadSearchThroughDate } from '../analytics-search';
 import type { AnalyticsFilters, AnalyticsSource } from './contract';
 import { commonCutoff, type AnalyticsCanonicalCutoffs } from './data-boundaries';
 import { addDays, clipAnalyticsFilters, inclusiveDays } from './date-range';
 import { economicsWarnings, sourceWarnings } from './economics-data';
 import { loadReturnObservation } from './fulfillment-data';
-import {
-  type Database,
-  type EconomicsReport,
-  economicsInput,
-  effectiveRange,
-  metric,
-} from './loaders-shared';
+import { type Database, type EconomicsReport, effectiveRange, metric } from './loaders-shared';
 import { loadSourceHealth } from './source-health';
 
 function costIsActiveOn(cost: EconomicsReport['costs'][number], date: string) {
@@ -28,10 +22,7 @@ export async function loadAssumptionsView(
     commonCutoff(cutoffs.posted, cutoffs.meta),
     cutoffs.metaFrom,
   );
-  const economics = await getProfitTrackerReport(
-    economicsInput(economicsFilters.startDate, economicsFilters.endDate),
-    { db },
-  );
+  const economics = await loadProfitTrackerReportForRange(db, economicsFilters);
   const [returns, sources] = await Promise.all([
     loadReturnObservation(db, economicsFilters, economics.settings.defaultReturnRate),
     loadSourceHealth(db, filters, economics, cutoffs.orders ?? undefined),

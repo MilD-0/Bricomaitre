@@ -1,7 +1,7 @@
 import { sql, type SQLWrapper } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
-import { getProfitTrackerReport, type ProfitTrackerRangeInput } from '../profit-tracker';
+import { getProfitTrackerReport } from '../profit-tracker';
 import {
   ANALYTICS_PAID_SHIPMENT_STATUSES,
   ANALYTICS_RESOLVED_SHIPMENT_STATUSES,
@@ -111,10 +111,6 @@ export type AnalyticsMetaEntity = {
 };
 
 export function statsInput(startDate: string | null, endDate: string): StatsFilters {
-  return startDate ? { range: 'custom', startDate, endDate } : { range: 'all', endDate };
-}
-
-export function economicsInput(startDate: string | null, endDate: string): ProfitTrackerRangeInput {
   return startDate ? { range: 'custom', startDate, endDate } : { range: 'all', endDate };
 }
 
