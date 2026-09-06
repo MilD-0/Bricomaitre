@@ -198,7 +198,7 @@ export function ThankYouConfirmation({
     (orderId != null && confirmation.order.id !== orderId)
   ) {
     return (
-      <main className="thank-you-page thank-you-state">
+      <div className="thank-you-page thank-you-state">
         <RotateCcw aria-hidden="true" />
         <h1>{labels.unavailableTitle}</h1>
         <p>{labels.unavailableBody}</p>
@@ -210,13 +210,13 @@ export function ThankYouConfirmation({
             {labels.browseProducts}
           </a>
         </div>
-      </main>
+      </div>
     );
   }
 
   const { order } = confirmation;
   return (
-    <main className="thank-you-page">
+    <div className="thank-you-page">
       <header className="thank-you-hero">
         <span>
           <Check aria-hidden="true" />
@@ -346,6 +346,6 @@ export function ThankYouConfirmation({
       <a className="button button-primary thank-you-continue" href={`/${locale}/products`}>
         {labels.browseProducts}
       </a>
-    </main>
+    </div>
   );
 }

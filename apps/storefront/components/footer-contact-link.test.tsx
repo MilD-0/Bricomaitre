@@ -14,4 +14,13 @@ describe('FooterContactLink', () => {
     );
     expect(screen.getByRole('link', { name: 'Facebook' })).toHaveAttribute('rel', 'noreferrer');
   });
+  it('renders an address without a destination as text', () => {
+    render(
+      <FooterContactLink icon="location" href={null}>
+        Alger
+      </FooterContactLink>,
+    );
+    expect(screen.getByText('Alger')).toBeVisible();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
 });

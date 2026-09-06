@@ -51,11 +51,8 @@ import {
 } from '@/lib/checkout';
 import type { CheckoutLabels } from '@/lib/checkout-labels';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
-import {
-  LANDING_ORDER_QUANTITY_EVENT,
-  LANDING_ORDER_SECTION_ID,
-  type LandingOrderQuantityDetail,
-} from '@/lib/landing-order';
+import { LANDING_ORDER_SECTION_ID } from '@/lib/landing-order';
+import { useLandingOrder } from '@/components/landing-order-context';
 import { getMarketingOrderContext } from '@/lib/marketing-attribution';
 import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
@@ -86,7 +83,7 @@ export function CheckoutForm({
   support?: { contact: StorefrontSupportContact; labels: SupportContactLabels };
 }) {
   const router = useRouter();
-  const [items, setItems] = useState<CartItem[]>(directItem ? [directItem] : []);
+  const [storedItems, setItems] = useState<CartItem[]>(directItem ? [directItem] : []);
   const [hydrated, setHydrated] = useState(false);
   const [phoneNumber1, setPhoneNumber1] = useState('');
   const [lastName, setLastName] = useState('');
@@ -104,6 +101,33 @@ export function CheckoutForm({
   const [validating, setValidating] = useState(false);
   const [retryAt, setRetryAt] = useState(0);
   const busy = validating || submitting;
+  const landing = useLandingOrder();
+  const landingQuantity =
+    embedded && landing && landing.productId === directItem?.productId ? landing.quantity : null;
+  const items = useMemo(
+    () =>
+      pending?.items ??
+      (landingQuantity !== null
+        ? storedItems.map((item) =>
+            item.productId === directItem?.productId
+              ? { ...item, quantity: landingQuantity }
+              : item,
+          )
+        : storedItems),
+    [storedItems, landingQuantity, directItem?.productId, pending],
+  );
+  const setLandingLocked = landing?.setLocked;
+  const setLandingQuantity = landing?.setQuantity;
+  const pendingLandingQuantity = pending?.items?.find(
+    (item) => item.productId === landing?.productId,
+  )?.quantity;
+  useEffect(() => {
+    if (pendingLandingQuantity !== undefined) setLandingQuantity?.(pendingLandingQuantity);
+  }, [pendingLandingQuantity, setLandingQuantity]);
+  useEffect(() => {
+    setLandingLocked?.(busy || Boolean(pending));
+    return () => setLandingLocked?.(false);
+  }, [busy, pending, setLandingLocked]);
   const retryBlocked = retryAt > 0;
   const submissionLock = useRef(false);
   const validationLock = useRef(false);
@@ -236,20 +260,6 @@ export function CheckoutForm({
       window.removeEventListener('storage', updateCart);
     };
   }, [cartMode, pending, busy]);
-
-  useEffect(() => {
-    if (!embedded || !directItem) return;
-    const updateQuantity = (event: Event) => {
-      const detail = (event as CustomEvent<LandingOrderQuantityDetail>).detail;
-      if (!detail || detail.productId !== directItem.productId || pending || busy) return;
-      const quantity = Math.max(1, Math.min(20, detail.quantity));
-      setItems((current) =>
-        current.map((item) => (item.productId === detail.productId ? { ...item, quantity } : item)),
-      );
-    };
-    window.addEventListener(LANDING_ORDER_QUANTITY_EVENT, updateQuantity);
-    return () => window.removeEventListener(LANDING_ORDER_QUANTITY_EVENT, updateQuantity);
-  }, [directItem, embedded, pending, busy]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -517,14 +527,14 @@ export function CheckoutForm({
 
   if (hydrated && items.length === 0 && !pending) {
     return (
-      <main className="checkout-page checkout-empty">
+      <div className="checkout-page checkout-empty">
         <PackageCheck aria-hidden="true" />
         <h1>{labels.emptyTitle}</h1>
         <p>{labels.emptyBody}</p>
         <a className="button button-primary" href={`/${locale}/products`}>
           {labels.browseProducts}
         </a>
-      </main>
+      </div>
     );
   }
 

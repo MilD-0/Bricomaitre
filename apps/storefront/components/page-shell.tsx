@@ -80,6 +80,8 @@ export async function PageShell({
                   searching: t('searching'),
                   results: t('searchResults'),
                   noResults: t('noSearchResults'),
+                  error: t('searchError'),
+                  retry: t('retry'),
                   viewAll: t('viewAllProducts'),
                   inStock: t('inStock'),
                   outOfStock: t('outOfStock'),
@@ -101,6 +103,8 @@ export async function PageShell({
                 offers: t('offers'),
                 categories: t('categories'),
                 brands: t('brands'),
+                loadError: t('navigationError'),
+                retry: t('retry'),
                 cartDrawer: {
                   title: t('cartTitle'),
                   close: t('cartClose'),
@@ -131,7 +135,12 @@ export async function PageShell({
             </a>
             <NavigationCategories
               locale={locale}
-              labels={{ categories: t('categories'), brands: t('brands') }}
+              labels={{
+                categories: t('categories'),
+                brands: t('brands'),
+                loadError: t('navigationError'),
+                retry: t('retry'),
+              }}
             />
           </nav>
         </div>
@@ -180,7 +189,7 @@ export async function PageShell({
                 <li>
                   <FooterContactLink
                     icon="location"
-                    href={contactSettings.mapUrl ?? '#'}
+                    href={contactSettings.mapUrl}
                     external={Boolean(contactSettings.mapUrl)}
                   >
                     {contactSettings.address}

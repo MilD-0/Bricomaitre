@@ -37,7 +37,10 @@
     "footerContactTitle": "تواصل معنا",
     "drawerSupportTitle": "هل تحتاج إلى مساعدة؟",
     "supportCall": "اتصل بنا",
-    "headerContact": "تحتاج مساعدة؟ اتصل بنا"
+    "headerContact": "تحتاج مساعدة؟ اتصل بنا",
+    "navigationError": "تعذر تحميل الفئات والعلامات التجارية.",
+    "searchError": "البحث غير متاح مؤقتاً.",
+    "retry": "إعادة المحاولة"
   },
   "ShoppingAssistant": {
     "open": "اعثر على الأداة المناسبة",

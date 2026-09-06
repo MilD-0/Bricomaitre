@@ -21,7 +21,15 @@ describe('NavigationCategories', () => {
         }),
     );
     render(
-      <NavigationCategories locale="fr" labels={{ categories: 'Catégories', brands: 'Marques' }} />,
+      <NavigationCategories
+        locale="fr"
+        labels={{
+          categories: 'Catégories',
+          brands: 'Marques',
+          loadError: 'Navigation indisponible',
+          retry: 'Réessayer',
+        }}
+      />,
     );
 
     expect(document.querySelector('.navigation-categories-skeleton')).toBeInTheDocument();
@@ -50,7 +58,15 @@ describe('NavigationCategories', () => {
       brands: [{ id: 9, name: 'Wadfow', slug: 'wadfow' }],
     });
     render(
-      <NavigationCategories locale="fr" labels={{ categories: 'Catégories', brands: 'Marques' }} />,
+      <NavigationCategories
+        locale="fr"
+        labels={{
+          categories: 'Catégories',
+          brands: 'Marques',
+          loadError: 'Navigation indisponible',
+          retry: 'Réessayer',
+        }}
+      />,
     );
 
     const categories = await screen.findByRole('button', { name: 'Catégories' });
@@ -67,5 +83,29 @@ describe('NavigationCategories', () => {
     fireEvent.pointerDown(document.body);
     expect(brands).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('link', { name: 'Wadfow' })).not.toBeInTheDocument();
+  });
+  it('explains a metadata failure and retries without navigation', async () => {
+    fetchMeta.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({
+      categories: [],
+      brands: [{ id: 9, name: 'Wadfow', slug: 'wadfow' }],
+    });
+    render(
+      <NavigationCategories
+        locale="fr"
+        labels={{
+          categories: 'Catégories',
+          brands: 'Marques',
+          loadError: 'Navigation indisponible',
+          retry: 'Réessayer',
+        }}
+      />,
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Navigation indisponible');
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Marques' }));
+    expect(screen.getByRole('link', { name: 'Wadfow' })).toHaveAttribute(
+      'href',
+      '/fr/brands/wadfow',
+    );
   });
 });

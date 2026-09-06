@@ -37,7 +37,10 @@
     "footerContactTitle": "Nous contacter",
     "drawerSupportTitle": "Besoin d’aide ?",
     "supportCall": "Appeler",
-    "headerContact": "Besoin d’aide ? Appelez-nous"
+    "headerContact": "Besoin d’aide ? Appelez-nous",
+    "navigationError": "Impossible de charger les catégories et les marques.",
+    "searchError": "La recherche est momentanément indisponible.",
+    "retry": "Réessayer"
   },
   "ShoppingAssistant": {
     "open": "Trouver le bon outil",

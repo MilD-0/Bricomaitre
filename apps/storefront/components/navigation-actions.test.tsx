@@ -29,6 +29,8 @@ const labels = {
   offers: 'Promos',
   categories: 'Catégories',
   brands: 'Marques',
+  loadError: 'Navigation indisponible',
+  retry: 'Réessayer',
   cartDrawer: {
     title: 'Votre panier',
     close: 'Fermer le panier',
@@ -227,5 +229,25 @@ describe('NavigationActions', () => {
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: labels.menu })).not.toBeInTheDocument();
+  });
+  it('retries missing navigation metadata when the mobile menu is reopened', async () => {
+    navigationMeta.mockRejectedValueOnce(new Error('offline'));
+    render(
+      <NavigationActions
+        locale="fr"
+        alternateLocale="ar"
+        alternateLabel="العربية"
+        labels={labels}
+        contact={contact}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: labels.menu }));
+    expect(await screen.findByRole('status')).toHaveTextContent(labels.loadError);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: labels.menu }));
+    const drawer = screen.getByRole('dialog', { name: labels.menu });
+    fireEvent.click(await within(drawer).findByText(labels.brands, { selector: 'summary span' }));
+    expect(await within(drawer).findByRole('link', { name: 'Wadfow' })).toBeVisible();
+    expect(screen.queryByText(labels.loadError)).not.toBeInTheDocument();
   });
 });

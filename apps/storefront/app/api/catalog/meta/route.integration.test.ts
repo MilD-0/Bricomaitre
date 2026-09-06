@@ -66,7 +66,7 @@ describe('GET /api/catalog/meta', () => {
     );
     try {
       const { fetchNavigationMeta } = await import('@/lib/navigation-categories');
-      await expect(fetchNavigationMeta()).resolves.toEqual({ categories: [], brands: [] });
+      await expect(fetchNavigationMeta()).rejects.toThrow('Navigation metadata unavailable');
       expect(responses[0]?.status).toBe(503);
       await expect(fetchNavigationMeta()).resolves.toEqual(payload);
       expect(getCatalogMeta).toHaveBeenCalledTimes(2);

@@ -20,7 +20,6 @@ export const navigationMetaSchema = z.object({
 });
 
 type NavigationMeta = z.infer<typeof navigationMetaSchema>;
-const EMPTY_NAVIGATION_META: NavigationMeta = { categories: [], brands: [] };
 let navigationMetaPromise: Promise<NavigationMeta> | null = null;
 
 export async function fetchNavigationMeta(signal?: AbortSignal) {
@@ -34,9 +33,9 @@ export async function fetchNavigationMeta(signal?: AbortSignal) {
         if (!parsed.success) throw new Error('Invalid navigation metadata');
         return parsed.data;
       })
-      .catch(() => {
+      .catch((error) => {
         navigationMetaPromise = null;
-        return EMPTY_NAVIGATION_META;
+        throw error;
       });
   }
 

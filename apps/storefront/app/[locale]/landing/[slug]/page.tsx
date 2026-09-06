@@ -1,3 +1,4 @@
+import { LandingOrderProvider } from '@/components/landing-order-context';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -47,12 +48,14 @@ async function LandingPageContent({ params }: LandingPageProps) {
       locale={locale}
       alternatePath={`/${alternateLocale}/landing/${encodeURIComponent(alternatePage?.slug ?? page.slug)}`}
     >
-      <LandingPageRenderer
-        page={page}
-        locale={locale}
-        nonce={requestHeaders.get('x-nonce') ?? undefined}
-      />
-      <LandingOrderForm page={page} locale={locale} />
+      <LandingOrderProvider key={page.id} productId={page.product.id}>
+        <LandingPageRenderer
+          page={page}
+          locale={locale}
+          nonce={requestHeaders.get('x-nonce') ?? undefined}
+        />
+        <LandingOrderForm page={page} locale={locale} />
+      </LandingOrderProvider>
     </PageShell>
   );
 }

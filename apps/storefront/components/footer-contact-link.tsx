@@ -13,17 +13,18 @@ export function FooterContactLink({
   direction,
 }: {
   icon: ContactIcon;
-  href: string;
+  href?: string | null;
   children: ReactNode;
   external?: boolean;
   direction?: 'ltr' | 'rtl';
 }) {
   const Icon = staticIcons[icon];
+  const Tag = href ? 'a' : 'span';
 
   return (
-    <a
+    <Tag
       className="site-footer-contact-link"
-      href={href}
+      href={href ?? undefined}
       target={external ? '_blank' : undefined}
       rel={external ? 'noreferrer' : undefined}
       dir={direction}
@@ -38,6 +39,6 @@ export function FooterContactLink({
       {external ? (
         <ExternalLink className="site-footer-external-icon" aria-hidden="true" size={12} />
       ) : null}
-    </a>
+    </Tag>
   );
 }

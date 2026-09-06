@@ -46,7 +46,7 @@ describe('fetchNavigationMeta', () => {
         .mockResolvedValueOnce(new Response(JSON.stringify(payload))),
     );
     const { fetchNavigationMeta } = await import('./navigation-categories');
-    expect(await fetchNavigationMeta()).toEqual({ categories: [], brands: [] });
+    await expect(fetchNavigationMeta()).rejects.toThrow();
     expect(await fetchNavigationMeta()).toEqual(payload);
   });
 
@@ -59,7 +59,7 @@ describe('fetchNavigationMeta', () => {
     vi.stubGlobal('fetch', fetchMock);
     const { fetchNavigationMeta } = await import('./navigation-categories');
 
-    await expect(fetchNavigationMeta()).resolves.toEqual({ categories: [], brands: [] });
+    await expect(fetchNavigationMeta()).rejects.toThrow('offline');
     await expect(fetchNavigationMeta()).resolves.toEqual(payload);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

@@ -1,3 +1,4 @@
+import { LandingOrderProvider } from '@/components/landing-order-context';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -50,12 +51,14 @@ export default async function LandingPagePreview({
           ? 'معاينة آمنة للنسخة المحفوظة. إرسال النموذج سينشئ طلباً حقيقياً.'
           : 'Aperçu sécurisé de la version enregistrée. Envoyer le formulaire créera une vraie commande.'}
       </aside>
-      <LandingPageRenderer
-        page={page}
-        locale={locale}
-        nonce={requestHeaders.get('x-nonce') ?? undefined}
-      />
-      <LandingOrderForm page={page} locale={locale} />
+      <LandingOrderProvider key={page.id} productId={page.product.id}>
+        <LandingPageRenderer
+          page={page}
+          locale={locale}
+          nonce={requestHeaders.get('x-nonce') ?? undefined}
+        />
+        <LandingOrderForm page={page} locale={locale} />
+      </LandingOrderProvider>
     </PageShell>
   );
 }

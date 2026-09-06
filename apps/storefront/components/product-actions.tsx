@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,8 @@ import type { Locale } from '@/i18n/config';
 import { addCartItem, readCart, writeCart, type CartItem } from '@/lib/cart';
 import { trackProductEvent } from '@/lib/analytics';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
-import { LANDING_ORDER_QUANTITY_EVENT, type LandingOrderQuantityDetail } from '@/lib/landing-order';
+import { focusLandingOrder } from '@/lib/landing-order';
+import { useLandingOrder } from '@/components/landing-order-context';
 
 type ProductActionsProps = {
   locale: Locale;
@@ -56,7 +57,12 @@ export function ProductActions({
   support,
 }: ProductActionsProps) {
   const router = useRouter();
-  const [quantity, setQuantity] = useState(1);
+  const [localQuantity, setLocalQuantity] = useState(1);
+  const landing = useLandingOrder();
+  const shared = buyNowTarget && landing?.productId === item.productId ? landing : null;
+  const quantity = shared?.quantity ?? localQuantity;
+  const setQuantity = shared?.setQuantity ?? setLocalQuantity;
+  const quantityLabelId = useId();
   const [announcement, setAnnouncement] = useState('');
   const buyNowIconRef = useRef<ArrowUpRightIconHandle>(null);
   const analyticsBase = {
@@ -74,7 +80,7 @@ export function ProductActions({
 
   function changeQuantity(next: number) {
     const boundedQuantity = Math.max(1, Math.min(20, next));
-    if (boundedQuantity === quantity) return;
+    if (shared?.locked || boundedQuantity === quantity) return;
 
     setQuantity(boundedQuantity);
     setAnnouncement('');
@@ -103,18 +109,7 @@ export function ProductActions({
     void triggerHaptic('primary');
     void trackProductEvent({ eventName: 'buy_now_click', ...analyticsBase });
     if (buyNowTarget) {
-      window.dispatchEvent(
-        new CustomEvent<LandingOrderQuantityDetail>(LANDING_ORDER_QUANTITY_EVENT, {
-          detail: { productId: item.productId, quantity },
-        }),
-      );
-      const target = document.querySelector<HTMLElement>(buyNowTarget);
-      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-      target?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
-      window.history.replaceState(window.history.state, '', buyNowTarget);
-      window.requestAnimationFrame(() =>
-        target?.querySelector<HTMLElement>('input, select, button')?.focus({ preventScroll: true }),
-      );
+      focusLandingOrder(buyNowTarget);
       return;
     }
     const params = new URLSearchParams({ product: item.token, quantity: String(quantity) });
@@ -133,13 +128,13 @@ export function ProductActions({
   return (
     <div className="product-actions" data-mobile-sticky={!analytics.metadata?.landingPageId}>
       <div className="quantity-control">
-        <span id="product-quantity-label">{labels.quantity}</span>
-        <div role="group" aria-labelledby="product-quantity-label">
+        <span id={quantityLabelId}>{labels.quantity}</span>
+        <div role="group" aria-labelledby={quantityLabelId}>
           <Button
             type="button"
             variant="ghost"
             onClick={() => changeQuantity(quantity - 1)}
-            disabled={quantity === 1}
+            disabled={quantity === 1 || shared?.locked}
             aria-label={labels.decrease}
           >
             −
@@ -155,7 +150,7 @@ export function ProductActions({
             type="button"
             variant="ghost"
             onClick={() => changeQuantity(quantity + 1)}
-            disabled={quantity === 20}
+            disabled={quantity === 20 || shared?.locked}
             aria-label={labels.increase}
           >
             +

@@ -87,6 +87,7 @@ export function CartDrawer({
 
   function remove(item: CartItem) {
     if (!commit(removeCartItem(items, item.productId))) return;
+    closeRef.current?.focus();
     void triggerHaptic('destructive');
     void trackNavigationEvent({
       eventName: 'remove_from_cart',

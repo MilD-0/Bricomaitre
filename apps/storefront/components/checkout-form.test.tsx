@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CheckoutOrderError } from '@/lib/orders';
 import { CheckoutForm } from './checkout-form';
+import { ProductActions } from './product-actions';
+import { LandingOrderProvider } from './landing-order-context';
+import { LandingFinalCtaLink, LandingMobileCta } from './landing-page-interactions';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -31,6 +34,7 @@ vi.mock('@/lib/cart', async () => {
 vi.mock('@/lib/analytics', () => ({
   getAnalyticsIdentity: mocks.identity,
   trackCheckoutEvent: mocks.track,
+  trackProductEvent: vi.fn(),
 }));
 vi.mock('@/lib/haptics', () => ({ prepareHaptics: vi.fn(), triggerHaptic: mocks.haptic }));
 vi.mock('@/components/storefront-image', () => ({
@@ -437,27 +441,71 @@ describe('CheckoutForm', () => {
     );
   });
 
-  it('embeds with a section heading and accepts landing-page quantity changes', async () => {
+  it('shares landing quantities across hero, commerce panel, final/mobile links and order submission', async () => {
+    mocks.reconcile.mockImplementation(async (items) => ({ items, changed: false }));
+    mocks.create.mockRejectedValueOnce(new TypeError('offline'));
+    const actionProps = {
+      locale: 'fr' as const,
+      item: directItem,
+      available: true,
+      analytics: { categoryId: null, categorySlug: null, brandId: null, brandSlug: null },
+      buyNowTarget: '#landing-order',
+      labels: {
+        quantity: 'Quantity',
+        decrease: 'Decrease',
+        increase: 'Increase',
+        addToCart: 'Add',
+        buyNow: 'Order',
+        added: 'Added',
+        unavailable: 'Unavailable',
+      },
+    };
     render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        embedded
-        labels={labels}
-      />,
+      <LandingOrderProvider productId={directItem.productId}>
+        <ProductActions {...actionProps} />
+        <ProductActions {...actionProps} />
+        <LandingFinalCtaLink href="#landing-order" label="Final order" />
+        <LandingMobileCta href="#landing-order" label="Mobile order" price="4500 DA" />
+        <CheckoutForm
+          locale="fr"
+          catalog={catalog}
+          directItem={directItem}
+          embedded
+          labels={labels}
+        />
+      </LandingOrderProvider>,
     );
-    expect(screen.getByRole('heading', { level: 2, name: 'title' })).toBeVisible();
-    expect(screen.queryByRole('heading', { level: 1, name: 'title' })).not.toBeInTheDocument();
-    expect(document.querySelector('#landing-order')).toHaveClass('landing-order-section');
-
-    window.dispatchEvent(
-      new CustomEvent('bric:landing-order-quantity', { detail: { productId: 12, quantity: 5 } }),
-    );
-    await waitFor(() => expect(screen.getByText('quantity: 5')).toBeVisible());
-    expect(screen.getAllByText((content) => content.replace(/\s/g, '') === '22500DA')).toHaveLength(
-      3,
-    );
+    const section = document.querySelector<HTMLElement>('#landing-order')!;
+    section.scrollIntoView = vi.fn();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Increase' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Increase' })[0]!);
+    expect(screen.getAllByLabelText('Quantity: 3')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('link', { name: 'Mobile order — 4500 DA' }));
+    expect(screen.getByText('quantity: 3')).toBeVisible();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Decrease' })[1]!);
+    fireEvent.click(screen.getByRole('link', { name: 'Final order' }));
+    expect(screen.getByText('quantity: 2')).toBeVisible();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Increase' })[1]!);
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    expect(
+      screen
+        .getAllByRole('button', { name: 'Increase' })
+        .every((button) => button.hasAttribute('disabled')),
+    ).toBe(true);
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create.mock.calls[0][0].cartProducts).toHaveLength(3);
+    expect(await screen.findByText('quantity: 3')).toBeVisible();
+    const attempt = mocks.create.mock.calls[0];
+    fireEvent.click(await screen.findByRole('button', { name: 'retry' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+    expect(mocks.create.mock.calls[1]).toEqual(attempt);
   });
 
   it('announces validation errors and moves focus to the first required field', async () => {

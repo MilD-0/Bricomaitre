@@ -139,26 +139,17 @@ describe('ProductActions', () => {
     expect(routerPushMock).toHaveBeenCalledWith('/fr/checkout?product=desk-lamp&quantity=1');
   });
 
-  it('moves landing-page buyers into the inline form with their selected quantity', () => {
+  it('moves landing-page buyers into the inline form', () => {
     const orderSection = document.createElement('section');
     orderSection.id = 'landing-order';
     orderSection.innerHTML = '<input aria-label="Order phone" />';
     orderSection.scrollIntoView = vi.fn();
     document.body.append(orderSection);
-    const quantityEvents: Array<{ productId: number; quantity: number }> = [];
-    window.addEventListener(
-      'bric:landing-order-quantity',
-      (event: Event) => {
-        quantityEvents.push((event as CustomEvent<{ productId: number; quantity: number }>).detail);
-      },
-      { once: true },
-    );
 
     render(<ProductActions {...props} buyNowTarget="#landing-order" />);
     fireEvent.click(screen.getByRole('button', { name: labels.increase }));
     fireEvent.click(screen.getByRole('button', { name: labels.buyNow }));
 
-    expect(quantityEvents).toEqual([{ productId: 12, quantity: 2 }]);
     expect(orderSection.scrollIntoView).toHaveBeenCalledWith({
       behavior: 'smooth',
       block: 'start',

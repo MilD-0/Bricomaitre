@@ -16,6 +16,8 @@ const labels = {
   searching: 'Recherche en cours…',
   results: 'Suggestions de produits',
   noResults: 'Aucun produit trouvé',
+  error: 'Recherche indisponible',
+  retry: 'Réessayer',
   viewAll: 'Voir tous les résultats',
   inStock: 'En stock',
   outOfStock: 'Indisponible',
@@ -122,5 +124,14 @@ describe('GlobalSearch', () => {
     await waitFor(() =>
       expect(document.querySelector('.global-search-skeleton')).not.toBeInTheDocument(),
     );
+  });
+  it('distinguishes service failure from no matches and retries the same query', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('{}', { status: 503 }));
+    render(<GlobalSearch locale="fr" labels={labels} />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Lampe' } });
+    expect(await screen.findByText(labels.error)).toBeVisible();
+    expect(screen.queryByText(labels.noResults)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: labels.retry }));
+    expect(await screen.findByRole('link', { name: /Lampe de travail/ })).toBeVisible();
   });
 });

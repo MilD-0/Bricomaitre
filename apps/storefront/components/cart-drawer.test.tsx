@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { STOREFRONT_CART_KEY, type CartItem } from '@/lib/cart';
 import { CartDrawer } from './cart-drawer';
+import { useState } from 'react';
 
 const analytics = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const haptics = vi.hoisted(() => ({ prepare: vi.fn(), trigger: vi.fn() }));
@@ -144,5 +145,28 @@ describe('CartDrawer', () => {
       'href',
       '/ar/products',
     );
+  });
+  it('keeps focus inside the cart when its last focused item is removed', () => {
+    const close = vi.fn();
+    function Cart() {
+      const [items, setItems] = useState([item]);
+      return (
+        <CartDrawer
+          locale="fr"
+          items={items}
+          labels={labels}
+          onClose={close}
+          onItemsChange={setItems}
+        />
+      );
+    }
+    render(<Cart />);
+    const remove = screen.getByRole('button', { name: `${labels.remove}: ${item.title}` });
+    remove.focus();
+    fireEvent.click(remove);
+    expect(screen.getByText(labels.emptyTitle)).toBeVisible();
+    expect(document.activeElement).toHaveAttribute('aria-label', labels.close);
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(close).toHaveBeenCalledOnce();
   });
 });

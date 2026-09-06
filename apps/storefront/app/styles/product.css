@@ -811,3 +811,9 @@ button.button {
     transform: translateX(500%) rotate(18deg);
   }
 }
+
+@media (max-width: 620px) {
+  .site-shell:has(.product-actions[data-mobile-sticky='true']) {
+    padding-bottom: calc(5.05rem + env(safe-area-inset-bottom));
+  }
+}

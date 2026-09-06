@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { ArrowUpRightIcon, type ArrowUpRightIconHandle } from '@/components/ui/arrow-up-right';
+import { focusLandingOrder } from '@/lib/landing-order';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 
 export function LandingFaqItem({ question, answer }: { question: string; answer: string }) {
@@ -56,7 +57,11 @@ export function LandingFinalCtaLink({ href, label }: { href: string; label: stri
       onPointerLeave={stop}
       onFocus={start}
       onBlur={stop}
-      onClick={() => {
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+          return;
+        event.preventDefault();
+        focusLandingOrder(href);
         void triggerHaptic('primary');
       }}
     >
@@ -110,7 +115,17 @@ export function LandingMobileCta({
         onPointerLeave={() => iconRef.current?.stopAnimation()}
         onFocus={() => iconRef.current?.startAnimation()}
         onBlur={() => iconRef.current?.stopAnimation()}
-        onClick={() => {
+        onClick={(event) => {
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return;
+          event.preventDefault();
+          focusLandingOrder(href);
           void triggerHaptic('primary');
         }}
       >

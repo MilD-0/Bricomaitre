@@ -3,32 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { Locale } from '@/i18n/config';
-import { fetchNavigationMeta, type navigationMetaSchema } from '@/lib/navigation-categories';
+import { useNavigationMeta } from '@/components/use-navigation-meta';
 import { getBrandPath, getCategoryPath } from '@/lib/taxonomy-routes';
-import type { z } from 'zod';
-
-type NavigationMeta = z.infer<typeof navigationMetaSchema>;
 
 export function NavigationCategories({
   locale,
   labels,
 }: {
   locale: Locale;
-  labels: { categories: string; brands: string };
+  labels: { categories: string; brands: string; loadError: string; retry: string };
 }) {
-  const [meta, setMeta] = useState<NavigationMeta>({ categories: [], brands: [] });
-  const [loading, setLoading] = useState(true);
+  const { meta, loading, failed, retry } = useNavigationMeta();
   const [openMenu, setOpenMenu] = useState<'categories' | 'brands' | null>(null);
   const navigationRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetchNavigationMeta(controller.signal)
-      .then(setMeta)
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     const closeWhenOutside = (event: PointerEvent) => {
@@ -44,6 +31,16 @@ export function NavigationCategories({
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, []);
+
+  if (failed)
+    return (
+      <span className="navigation-load-error" role="status">
+        {labels.loadError}{' '}
+        <button type="button" onClick={retry}>
+          {labels.retry}
+        </button>
+      </span>
+    );
 
   if (loading)
     return (

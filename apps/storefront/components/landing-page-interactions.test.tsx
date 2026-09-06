@@ -74,7 +74,12 @@ describe('landing page interactions', () => {
     );
     render(
       <>
-        <div id="landing-order" />
+        <div
+          id="landing-order"
+          ref={(node) => {
+            if (node) node.scrollIntoView = vi.fn();
+          }}
+        />
         <LandingMobileCta href="#landing-order" label="Commander" price="4 500 DA" />
       </>,
     );

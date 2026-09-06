@@ -228,7 +228,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
       <div
         className="product-media-stage"
         ref={galleryRef}
-        role="region"
+        role="group"
         aria-roledescription="carousel"
         aria-label={labels.gallery}
       >

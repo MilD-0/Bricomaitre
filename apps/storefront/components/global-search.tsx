@@ -24,6 +24,8 @@ export type GlobalSearchLabels = {
   searching: string;
   results: string;
   noResults: string;
+  error: string;
+  retry: string;
   viewAll: string;
   inStock: string;
   outOfStock: string;
@@ -42,6 +44,7 @@ export function GlobalSearch({
   const [results, setResults] = useState<SearchProduct[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -63,6 +66,7 @@ export function GlobalSearch({
   function scheduleSearch(nextValue: string, inputType: string) {
     if (timerRef.current) clearTimeout(timerRef.current);
     abortRef.current?.abort();
+    setFailed(false);
     const query = nextValue.trim();
     if ([...query].length < 2) {
       setResults([]);
@@ -102,7 +106,13 @@ export function GlobalSearch({
             metadata: { surface: 'global_search', resultsCount: items.length },
           });
         } catch (error) {
-          if (!(error instanceof DOMException && error.name === 'AbortError')) setResults([]);
+          if (
+            !controller.signal.aborted &&
+            !(error instanceof DOMException && error.name === 'AbortError')
+          ) {
+            setResults([]);
+            setFailed(true);
+          }
         } finally {
           if (!controller.signal.aborted) setLoading(false);
         }
@@ -175,8 +185,19 @@ export function GlobalSearch({
       {open ? (
         <div className="global-search-panel" id={resultsId} aria-label={labels.results}>
           <p className="global-search-state" role="status" aria-live="polite">
-            {loading ? labels.searching : results.length === 0 ? labels.noResults : labels.results}
+            {loading
+              ? labels.searching
+              : failed
+                ? labels.error
+                : results.length === 0
+                  ? labels.noResults
+                  : labels.results}
           </p>
+          {failed ? (
+            <button type="button" onClick={() => scheduleSearch(value, 'insertText')}>
+              {labels.retry}
+            </button>
+          ) : null}
           {loading ? (
             <SearchResultsSkeleton />
           ) : results.length > 0 ? (

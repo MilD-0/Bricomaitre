@@ -194,7 +194,7 @@ export function LandingPageRenderer({
               className={blockClass(block, 'landing-section', 'landing-benefits')}
             >
               <h2>{block.heading}</h2>
-              <div>
+              <div tabIndex={0} role="group" aria-label={block.heading}>
                 {block.items.map((item, index) => {
                   const Icon = benefitIcons[item.icon];
                   return (
@@ -299,7 +299,7 @@ export function LandingPageRenderer({
               className={blockClass(block, 'landing-section', 'landing-gallery')}
             >
               <h2>{block.heading}</h2>
-              <div>
+              <div tabIndex={0} role="group" aria-label={block.heading}>
                 {block.images.map((item, index) => (
                   <figure key={`${block.id}-${index}`}>
                     {blockImage(
@@ -324,7 +324,7 @@ export function LandingPageRenderer({
                 <h2>{block.heading}</h2>
                 {block.body ? <p>{block.body}</p> : null}
               </header>
-              <div>
+              <div tabIndex={0} role="group" aria-label={block.heading}>
                 {block.items.map((item, index) => {
                   const Icon = benefitIcons[item.icon];
                   return (
@@ -347,7 +347,12 @@ export function LandingPageRenderer({
               className={blockClass(block, 'landing-section', 'landing-comparison')}
             >
               <h2>{block.heading}</h2>
-              <div className="landing-comparison-table" role="table" aria-label={block.heading}>
+              <div
+                className="landing-comparison-table"
+                tabIndex={0}
+                role="table"
+                aria-label={block.heading}
+              >
                 <div className="landing-comparison-header" role="row">
                   <span role="columnheader">{locale === 'ar' ? 'المعيار' : 'Critère'}</span>
                   <strong role="columnheader">{block.productLabel}</strong>
@@ -469,7 +474,9 @@ export function LandingPageRenderer({
               />
             </div>
             {block.variant === 'split' ? (
-              <div>{blockImage(block, image, '(max-width: 760px) 100vw, 38vw')}</div>
+              <div className="landing-final-media">
+                {blockImage(block, image, '(max-width: 760px) 100vw, 38vw')}
+              </div>
             ) : null}
           </section>
         );

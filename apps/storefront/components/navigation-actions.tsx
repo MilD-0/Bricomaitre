@@ -15,13 +15,10 @@ import type { Locale } from '@/i18n/config';
 import { trackNavigationEvent } from '@/lib/analytics';
 import { getCartItemCount, getCartSubtotal, readCart, type CartItem } from '@/lib/cart';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
-import { fetchNavigationMeta, type navigationMetaSchema } from '@/lib/navigation-categories';
+import { useNavigationMeta } from '@/components/use-navigation-meta';
 import { buildNavigationTaxonomy, type NavigationTaxonomyNode } from '@/lib/navigation-taxonomy';
 import { formatProductPrice } from '@/lib/product-presentation';
 import { getBrandPath, getCategoryPath } from '@/lib/taxonomy-routes';
-import type { z } from 'zod';
-
-type NavigationMeta = z.infer<typeof navigationMetaSchema>;
 type NavigationLabels = {
   menu: string;
   closeMenu: string;
@@ -32,6 +29,8 @@ type NavigationLabels = {
   offers: string;
   categories: string;
   brands: string;
+  loadError: string;
+  retry: string;
   cartDrawer: CartDrawerLabels;
   support: SupportContactLabels;
 };
@@ -54,7 +53,7 @@ export function NavigationActions({
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [meta, setMeta] = useState<NavigationMeta>({ categories: [], brands: [] });
+  const { meta, failed, retry } = useNavigationMeta();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const alternateHref = `${alternatePath ?? pathname.replace(/^\/(fr|ar)(?=\/|$)/, `/${alternateLocale}`)}${searchParams.size ? `?${searchParams}` : ''}`;
@@ -77,14 +76,6 @@ export function NavigationActions({
     void prepareHaptics();
     queueMicrotask(() => setVisualLocale(locale));
   }, [locale]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetchNavigationMeta(controller.signal)
-      .then(setMeta)
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     const updateCart = () => setCartItems(readCart(window.localStorage));
@@ -127,6 +118,7 @@ export function NavigationActions({
   }, [locale]);
 
   function openMenu() {
+    if (failed) retry();
     void triggerHaptic('surface');
     setMenuOpen(true);
     scheduleAfterNextPaint(() => {
@@ -296,6 +288,14 @@ export function NavigationActions({
             </div>
           }
         >
+          {failed ? (
+            <p role="status">
+              {labels.loadError}{' '}
+              <button type="button" onClick={retry}>
+                {labels.retry}
+              </button>
+            </p>
+          ) : null}
           <nav className="navigation-drawer-links" aria-label={labels.menu}>
             <a
               href={`/${locale}`}
