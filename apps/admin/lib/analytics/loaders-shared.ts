@@ -6,7 +6,7 @@ import {
   ANALYTICS_PAID_SHIPMENT_STATUSES,
   ANALYTICS_RESOLVED_SHIPMENT_STATUSES,
 } from '../ecotrack-status-policy';
-import type { StatsFilters } from '../stats';
+import type { StatsFilters } from '../stats-contract';
 import type {
   AnalyticsEffectiveRange,
   AnalyticsFilters,

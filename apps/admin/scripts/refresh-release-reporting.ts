@@ -5,7 +5,7 @@ import { refreshReleaseReporting } from '../lib/release-reporting-refresh';
 async function main() {
   const result = await refreshReleaseReporting(process.env.SENTRY_RELEASE ?? 'unknown');
   console.log(
-    `Release reporting refreshed: trigger=${result.trigger} snapshots=${result.snapshots.snapshots} dailyFacts=${result.facts.dailyFacts}`,
+    `Release reporting refreshed: trigger=${result.trigger} dailyFacts=${result.facts.dailyFacts}`,
   );
 }
 

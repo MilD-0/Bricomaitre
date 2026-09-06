@@ -56,7 +56,6 @@ export type StatsImportResult = {
   unmatchedReferences: string[];
 };
 
-const DEFAULT_IMPORT_HISTORY_LIMIT = 8;
 export const IMPORT_HISTORY_PAGE_SIZE = 10;
 
 function mapImportHistoryRow(row: typeof importBatches.$inferSelect): ImportHistoryItem {
@@ -76,16 +75,6 @@ function mapImportHistoryRow(row: typeof importBatches.$inferSelect): ImportHist
     dateRangeStart: row.dateRangeStart,
     dateRangeEnd: row.dateRangeEnd,
   };
-}
-
-export async function listImportHistory(limit = DEFAULT_IMPORT_HISTORY_LIMIT, db = getDb()) {
-  const rows = await db
-    .select()
-    .from(importBatches)
-    .orderBy(desc(importBatches.importedAt))
-    .limit(limit);
-
-  return rows.map(mapImportHistoryRow);
 }
 
 export async function listImportHistoryPage({

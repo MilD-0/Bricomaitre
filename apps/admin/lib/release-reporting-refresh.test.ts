@@ -1,35 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
-
+import { expect, it, vi } from 'vitest';
 import { refreshReleaseReporting } from './release-reporting-refresh';
-
-describe('refreshReleaseReporting', () => {
-  it('rebuilds snapshots before derived facts and binds the run to the release', async () => {
-    const refreshSnapshots = vi.fn().mockResolvedValue({ snapshots: 9 });
-    const refreshFacts = vi.fn().mockResolvedValue({ dailyFacts: 183 });
-
-    const result = await refreshReleaseReporting('abc123', {
-      refreshSnapshots,
-      refreshFacts,
-    });
-
-    expect(refreshSnapshots).toHaveBeenCalledWith({ trigger: 'release:abc123' });
-    expect(refreshFacts).toHaveBeenCalledOnce();
-    expect(refreshSnapshots.mock.invocationCallOrder[0]).toBeLessThan(
-      refreshFacts.mock.invocationCallOrder[0]!,
-    );
-    expect(result).toEqual({
-      trigger: 'release:abc123',
-      snapshots: { snapshots: 9 },
-      facts: { dailyFacts: 183 },
-    });
+import { refreshAnalyticsFacts } from './analytics-facts';
+vi.mock('./analytics-facts', () => ({ refreshAnalyticsFacts: vi.fn() }));
+it('binds current fact refresh results to the release and propagates failures', async () => {
+  vi.mocked(refreshAnalyticsFacts).mockResolvedValueOnce({
+    dailyFacts: 183,
+    cohortThrough: '2026-09-05',
   });
-
-  it('uses an explicit unknown release marker when identity is unavailable', async () => {
-    const refreshSnapshots = vi.fn().mockResolvedValue({});
-    const refreshFacts = vi.fn().mockResolvedValue({});
-
-    await refreshReleaseReporting('   ', { refreshSnapshots, refreshFacts });
-
-    expect(refreshSnapshots).toHaveBeenCalledWith({ trigger: 'release:unknown' });
+  await expect(refreshReleaseReporting('abc123')).resolves.toEqual({
+    trigger: 'release:abc123',
+    facts: { dailyFacts: 183, cohortThrough: '2026-09-05' },
   });
+  vi.mocked(refreshAnalyticsFacts).mockRejectedValueOnce(new Error('database unavailable'));
+  await expect(refreshReleaseReporting('abc123')).rejects.toThrow('database unavailable');
 });

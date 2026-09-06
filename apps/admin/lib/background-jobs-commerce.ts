@@ -1,6 +1,8 @@
+import { getRedis } from '@bric/runtime/redis';
 import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import {
   getJobSnapshot,
+  getQueue,
   getLatestOwnedJob,
   listRecentJobSnapshots,
   requestJobCancellation,
@@ -10,13 +12,7 @@ import {
 import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/order-records';
 
 import { getDb } from '@bric/db/client';
-import {
-  adminReportingSnapshotRuns,
-  brands,
-  orderStatusHistory,
-  orders,
-  products,
-} from '@bric/db/schema';
+import { brands, orderStatusHistory, orders, products } from '@bric/db/schema';
 import { syncEcotrackShipmentStates } from './admin-ecotrack-orders-data';
 import {
   loadEcotrackOrderInputs,
@@ -47,7 +43,6 @@ import {
 import { ORDER_STATUS, type OrderStatusHistoryRecord } from './orders';
 import { importAdCostsSpreadsheet } from './stats-ad-costs';
 import { importStatsSpreadsheet } from './stats-order-import';
-import { refreshAdminReportingSnapshots } from './stats';
 import { refreshAnalyticsFacts } from './analytics-facts';
 import { getReportingDb } from './reporting-db';
 import {
@@ -273,42 +268,34 @@ export async function startAdCostsImportJob(
   });
 }
 
+const REPORTING_REQUESTED_REVISION = 'bric:reporting:requested-revision';
+const REPORTING_COMPLETED_REVISION = 'bric:reporting:completed-revision';
+
 export async function startAdminReportingRefreshJob(
   trigger: string,
   sourceImportBatchId?: string | null,
   requestId?: string,
   taskContext: AiTaskContext = {},
 ) {
+  const revision = await getRedis().incr(REPORTING_REQUESTED_REVISION);
+  // One processor across overlapping worker deployments prevents older fact writes
+  // from completing after a newer pass. Each request keeps its durable successor.
+  await getQueue(ADMIN_REPORTING_REFRESH_QUEUE).setGlobalConcurrency(1);
   const result = await startOwnedJob<ReportingRefreshPayload>({
     queueName: ADMIN_REPORTING_REFRESH_QUEUE,
     kind: 'admin-reporting-refresh',
-    ownerKey: 'admin-reporting',
+    ownerKey: `admin-reporting-${revision}`,
     origin: assistantJobOrigin(taskContext),
     conversationId: taskContext.conversationId,
     requestId,
-    activeScope: 'global',
     data: {
       trigger,
+      revision,
       sourceImportBatchId: sourceImportBatchId ?? null,
       ...taskContext,
     } as ReportingRefreshPayload,
   });
-
-  if (result.kind !== 'started') {
-    await getDb()
-      .update(adminReportingSnapshotRuns)
-      .set({
-        pendingRefresh: true,
-        pendingTrigger: trigger,
-        updatedAt: new Date(),
-      })
-      .where(eq(adminReportingSnapshotRuns.runId, result.job.id));
-  }
-
-  return {
-    kind: result.kind,
-    job: toClientJob(result.job),
-  };
+  return { kind: result.kind, job: toClientJob(result.job) };
 }
 
 export async function startEcotrackSyncJob(
@@ -704,43 +691,20 @@ export async function runStatsImportJob(
 }
 
 export async function runAdminReportingRefreshJob(payload: ReportingRefreshPayload) {
-  const result = await refreshAdminReportingSnapshots({
-    runId: payload.__jobMeta.id,
-    trigger: payload.trigger,
-    sourceImportBatchId: payload.sourceImportBatchId ?? null,
-  });
-  const db = getReportingDb();
-  const [run] = await db
-    .select({
-      pendingRefresh: adminReportingSnapshotRuns.pendingRefresh,
-      pendingTrigger: adminReportingSnapshotRuns.pendingTrigger,
-    })
-    .from(adminReportingSnapshotRuns)
-    .where(eq(adminReportingSnapshotRuns.runId, payload.__jobMeta.id))
-    .limit(1);
-
-  if (!run?.pendingRefresh) {
-    await refreshAnalyticsFacts({ db });
-    return result;
-  }
-
-  const pendingTrigger = run.pendingTrigger || 'coalesced-refresh';
-  await db
-    .update(adminReportingSnapshotRuns)
-    .set({
-      pendingRefresh: false,
-      pendingTrigger: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(adminReportingSnapshotRuns.runId, payload.__jobMeta.id));
-
-  const refreshed = await refreshAdminReportingSnapshots({
-    runId: payload.__jobMeta.id,
-    trigger: pendingTrigger,
-    sourceImportBatchId: payload.sourceImportBatchId ?? null,
-  });
-  await refreshAnalyticsFacts({ db });
-  return refreshed;
+  const redis = getRedis();
+  // An older queued payload has no revision; give it one so it still refreshes.
+  const revision = payload.revision ?? (await redis.incr(REPORTING_REQUESTED_REVISION));
+  const completed = Number((await redis.get(REPORTING_COMPLETED_REVISION)) ?? 0);
+  if (completed >= revision) return { revision, coalesced: true };
+  const throughRevision = Math.max(
+    revision,
+    Number((await redis.get(REPORTING_REQUESTED_REVISION)) ?? 0),
+  );
+  const facts = await refreshAnalyticsFacts({ db: getReportingDb() });
+  // Requests arriving during this pass have a higher revision and retain their
+  // queued job. A failed refresh never marks its requested revision complete.
+  await redis.set(REPORTING_COMPLETED_REVISION, String(throughRevision));
+  return { revision: throughRevision, coalesced: false, ...facts };
 }
 
 export async function runAdCostsImportJob(

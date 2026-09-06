@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 
 import { analyticsEvents, orders } from '@bric/db/schema';
-import { getCanonicalStorefrontSessionCount } from '../stats';
+import { getCanonicalStorefrontSessionCount } from '../stats-live-commerce';
 import type { AnalyticsFilters } from './contract';
 import { addDays, dayInTimezone } from './date-range';
 import { ratio } from './metrics';
@@ -67,7 +67,7 @@ export async function loadStorefrontPaths(
 
 export async function loadStorefrontOrderConversion(db: Database, filters: AnalyticsFilters) {
   const [sessions, result] = await Promise.all([
-    getCanonicalStorefrontSessionCount(statsInput(filters.startDate, filters.endDate)),
+    getCanonicalStorefrontSessionCount(db, statsInput(filters.startDate, filters.endDate)),
     db.execute(sql`
       select (select count(*)::int from ${orders}
         where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})

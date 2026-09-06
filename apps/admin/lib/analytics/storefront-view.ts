@@ -1,5 +1,5 @@
 import { getDb } from '@bric/db/client';
-import { getLiveStorefrontAnalytics } from '../stats';
+import { getLiveStorefrontAnalytics } from '../storefront-analytics';
 import {
   loadStorefrontPaths,
   loadStorefrontSessionFunnel,
@@ -44,11 +44,17 @@ export async function loadStorefrontView(
   const prior = priorFilters ? statsInput(priorFilters.startDate, priorFilters.endDate) : null;
   const pathCoverage = storefrontPathCoverage(storefrontFilters, now);
   const [dashboard, previous, sources, paths, funnel] = await Promise.all([
-    getLiveStorefrontAnalytics(statsInput(storefrontFilters.startDate, storefrontFilters.endDate), {
-      includeExperience: includeDetails,
-    }),
-    prior ? getLiveStorefrontAnalytics(prior, { includeExperience: false }) : Promise.resolve(null),
-    loadSourceHealth(db, filters),
+    getLiveStorefrontAnalytics(
+      db,
+      statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
+      {
+        includeExperience: includeDetails,
+      },
+    ),
+    prior
+      ? getLiveStorefrontAnalytics(db, prior, { includeExperience: false })
+      : Promise.resolve(null),
+    loadSourceHealth(db, filters, undefined, cutoffs.orders ?? undefined),
     includeDetails
       ? loadStorefrontPaths(db, storefrontFilters, now)
       : Promise.resolve<Awaited<ReturnType<typeof loadStorefrontPaths>> | null>(null),
@@ -246,7 +252,10 @@ export async function getAnalyticsStorefrontDetails(
   );
   const pathCoverage = storefrontPathCoverage(storefrontFilters, clock.now);
   const [dashboard, paths, funnel] = await Promise.all([
-    getLiveStorefrontAnalytics(statsInput(storefrontFilters.startDate, storefrontFilters.endDate)),
+    getLiveStorefrontAnalytics(
+      db,
+      statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
+    ),
     loadStorefrontPaths(db, storefrontFilters, clock.now),
     pathCoverage.coverageStartDate <= pathCoverage.coverageEndDate
       ? loadStorefrontSessionFunnel(

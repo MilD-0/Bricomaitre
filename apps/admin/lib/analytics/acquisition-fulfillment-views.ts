@@ -1,5 +1,5 @@
 import { getProfitTrackerReport } from '../profit-tracker';
-import { getStatsDashboardSection } from '../stats';
+import { loadAcquisitionDiagnostics } from './acquisition-diagnostics';
 import { loadMetaBreakdowns, loadMetaPerformance, publicMetaEntity } from './acquisition-data';
 import { cohortCompletionCovers, loadCohortCompletionPair } from './cohort-completion';
 import type { AnalyticsFilters } from './contract';
@@ -67,11 +67,11 @@ export async function loadAcquisitionView(
     await Promise.all([
       loadMetaPerformance(db, performanceFilters, current),
       prior && previous ? loadMetaPerformance(db, prior, previous) : Promise.resolve(null),
-      getStatsDashboardSection(
+      loadAcquisitionDiagnostics(
+        db,
         statsInput(performanceFilters.startDate, performanceFilters.endDate),
-        'metaAds',
       ),
-      loadSourceHealth(db, filters, current),
+      loadSourceHealth(db, filters, current, cutoffs.orders ?? undefined),
       loadMetaBreakdowns(db, performanceFilters, current),
       loadLeadingOrderForecast(db, performanceFilters, current.settings),
     ]);
@@ -153,16 +153,13 @@ export async function loadAcquisitionView(
       efficiency: {
         confirmationRatePct: ratio(summary.confirmedOrders, summary.bricOrders),
         clickToPageRatePct: ratio(summary.landingPageViews, summary.outboundClicks),
-        exactAdAttributionCoveragePct: ratio(
-          summary.bricOrders,
-          diagnostics.metaAds.paidAttribution.createdOrders,
-        ),
+        exactAdAttributionCoveragePct: ratio(summary.bricOrders, diagnostics.createdOrders),
         outcomeMaturityPct: ratio(summary.paidOrders + summary.returnedOrders, summary.bricOrders),
         metaToBricPurchaseDelta: summary.metaPurchases - summary.bricOrders,
       },
       trackingHealth: {
-        available: diagnostics.metaAds.trackingAvailable !== false,
-        events: diagnostics.metaAds.events,
+        available: diagnostics.available,
+        events: diagnostics.events,
       },
       sync: {
         canSyncActiveRange:
@@ -212,7 +209,7 @@ export async function loadFulfillmentView(
       operationalFilters,
       1 - economics.settings.defaultReturnRate / 100,
     ),
-    loadSourceHealth(db, filters, economics),
+    loadSourceHealth(db, filters, economics, cutoffs.orders ?? undefined),
   ]);
   const returns = await loadReturnObservation(
     db,

@@ -1,28 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DELETE, GET, PATCH, PUT } from '../route';
+import { DELETE, GET, PATCH } from '../route';
 
 const {
   hasDbMock,
   requireOpsAccessMock,
   authMock,
-  getStatsDashboardMock,
   getLatestExportJobMock,
   startAdminReportingRefreshJobMock,
   listImportHistoryMock,
-  refreshStatsDashboardMock,
   deleteImportBatchMock,
   dismissUnmatchedReferenceMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   requireOpsAccessMock: vi.fn(),
   authMock: vi.fn(),
-  getStatsDashboardMock: vi.fn(),
   getLatestExportJobMock: vi.fn(),
   startAdminReportingRefreshJobMock: vi.fn(),
   listImportHistoryMock: vi.fn(),
-  refreshStatsDashboardMock: vi.fn(),
   deleteImportBatchMock: vi.fn(),
   dismissUnmatchedReferenceMock: vi.fn(),
 }));
@@ -47,17 +43,6 @@ vi.mock('../../../../lib/background-jobs', () => ({
   getLatestExportJob: getLatestExportJobMock,
   startAdminReportingRefreshJob: startAdminReportingRefreshJobMock,
 }));
-
-vi.mock('../../../../lib/stats', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../../../lib/stats')>('../../../../lib/stats');
-
-  return {
-    ...actual,
-    getStatsDashboard: getStatsDashboardMock,
-    refreshStatsDashboard: refreshStatsDashboardMock,
-  };
-});
 
 vi.mock('../../../../lib/stats-order-import', async () => {
   const actual = await vi.importActual<typeof import('../../../../lib/stats-order-import')>(
@@ -86,11 +71,9 @@ describe('app/api/stats/route', () => {
     hasDbMock.mockReset();
     requireOpsAccessMock.mockReset();
     authMock.mockReset();
-    getStatsDashboardMock.mockReset();
     getLatestExportJobMock.mockReset();
     startAdminReportingRefreshJobMock.mockReset();
     listImportHistoryMock.mockReset();
-    refreshStatsDashboardMock.mockReset();
     deleteImportBatchMock.mockReset();
     dismissUnmatchedReferenceMock.mockReset();
     revalidateServerTagsMock.mockReset();
@@ -113,16 +96,6 @@ describe('app/api/stats/route', () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: 'Forbidden' });
-  });
-
-  it('returns stats data for a validated query', async () => {
-    getStatsDashboardMock.mockResolvedValue({ summary: { totalOrders: 4 } });
-
-    const response = await GET(new NextRequest('http://localhost/api/stats?range=30d'));
-
-    expect(response.status).toBe(200);
-    expect(getStatsDashboardMock).toHaveBeenCalledWith({ range: '30d' });
-    await expect(response.json()).resolves.toEqual({ data: { summary: { totalOrders: 4 } } });
   });
 
   it('returns history when requested', async () => {
@@ -170,40 +143,6 @@ describe('app/api/stats/route', () => {
     expect(response.status).toBe(200);
     expect(getLatestExportJobMock).toHaveBeenCalledWith('admin-stats-import', 'ops@example.com');
     await expect(response.json()).resolves.toEqual({ job: { id: 'job-3', status: 'running' } });
-  });
-
-  it('refreshes a stats snapshot for the requested filters', async () => {
-    refreshStatsDashboardMock.mockResolvedValue({ summary: { totalOrders: 8 } });
-
-    const request = new NextRequest('http://localhost/api/stats', {
-      method: 'PUT',
-      body: JSON.stringify({ range: 'custom', startDate: '2026-05-01', endDate: '2026-05-27' }),
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    const response = await PUT(request);
-
-    expect(response.status).toBe(200);
-    expect(refreshStatsDashboardMock).toHaveBeenCalledWith(
-      { range: 'custom', startDate: '2026-05-01', endDate: '2026-05-27' },
-      'manual-refresh',
-    );
-    expect(revalidateServerTagsMock).toHaveBeenCalledWith('stats', 'stats-history');
-    await expect(response.json()).resolves.toEqual({ data: { summary: { totalOrders: 8 } } });
-  });
-
-  it('returns 400 when a stats refresh body is malformed JSON', async () => {
-    const request = new NextRequest('http://localhost/api/stats', {
-      method: 'PUT',
-      body: '{',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    const response = await PUT(request);
-
-    expect(response.status).toBe(400);
-    expect(refreshStatsDashboardMock).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON request body' });
   });
 
   it('deletes an import batch', async () => {

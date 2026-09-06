@@ -1,7 +1,10 @@
 import { sql } from 'drizzle-orm';
 import { ecotrackOrderStates, orderLineItems, orderStatusHistory } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
-import { getLiveWebsiteProductMetrics, type LiveWebsiteProductMetric } from '../stats';
+import {
+  getLiveWebsiteProductMetrics,
+  type LiveWebsiteProductMetric,
+} from '../stats-live-commerce';
 import {
   loadBasketPairs,
   loadCustomerEconomics,
@@ -101,10 +104,11 @@ export async function loadCatalogView(
     completion,
   ] = await Promise.all([
     getLiveWebsiteProductMetrics(
+      db,
       statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
     ),
     loadBasketPairs(db, catalogFilters),
-    loadSourceHealth(db, filters, economics),
+    loadSourceHealth(db, filters, economics, cutoffs.orders ?? undefined),
     loadOperationalProducts(db, catalogFilters, economics.settings.defaultReturnRate),
     previousAnalytics
       ? loadOperationalProducts(db, previousAnalytics, economics.settings.defaultReturnRate)

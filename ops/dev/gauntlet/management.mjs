@@ -523,7 +523,7 @@ export async function run(ctx) {
     async ({ page, context, expect, save }) => {
       await ctx.loginAdmin(page);
       const results = [];
-      for (const route of ['/api/stats/workspace?view=command', '/api/stats/overview?']) {
+      for (const route of ['/api/stats/workspace?view=command', '/api/stats/ai?surface=admin']) {
         const join = route.endsWith('?') ? '' : '&';
         for (const [startDate, endDate] of [
           ['2026-02-30', '2026-03-02'],

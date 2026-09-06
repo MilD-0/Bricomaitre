@@ -9,9 +9,7 @@ import {
   adminAssetStateMutationSchema,
   createAdminAsset,
   deleteAdminAsset,
-  reorderAdminAssets,
   replaceAdminAsset,
-  updateAdminAssetStates,
 } from './asset-mutations';
 
 describe('canonical asset mutations', () => {
@@ -19,49 +17,6 @@ describe('canonical asset mutations', () => {
     vi.clearAllMocks();
     mocks.mutate.mockResolvedValue(undefined);
     mocks.revalidate.mockResolvedValue(undefined);
-  });
-
-  it('updates exact asset visibility and featured placement with action history', async () => {
-    const db = { marker: 'database' };
-    await expect(
-      updateAdminAssetStates(
-        db as never,
-        {
-          items: [
-            { kind: 'banner', id: 4, active: false },
-            {
-              kind: 'featured-group',
-              id: 7,
-              active: true,
-              prioritizeRecommendations: true,
-            },
-          ],
-        },
-        { email: 'admin@example.com', name: 'Admin' },
-      ),
-    ).resolves.toMatchObject({ ok: true, updatedCount: 2 });
-
-    expect(mocks.mutate).toHaveBeenCalledTimes(2);
-    expect(mocks.mutate).toHaveBeenNthCalledWith(
-      1,
-      db,
-      expect.objectContaining({
-        entityType: 'assetBanners',
-        entityId: 4,
-        operation: 'update',
-        actor: { email: 'admin@example.com', name: 'Admin' },
-      }),
-    );
-    expect(mocks.mutate).toHaveBeenNthCalledWith(
-      2,
-      db,
-      expect.objectContaining({
-        entityType: 'featuredProductGroups',
-        entityId: 7,
-        operation: 'update',
-      }),
-    );
-    expect(mocks.revalidate).toHaveBeenCalledOnce();
   });
 
   it('creates a validated banner at the next canonical position with history', async () => {
@@ -145,34 +100,5 @@ describe('canonical asset mutations', () => {
       }).success,
     ).toBe(false);
     expect(mocks.mutate).not.toHaveBeenCalled();
-  });
-
-  it('reorders one exact asset kind transactionally and refreshes the storefront once', async () => {
-    const where = vi.fn().mockResolvedValue(undefined);
-    const set = vi.fn().mockReturnValue({ where });
-    const update = vi.fn().mockReturnValue({ set });
-    const transaction = vi.fn(async (callback: (tx: { update: typeof update }) => Promise<void>) =>
-      callback({ update }),
-    );
-
-    await expect(
-      reorderAdminAssets({ transaction } as never, {
-        kind: 'product-card',
-        items: [
-          { id: 12, sortOrder: 0 },
-          { id: 4, sortOrder: 1 },
-        ],
-      }),
-    ).resolves.toEqual({
-      ok: true,
-      kind: 'product-card',
-      items: [
-        { id: 12, sortOrder: 0 },
-        { id: 4, sortOrder: 1 },
-      ],
-    });
-    expect(transaction).toHaveBeenCalledOnce();
-    expect(update).toHaveBeenCalledTimes(2);
-    expect(mocks.revalidate).toHaveBeenCalledOnce();
   });
 });

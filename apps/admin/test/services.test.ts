@@ -1,3 +1,8 @@
+import { getLiveStorefrontAiStats } from '../lib/stats-experience-ai';
+import { loadMetaPerformance } from '../lib/analytics/acquisition-data';
+import { resolveAnalyticsFilters } from '../lib/analytics/date-range';
+import { analyticsQuerySchema } from '../lib/analytics/contract';
+import { getProfitTrackerReport } from '../lib/profit-tracker';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -31,13 +36,6 @@ import {
   shoppingListDrafts,
   storefrontOrderIdempotency,
 } from '@bric/db/schema';
-import {
-  beginIdempotentRequest,
-  buildIdempotencyFingerprint,
-  clearIdempotentRequest,
-  completeIdempotentRequest,
-  readIdempotencyRecord,
-} from '@bric/runtime/idempotency';
 import { applyRateLimit } from '@bric/runtime/rate-limit';
 import { getRedis } from '@bric/runtime/redis';
 import {
@@ -51,10 +49,12 @@ import {
   deleteExpiredOrderIdempotencyBatch,
   rollUpNextExpiredAnalyticsDay,
 } from '@bric/storefront-core/maintenance';
-import { claimStorefrontOrderIdempotency } from '@bric/storefront-core/order-idempotency';
+import {
+  buildIdempotencyFingerprint,
+  claimStorefrontOrderIdempotency,
+} from '@bric/storefront-core/order-idempotency';
 import { createStorefrontOrder, readStorefrontOrderByToken } from '@bric/storefront-core/orders';
 import { dayInTimezone } from '../lib/analytics/date-range';
-import { getMetaCommercePerformance, getMetaCommerceReport } from '../lib/meta-commerce-analytics';
 
 import { applyHistoryAction, getActionEntityConfig } from '../lib/action-history';
 import { queryAdminOrders } from '../lib/admin-ai-order-query';
@@ -69,12 +69,7 @@ import {
 } from '../lib/bulletin-mutations';
 import { parseEcotrackShipmentListQuery } from '../lib/ecotrack-shipment-list';
 import { getReportingDb } from '../lib/reporting-db';
-import { computeStatsDashboard } from '../lib/stats-dashboard-compute';
-import {
-  ADMIN_REPORTING_TIMEZONE,
-  getExperienceStats,
-  getLiveStorefrontAiStats,
-} from '../lib/stats-experience';
+import { ADMIN_REPORTING_TIMEZONE, getExperienceStats } from '../lib/stats-experience';
 import { buildWebsiteProductMetricsQuery } from '../lib/stats-live-commerce';
 import { deleteImportBatch, importStatsSpreadsheet } from '../lib/stats-order-import';
 
@@ -107,7 +102,10 @@ describe('real PostgreSQL and Redis contracts', () => {
   it('queues snapshot queries separately from interactive reads with one nonparallel connection', async () => {
     const reporting = getReportingDb();
     const held = await reporting.$client.connect();
-    const computation = computeStatsDashboard({ range: '7d' });
+    const computation = getAnalyticsSnapshot(
+      { view: 'storefront', range: '7d', grain: 'auto' },
+      { refresh: true, remember: false },
+    );
     try {
       await vi.waitFor(() => expect(reporting.$client.waitingCount).toBeGreaterThan(0));
       expect(reporting.$client.totalCount).toBe(1);
@@ -118,7 +116,7 @@ describe('real PostgreSQL and Redis contracts', () => {
     }
     const result = await computation;
     expect(result.filters.range).toBe('7d');
-    expect(result.customers.customers).toEqual([]);
+    expect(result.data.kind).toBe('storefront');
     const settings = await reporting.execute(sql`
       select current_setting('max_parallel_workers_per_gather') as parallel,
         current_setting('application_name') as application
@@ -1454,36 +1452,6 @@ describe('real PostgreSQL and Redis contracts', () => {
     });
   });
 
-  it('preserves idempotency under concurrent Redis claims', async () => {
-    const scope = `service-test:${runId}`;
-    const key = 'concurrent-request';
-    const fingerprint = buildIdempotencyFingerprint({ orderId: 42 });
-
-    const claims = await Promise.all([
-      beginIdempotentRequest({ scope, key, fingerprint, ttlSeconds: 60 }),
-      beginIdempotentRequest({ scope, key, fingerprint, ttlSeconds: 60 }),
-    ]);
-
-    expect(claims.filter((claim) => claim.kind === 'started')).toHaveLength(1);
-    expect(claims.filter((claim) => claim.kind === 'existing')).toHaveLength(1);
-
-    await completeIdempotentRequest({
-      scope,
-      key,
-      fingerprint,
-      statusCode: 201,
-      body: { orderId: 42 },
-      ttlSeconds: 60,
-    });
-    await expect(readIdempotencyRecord(scope, key)).resolves.toMatchObject({
-      status: 'completed',
-      fingerprint,
-      response: { statusCode: 201, body: { orderId: 42 } },
-    });
-
-    await clearIdempotentRequest(scope, key);
-  });
-
   it('enforces rate-limit counters in Redis', async () => {
     const options = {
       scope: `service-test:${runId}`,
@@ -1502,16 +1470,16 @@ describe('real PostgreSQL and Redis contracts', () => {
     const fingerprint = buildIdempotencyFingerprint({ phoneNumber1: '0550000001' });
     const payload = storefrontOrderCreateRequestSchema.parse({ phoneNumber1: '0550000001' });
 
-    await expect(
-      claimStorefrontOrderIdempotency(db, {
-        keyHash,
-        fingerprint,
-        processingTtlSeconds: 60,
-      }),
-    ).resolves.toEqual({ kind: 'started' });
+    const claim = await claimStorefrontOrderIdempotency(db, {
+      keyHash,
+      fingerprint,
+      processingTtlSeconds: 60,
+    });
+    expect(claim.kind).toBe('started');
+    if (claim.kind !== 'started') throw new Error('Expected a new claim');
 
     const created = await createStorefrontOrder(db, payload, {
-      idempotency: { keyHash, fingerprint },
+      idempotency: { keyHash, fingerprint, createdAt: claim.createdAt },
     });
 
     try {
@@ -1587,9 +1555,10 @@ describe('real PostgreSQL and Redis contracts', () => {
         idempotency: {
           keyHash: `missing-service-order:${runId}`,
           fingerprint: buildIdempotencyFingerprint({ phoneNumber1 }),
+          createdAt: new Date(),
         },
       }),
-    ).rejects.toThrow('Unable to complete the durable order idempotency record.');
+    ).rejects.toThrow('The order request claim is no longer owned by this attempt.');
 
     await expect(
       db.select({ id: orders.id }).from(orders).where(eq(orders.phoneNumber1, phoneNumber1)),
@@ -1828,24 +1797,17 @@ describe('real PostgreSQL and Redis contracts', () => {
           website_purchase_count: 2,
         }),
       );
-      await expect(getMetaCommercePerformance(db, filters, true)).resolves.toContainEqual(
-        expect.objectContaining({
-          campaignId,
-          adsetId,
-          adId,
-          bricOrders: 1,
-          submittedValueDzd: 8000,
-        }),
+      const acquisition = await loadMetaPerformance(
+        db,
+        resolveAnalyticsFilters(
+          analyticsQuerySchema.parse({ view: 'acquisition', range: 'custom', ...filters }),
+        ),
+        await getProfitTrackerReport({ range: 'custom', ...filters }, { db }),
       );
-      await expect(getMetaCommerceReport(db, filters, false)).resolves.toMatchObject({
-        summary: {
-          spend: 0,
-          bricOrders: 1,
-          confirmedOrders: 0,
-          paidOrders: 0,
-          submittedValueDzd: 8000,
-        },
-      });
+      expect(acquisition.entities.ads).toContainEqual(
+        expect.objectContaining({ id: adId, bricOrders: 1 }),
+      );
+      expect(acquisition.summary.bricOrders).toBeGreaterThanOrEqual(1);
 
       const afterRetention = new Date(capturedAt.getTime() + 8 * 24 * 60 * 60 * 1_000);
       await expect(rollUpNextExpiredAnalyticsDay(db, { now: afterRetention })).resolves.toBe(

@@ -11,7 +11,7 @@ import {
   listAdSpendImportBatches,
   upsertAdCostEntry,
 } from '../../../../lib/stats-ad-costs';
-import { statsQuerySchema } from '../../../../lib/stats';
+import { statsQuerySchema } from '../../../../lib/stats-contract';
 import { requireAnalyticsAccess } from '../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 

@@ -4,8 +4,6 @@ import { z } from 'zod';
 import { hasDb } from '@bric/db/client';
 import { auth } from '../../../lib/auth';
 import { ADMIN_STATS_IMPORT_QUEUE, getLatestExportJob } from '../../../lib/background-jobs';
-import { getStatsDashboard, refreshStatsDashboard, statsQuerySchema } from '../../../lib/stats';
-import { getAnalyticsSectionData, type AnalyticsSection } from '../../../lib/stats-sections';
 import {
   deleteImportBatch,
   dismissUnmatchedReference,
@@ -16,26 +14,10 @@ import { requireAnalyticsAccess } from '../../../lib/rbac';
 import { CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
 import { triggerAdminReportingRefresh } from '../../../lib/reporting-refresh-trigger';
 
-function getRequesterKey(email: string | null | undefined) {
-  return email?.trim() || 'ops';
-}
-
 const importHistoryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(50).default(IMPORT_HISTORY_PAGE_SIZE),
 });
-const analyticsSections = new Set<AnalyticsSection>([
-  'overview',
-  'website',
-  'landingPages',
-  'aiAssistants',
-  'customers',
-  'products',
-  'geography',
-  'time',
-  'metaAds',
-]);
-
 export async function GET(request: NextRequest) {
   const denied = await requireAnalyticsAccess();
 
@@ -70,64 +52,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       job: await getLatestExportJob(
         ADMIN_STATS_IMPORT_QUEUE,
-        getRequesterKey(session?.user?.email),
+        session?.user?.email?.trim() || 'ops',
       ),
     });
   }
 
-  const parsed = statsQuerySchema.safeParse({
-    range: request.nextUrl.searchParams.get('range') ?? undefined,
-    startDate: request.nextUrl.searchParams.get('startDate') ?? undefined,
-    endDate: request.nextUrl.searchParams.get('endDate') ?? undefined,
-  });
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const section = request.nextUrl.searchParams.get('section') as AnalyticsSection | null;
-  return NextResponse.json({
-    data:
-      section && analyticsSections.has(section)
-        ? await getAnalyticsSectionData(section, parsed.data)
-        : await getStatsDashboard(parsed.data),
-  });
-}
-
-export async function PUT(request: NextRequest) {
-  const denied = await requireAnalyticsAccess();
-
-  if (denied) {
-    return denied;
-  }
-
-  if (!hasDb()) {
-    return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
-  }
-
-  const body = await request.json().catch(() => null);
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-    return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
-  }
-
-  const parsed = statsQuerySchema.safeParse({
-    range: 'range' in body ? body.range : undefined,
-    startDate: 'startDate' in body ? body.startDate : undefined,
-    endDate: 'endDate' in body ? body.endDate : undefined,
-  });
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const section = typeof body.section === 'string' ? (body.section as AnalyticsSection) : null;
-  const data =
-    section && analyticsSections.has(section)
-      ? await getAnalyticsSectionData(section, parsed.data, true)
-      : await refreshStatsDashboard(parsed.data, 'manual-refresh');
-  revalidateServerTags(CACHE_TAGS.stats, CACHE_TAGS.statsHistory);
-
-  return NextResponse.json({ data });
+  return NextResponse.json(
+    { error: 'Use /api/stats/workspace for analytics reports.' },
+    { status: 410 },
+  );
 }
 
 export async function DELETE(request: NextRequest) {

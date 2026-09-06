@@ -90,6 +90,7 @@ export type AdCostsImportPayload = QueueJobMeta &
 export type ReportingRefreshPayload = QueueJobMeta &
   AiTaskContext & {
     trigger: string;
+    revision?: number;
     sourceImportBatchId?: string | null;
   };
 export type EcotrackSyncPayload = QueueJobMeta &

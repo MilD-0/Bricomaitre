@@ -1,6 +1,6 @@
-import { and, inArray, sql } from 'drizzle-orm';
+import { and, sql } from 'drizzle-orm';
 
-import { getDb } from '@bric/db/client';
+import type { getDb } from '@bric/db/client';
 import {
   analyticsAcquisitionDailyRollups,
   analyticsDailyRollups,
@@ -9,19 +9,12 @@ import {
   categories,
   orderLineItems,
   orders,
-  processedOrders,
   products,
 } from '@bric/db/schema';
-import { ADMIN_REPORTING_TIMEZONE, CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience';
+import { ADMIN_REPORTING_TIMEZONE } from './stats-experience';
 import { numberOrZero, round, toDateInput } from './stats-values';
-import {
-  statsQuerySchema,
-  type StatsDashboardData,
-  type StatsFilters,
-  type TrendPoint,
-} from './stats-contract';
+import { type WebsiteAnalyticsData, type StatsFilters } from './stats-contract';
 
-export const statsDateExpression = sql`coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})`;
 export function buildResolvedFilters(input: StatsFilters): Required<StatsFilters> {
   const today = new Date();
   const endDate = toDateInput(today);
@@ -58,8 +51,8 @@ export function buildResolvedFilters(input: StatsFilters): Required<StatsFilters
   if (input.range === 'all') {
     return {
       range: input.range,
-      startDate: '',
-      endDate: '',
+      startDate: input.startDate ?? '',
+      endDate: input.endDate ?? '',
     };
   }
 
@@ -76,20 +69,6 @@ export function buildResolvedFilters(input: StatsFilters): Required<StatsFilters
     startDate,
     endDate,
   };
-}
-
-export function buildStatsWhere(filters: Required<StatsFilters>) {
-  const conditions = [sql`${statsDateExpression} is not null`];
-
-  if (filters.startDate) {
-    conditions.push(sql`${statsDateExpression}::date >= ${filters.startDate}`);
-  }
-
-  if (filters.endDate) {
-    conditions.push(sql`${statsDateExpression}::date <= ${filters.endDate}`);
-  }
-
-  return and(...conditions);
 }
 
 export function buildAnalyticsWhere(filters: StatsFilters | Required<StatsFilters>) {
@@ -173,9 +152,13 @@ export function buildCanonicalStorefrontSessionsQuery(filters: Required<StatsFil
   `;
 }
 
-export async function getCanonicalStorefrontSessionCount(input: StatsFilters) {
-  const filters = buildResolvedFilters(statsQuerySchema.parse(input));
-  const result = await getDb().execute(buildCanonicalStorefrontSessionsQuery(filters));
+export async function getCanonicalStorefrontSessionCount(
+  db: ReturnType<typeof getDb>,
+  input: StatsFilters,
+) {
+  if (input.startDate && input.endDate && input.startDate > input.endDate) return 0;
+  const filters = buildResolvedFilters(input);
+  const result = await db.execute(buildCanonicalStorefrontSessionsQuery(filters));
   return numberOrZero((result.rows[0] as Record<string, unknown> | undefined)?.sessions);
 }
 
@@ -194,18 +177,6 @@ function buildLiveOrderWhere(filters: Required<StatsFilters>) {
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
-export function buildLiveOrderSummaryQuery(filters: Required<StatsFilters>) {
-  const where = buildLiveOrderWhere(filters);
-  return sql`
-    select count(*)::int as total_orders,
-      count(*) filter (
-        where ${inArray(orders.inHouseStatus, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES])}
-      )::int as successful_orders
-    from ${orders}
-    where ${where ?? sql`true`}
-  `;
-}
-
 export function buildLiveOrderTrendQuery(filters: Required<StatsFilters>) {
   const where = buildLiveOrderWhere(filters);
   return sql`
@@ -214,50 +185,17 @@ export function buildLiveOrderTrendQuery(filters: Required<StatsFilters>) {
       from ${orders}
       where ${where ?? sql`true`}
     )
-    select 'daily' as grain,
-      to_char(date_trunc('day', local_created_at), 'YYYY-MM-DD') as bucket,
+    select to_char(local_created_at::date, 'YYYY-MM-DD') as bucket,
       count(*)::int as orders
-    from filtered_orders group by 1, 2
-    union all
-    select 'weekly' as grain,
-      to_char(date_trunc('week', local_created_at), 'YYYY-MM-DD') as bucket,
-      count(*)::int as orders
-    from filtered_orders group by 1, 2
-    union all
-    select 'monthly' as grain,
-      to_char(date_trunc('month', local_created_at), 'YYYY-MM') as bucket,
-      count(*)::int as orders
-    from filtered_orders group by 1, 2
-    order by 1, 2
+    from filtered_orders group by 1 order by 1
   `;
 }
 
-export function mergeLiveOrderTrend(
-  financial: TrendPoint[],
-  live: Array<{ bucket: string; orders: number }>,
-) {
-  const merged = new Map(financial.map((point) => [point.bucket, { ...point, orders: 0 }]));
-
-  for (const point of live) {
-    merged.set(point.bucket, {
-      ...(merged.get(point.bucket) ?? {
-        bucket: point.bucket,
-        revenue: 0,
-        profit: 0,
-        fees: 0,
-      }),
-      orders: point.orders,
-    });
-  }
-
-  return [...merged.values()].sort((left, right) => left.bucket.localeCompare(right.bucket));
-}
-
 export function mergeCanonicalWebsitePurchases(
-  website: StatsDashboardData['website'],
+  website: WebsiteAnalyticsData,
   purchases: number,
   dailyOrders?: Array<{ bucket: string; orders: number }>,
-): StatsDashboardData['website'] {
+): WebsiteAnalyticsData {
   const funnel = [
     ...website.funnel.filter((item) => item.name !== 'Purchases'),
     ...(purchases > 0 ? [{ name: 'Purchases', value: purchases }] : []),
@@ -432,10 +370,12 @@ export type LiveWebsiteProductMetric = {
 };
 
 export async function getLiveWebsiteProductMetrics(
+  db: ReturnType<typeof getDb>,
   input: StatsFilters,
 ): Promise<LiveWebsiteProductMetric[]> {
-  const filters = buildResolvedFilters(statsQuerySchema.parse(input));
-  const result = await getDb().execute(buildWebsiteProductMetricsQuery(filters));
+  if (input.startDate && input.endDate && input.startDate > input.endDate) return [];
+  const filters = buildResolvedFilters(input);
+  const result = await db.execute(buildWebsiteProductMetricsQuery(filters));
 
   return (result.rows as Array<Record<string, unknown>>).map((row): LiveWebsiteProductMetric => ({
     id: numberOrZero(row.id),

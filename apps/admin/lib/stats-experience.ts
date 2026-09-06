@@ -29,24 +29,15 @@ import {
   type ExperienceStatsFilters,
 } from './stats-experience-shared';
 
-export {
-  estimateAdminAiModelCost,
-  getAiUsagePricing,
-  getLiveAdminAiStats,
-  getLiveStorefrontAiStats,
-} from './stats-experience-ai';
+export { estimateAdminAiModelCost, getAiUsagePricing } from './stats-experience-ai';
 export {
   ADMIN_REPORTING_TIMEZONE,
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   emptyExperienceStats,
 } from './stats-experience-shared';
 export type {
-  AiAssistantStats,
-  CustomerStats,
   ExperienceStats,
   ExperienceStatsFilters,
-  LandingPageStats,
-  MetaPaidAttributionStats,
   WebsiteExperienceStats,
 } from './stats-experience-shared';
 

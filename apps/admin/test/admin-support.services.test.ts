@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, expect, it, vi } from 'vitest';
 import { getDb, getPool } from '@bric/db/client';
-import { actionLogs, assetBanners } from '@bric/db/schema';
+import { actionLogs, assetBanners, featuredProductGroups } from '@bric/db/schema';
 import { ActionHistoryEntityNotFoundError } from '../lib/action-history';
 import { deleteAdminAsset, updateAdminAssetStates } from '../lib/asset-mutations';
 import { revalidateStorefrontAssets } from '../lib/storefront-revalidate';
@@ -33,6 +33,10 @@ it('rolls back a mixed existing/missing asset batch and records no nonexistent d
     })
     .returning();
   await db.delete(assetBanners).where(eq(assetBanners.id, removed!.id));
+  const [group] = await db
+    .insert(featuredProductGroups)
+    .values({ name: randomUUID(), active: false })
+    .returning();
   try {
     await expect(
       updateAdminAssetStates(db, {
@@ -61,7 +65,47 @@ it('rolls back a mixed existing/missing asset batch and records no nonexistent d
         .where(and(eq(actionLogs.entityType, 'assetBanners'), eq(actionLogs.entityId, missingId))),
     ).toHaveLength(0);
     expect(revalidateStorefrontAssets).not.toHaveBeenCalled();
+    await expect(
+      updateAdminAssetStates(db, {
+        items: [
+          { kind: 'banner', id: banner!.id, active: false },
+          { kind: 'featured-group', id: group!.id, active: true, prioritizeRecommendations: true },
+        ],
+      }),
+    ).resolves.toMatchObject({ ok: true, updatedCount: 2 });
+    expect(
+      (await db.query.assetBanners.findFirst({ where: eq(assetBanners.id, banner!.id) }))?.active,
+    ).toBe(false);
+    expect(
+      await db.query.featuredProductGroups.findFirst({
+        where: eq(featuredProductGroups.id, group!.id),
+      }),
+    ).toMatchObject({ active: true, prioritizeRecommendations: true });
+    expect(
+      await db
+        .select()
+        .from(actionLogs)
+        .where(and(eq(actionLogs.entityType, 'assetBanners'), eq(actionLogs.entityId, banner!.id))),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(actionLogs)
+        .where(
+          and(
+            eq(actionLogs.entityType, 'featuredProductGroups'),
+            eq(actionLogs.entityId, group!.id),
+          ),
+        ),
+    ).toHaveLength(1);
+    expect(revalidateStorefrontAssets).toHaveBeenCalledOnce();
   } finally {
+    await db
+      .delete(actionLogs)
+      .where(
+        and(eq(actionLogs.entityType, 'featuredProductGroups'), eq(actionLogs.entityId, group!.id)),
+      );
+    await db.delete(featuredProductGroups).where(eq(featuredProductGroups.id, group!.id));
     await db
       .delete(actionLogs)
       .where(and(eq(actionLogs.entityType, 'assetBanners'), eq(actionLogs.entityId, banner!.id)));
