@@ -1,6 +1,7 @@
 import type { getDb } from '@bric/db/client';
 import { type StatsFilters } from './stats-contract';
-import { emptyExperienceStats, getExperienceStats } from './stats-experience';
+import { getStorefrontExperienceStats } from './stats-experience';
+import { emptyExperienceStats } from './stats-experience-shared';
 import {
   buildAnalyticsRollupWhere,
   buildAnalyticsWhere,
@@ -22,12 +23,12 @@ export async function getLiveStorefrontAnalytics(
   const includeExperience = options.includeExperience !== false;
   const [websiteData, experience, orderTrend]: [
     Awaited<ReturnType<typeof getWebsiteAnalyticsData>>,
-    Awaited<ReturnType<typeof getExperienceStats>>,
+    Awaited<ReturnType<typeof getStorefrontExperienceStats>>,
     { rows: unknown[] },
   ] = await Promise.all([
-    getWebsiteAnalyticsData(db, analyticsWhere, rollupWhere, filters, false, 'sessions'),
+    getWebsiteAnalyticsData(db, analyticsWhere, rollupWhere, filters),
     includeExperience
-      ? getExperienceStats(db, filters, { scope: 'storefront' })
+      ? getStorefrontExperienceStats(db, filters)
       : Promise.resolve(emptyExperienceStats()),
     db.execute(buildLiveOrderTrendQuery(filters)),
   ]);
@@ -35,7 +36,7 @@ export async function getLiveStorefrontAnalytics(
     bucket: row.bucket,
     orders: numberOrZero(row.orders),
   }));
-  const summary = websiteData.websiteSummaryRows[0];
+  const summary = websiteData.summary;
   const website = mergeCanonicalWebsitePurchases(
     {
       sessions: summary?.sessions ?? 0,
@@ -53,25 +54,13 @@ export async function getLiveStorefrontAnalytics(
         : 0,
       cartToPurchaseRate: 0,
       checkoutToPurchaseRate: 0,
-      topSearches: websiteData.websiteSearchRows.map((row) => ({
+      topSearches: websiteData.searches.map((row) => ({
         term: row.term,
         searches: row.searches,
         zeroResults: row.zeroResults,
       })),
       funnel: [],
-      topProducts: websiteData.websiteTopProductRows.map((row) => ({
-        id: String(row.id),
-        title: row.title,
-        sku: row.sku,
-        categoryName: row.categoryName,
-        brandName: row.brandName,
-        viewCount: row.viewCount,
-        addToCartCount: row.addToCartCount,
-        checkoutCount: row.checkoutCount,
-        websitePurchaseCount: row.websitePurchaseCount,
-        popularityScore: round(numberOrZero(row.popularityScore)),
-        websiteConversionRate: round(numberOrZero(row.websiteConversionRate) * 100),
-      })),
+      topProducts: [],
       ...experience.website,
     },
     dailyOrders.reduce((total, day) => total + day.orders, 0),

@@ -69,7 +69,8 @@ import {
 } from '../lib/bulletin-mutations';
 import { parseEcotrackShipmentListQuery } from '../lib/ecotrack-shipment-list';
 import { getReportingDb } from '../lib/reporting-db';
-import { ADMIN_REPORTING_TIMEZONE, getExperienceStats } from '../lib/stats-experience';
+import { getStorefrontExperienceStats } from '../lib/stats-experience';
+import { ADMIN_REPORTING_TIMEZONE } from '../lib/stats-experience-shared';
 import { buildWebsiteProductMetricsQuery } from '../lib/stats-live-commerce';
 import { deleteImportBatch, importStatsSpreadsheet } from '../lib/stats-order-import';
 
@@ -1771,17 +1772,11 @@ describe('real PostgreSQL and Redis contracts', () => {
         opens: 1,
         messages: 1,
         resultClicks: 1,
-        runs: 2,
-        completed: 1,
-        cancelled: 1,
-        successRate: 100,
-        helpful: 1,
-        notHelpful: 0,
-        helpfulRate: 100,
         influencedOrders: 1,
-        recommendedProductOrders: 1,
+        confirmedOrders: 0,
+        paidOrders: 0,
       });
-      const experience = await getExperienceStats(db, filters);
+      const experience = await getStorefrontExperienceStats(db, filters);
       expect(experience.website.acquisitionSources).toContainEqual(
         expect.objectContaining({ name: 'meta_paid', sessions: 1, orders: 1 }),
       );
@@ -1832,17 +1827,11 @@ describe('real PostgreSQL and Redis contracts', () => {
         opens: 1,
         messages: 1,
         resultClicks: 1,
-        runs: 2,
-        completed: 1,
-        cancelled: 1,
-        successRate: 100,
-        helpful: 1,
-        notHelpful: 0,
-        helpfulRate: 100,
         influencedOrders: 1,
-        recommendedProductOrders: 1,
+        confirmedOrders: 0,
+        paidOrders: 0,
       });
-      const retainedExperience = await getExperienceStats(db, filters);
+      const retainedExperience = await getStorefrontExperienceStats(db, filters);
       expect(retainedExperience.website.acquisitionSources).toContainEqual(
         expect.objectContaining({ name: 'meta_paid', sessions: 1, orders: 1 }),
       );
@@ -1854,9 +1843,7 @@ describe('real PostgreSQL and Redis contracts', () => {
     }
   });
 
-  it('keeps captured customer totals and literal historical product search semantics', async () => {
-    const { buildCustomerSummaryQuery, buildCustomerProductQuery } =
-      await import('../lib/stats-experience');
+  it('keeps literal historical product search semantics', async () => {
     const { orderProductSearchCondition } = await import('../lib/order-product-search');
     const rollback = new Error('reporting fixture rollback');
     await expect(
@@ -1923,17 +1910,6 @@ describe('real PostgreSQL and Redis contracts', () => {
           quantity: 1,
           lineTotal: '600',
         });
-        const filters = { startDate: '2097-06-17', endDate: '2097-06-17' };
-        const summary = await tx.execute(buildCustomerSummaryQuery(filters));
-        expect(summary.rows).toEqual([
-          expect.objectContaining({ phone, orders: 2, total_value: 2000 }),
-        ]);
-        const details = await tx.execute(buildCustomerProductQuery(filters, [phone]));
-        expect(details.rows).toEqual([
-          expect.objectContaining({ phone, product: 'Renamed product', count: 3 }),
-        ]);
-        const absent = await tx.execute(buildCustomerProductQuery(filters, ['0559999999']));
-        expect(absent.rows).toEqual([]);
         const matched = await tx
           .select({ id: orders.id })
           .from(orders)

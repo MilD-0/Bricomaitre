@@ -5,8 +5,6 @@ import {
   analyticsAcquisitionDailyRollups,
   analyticsDailyRollups,
   analyticsEvents,
-  analyticsPaidClickDailyRollups,
-  analyticsPaidClickVisits,
   analyticsSessions,
   landingPages,
   orderAcquisitionAttribution,
@@ -14,11 +12,10 @@ import {
   products,
 } from '@bric/db/schema';
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
-import { getLiveAdminAiStats, getLiveStorefrontAiStats } from './stats-experience-ai';
+import { getLiveStorefrontAiStats } from './stats-experience-ai';
 import {
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   dateCondition,
-  emptyExperienceStats,
   inclusiveDateDays,
   isoValue,
   numberValue,
@@ -29,21 +26,9 @@ import {
   type ExperienceStatsFilters,
 } from './stats-experience-shared';
 
-export { estimateAdminAiModelCost, getAiUsagePricing } from './stats-experience-ai';
-export {
-  ADMIN_REPORTING_TIMEZONE,
-  CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
-  emptyExperienceStats,
-} from './stats-experience-shared';
-export type {
-  ExperienceStats,
-  ExperienceStatsFilters,
-  WebsiteExperienceStats,
-} from './stats-experience-shared';
-
 type Database = ReturnType<typeof getDb>;
 
-export function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters) {
+function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters) {
   const storefrontAnalyticsWhere = and(
     dateCondition(analyticsEvents.occurredAt, filters),
     sql`${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`,
@@ -94,129 +79,19 @@ export function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters
   `;
 }
 
-function customerProductReferences() {
-  // Resolve reference precedence once for the catalog, rather than scanning it
-  // for every cart unit with an OR join.
-  return sql`product_references as materialized (
-    select distinct on (reference) reference, title, unit_price
-    from (
-      select ${products.id}::text as reference, ${products.title} as title,
-        ${products.price}::double precision as unit_price, 0 as priority from ${products}
-      union all
-      select ${products.mongoId}, ${products.title}, ${products.price}::double precision, 1
-        from ${products} where ${products.mongoId} is not null
-      union all
-      select ${products.slug}, ${products.title}, ${products.price}::double precision, 2
-        from ${products} where ${products.slug} is not null
-    ) references_by_kind
-    order by reference, priority
-  )`;
-}
-
-export function buildCustomerProductQuery(filters: ExperienceStatsFilters, phones?: string[]) {
-  const orderWhere = and(
-    dateCondition(orders.createdAt, filters),
-    inArray(orders.inHouseStatus, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES]),
-    phones === undefined
-      ? undefined
-      : inArray(sql`regexp_replace(${orders.phoneNumber1}, '[^0-9]+', '', 'g')`, phones),
-  );
-
-  return sql`
-    with ${customerProductReferences()}
-    select regexp_replace(${orders.phoneNumber1}, '[^0-9]+', '', 'g') as phone,
-      coalesce(product_references.title, product_ref) as product, count(*)::int as count
-    from ${orders}
-    cross join lateral unnest(${orders.cartProducts}) product_ref
-    left join product_references on product_references.reference = trim(product_ref)
-    where ${orderWhere ?? sql`true`}
-    group by 1, 2 order by 1, 3 desc
-  `;
-}
-
-export function buildCustomerSummaryQuery(filters: ExperienceStatsFilters) {
-  const orderWhere = and(
-    dateCondition(orders.createdAt, filters),
-    inArray(orders.inHouseStatus, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES]),
-  );
-
-  return sql`
-    with ${customerProductReferences()}, legacy_cart_values as (
-      select ${orders.id} as order_id,
-        coalesce(sum(product_references.unit_price), 0)::double precision as derived_subtotal
-      from ${orders}
-      cross join lateral unnest(${orders.cartProducts}) product_ref
-      left join product_references on product_references.reference = trim(product_ref)
-      where ${orderWhere ?? sql`true`}
-        and ${orders.price} is null and ${orders.productSubtotal} is null
-        and ${orders.totalAmount} is null
-      group by ${orders.id}
-    ), order_values as (
-      select regexp_replace(${orders.phoneNumber1}, '[^0-9]+', '', 'g') as phone,
-        nullif(trim(concat_ws(' ', ${orders.firstName}, ${orders.lastName})), '') as customer_name,
-        ${orders.city} as city, ${orders.inHouseStatus} as confirmed,
-        coalesce(
-          ${orders.price}::double precision + coalesce(${orders.deliveryFee}::double precision, 0),
-          ${orders.totalAmount}::double precision,
-          coalesce(${orders.productSubtotal}::double precision, cart.derived_subtotal, 0)
-            + coalesce(${orders.deliveryFee}::double precision, 0)
-        ) as value,
-        ${orders.createdAt} as created_at
-      from ${orders}
-      left join legacy_cart_values cart on cart.order_id = ${orders.id}
-      where ${orderWhere ?? sql`true`}
-    ), ranked as (
-      select phone, max(customer_name) as customer_name, max(city) as city,
-        count(*)::int as orders,
-        count(*)::int as confirmed_orders,
-        coalesce(sum(value), 0)::double precision as total_value,
-        coalesce(avg(value), 0)::double precision as average_order_value,
-        min(created_at) as first_order_at, max(created_at) as last_order_at
-      from order_values where phone <> '' group by phone
-    )
-    select *, count(*) over()::int as customer_count,
-      coalesce(sum(orders) over(), 0)::int as successful_orders,
-      count(*) filter (where orders > 1) over()::int as repeat_customers,
-      count(*) filter (where confirmed_orders > 0) over()::int as confirmed_customers,
-      coalesce(avg(orders) over(), 0)::double precision as average_orders,
-      coalesce(avg(average_order_value) over(), 0)::double precision as overall_average_order_value
-    from ranked order by confirmed_orders desc, orders desc, total_value desc limit 100
-  `;
-}
-
 function asRows(result: unknown) {
   const candidate = result as { rows?: unknown[] } | undefined;
   return Array.isArray(candidate?.rows) ? (candidate.rows as Record<string, unknown>[]) : [];
 }
 
-export async function getExperienceStats(
+export async function getStorefrontExperienceStats(
   db: Database,
   filters: ExperienceStatsFilters,
-  options: { scope?: 'all' | 'storefront' } = {},
 ): Promise<ExperienceStats> {
-  const includeExtendedSurfaces = options.scope !== 'storefront';
-  const includeRawSessionStats = includeExtendedSurfaces || inclusiveDateDays(filters) <= 7;
-  const empty = emptyExperienceStats();
-  const customerSummaryPromise: Promise<unknown> = includeExtendedSurfaces
-    ? Promise.resolve(db.execute(buildCustomerSummaryQuery(filters)))
-    : Promise.resolve({ rows: [] });
-  const customerProductsPromise = customerSummaryPromise.then(
-    async (result): Promise<{ rows: unknown[] }> => {
-      const phones = asRows(result)
-        .map((row) => String(row.phone ?? ''))
-        .filter(Boolean);
-      // Only the displayed customer cohort consumes product details.
-      if (phones.length === 0) return { rows: [] };
-      return await db.execute(buildCustomerProductQuery(filters, phones));
-    },
-  );
+  const includeRawSessionStats = inclusiveDateDays(filters) <= 7;
   const websiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, filters);
   const rawWebsiteFilters = resolveRawWebsiteFilters(filters);
   const rawWebsiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, rawWebsiteFilters);
-  const storefrontAnalyticsWhere = and(
-    websiteAnalyticsWhere,
-    sql`${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`,
-  );
   const websiteRollupWhere = dateCondition(analyticsDailyRollups.day, filters);
   const acquisitionSessionWhere = dateCondition(analyticsSessions.startedAt, filters);
   const acquisitionRollupWhere = dateCondition(analyticsAcquisitionDailyRollups.day, filters);
@@ -230,7 +105,7 @@ export async function getExperienceStats(
     )`,
   );
   const unrolledWebsiteAnalyticsWhere = and(
-    includeExtendedSurfaces ? websiteAnalyticsWhere : rawWebsiteAnalyticsWhere,
+    rawWebsiteAnalyticsWhere,
     sql`not exists (
     select 1 from ${analyticsDailyRollups} rollup
     where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
@@ -238,19 +113,7 @@ export async function getExperienceStats(
       and rollup.dimension_key = ''
   )`,
   );
-  const paidWhere = dateCondition(analyticsPaidClickVisits.firstSeenAt, filters);
-  const paidRollupWhere = dateCondition(analyticsPaidClickDailyRollups.day, filters);
-  const unrolledPaidWhere = and(
-    paidWhere,
-    sql`not exists (
-    select 1 from ${analyticsPaidClickDailyRollups} rollup
-    where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date
-  )`,
-  );
   const [
-    pageTypeRows,
-    localeRows,
-    deviceRows,
     vitalRows,
     acquisitionSessionRows,
     acquisitionRollupRows,
@@ -261,54 +124,8 @@ export async function getExperienceStats(
     engagementResult,
     landingInventoryRows,
     landingPerformanceRows,
-    landingBlockRows,
-    adminAi,
     storefrontAi,
-    customerResult,
-    customerProductResult,
-    paidResult,
-    paidRollupRows,
-    paidCampaignRows,
   ] = await Promise.all([
-    includeExtendedSurfaces
-      ? db
-          .select({
-            name: sql<string>`coalesce(nullif(${analyticsEvents.pageType}, ''), 'unknown')`,
-            sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
-            pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
-            interactions: sql<number>`count(*) filter (where ${analyticsEvents.eventName} not in ('page_view', 'session_start', 'web_vital'))::int`,
-          })
-          .from(analyticsEvents)
-          .where(websiteAnalyticsWhere)
-          .groupBy(sql`1`)
-          .orderBy(sql`2 desc`)
-          .limit(12)
-      : Promise.resolve([]),
-    includeExtendedSurfaces
-      ? db
-          .select({
-            name: sql<string>`coalesce(nullif(${analyticsEvents.locale}, ''), 'unknown')`,
-            sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
-            pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
-            purchases: sql<number>`count(distinct coalesce(${analyticsEvents.orderId}::text, ${analyticsEvents.eventId})) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
-          })
-          .from(analyticsEvents)
-          .where(websiteAnalyticsWhere)
-          .groupBy(sql`1`)
-          .orderBy(sql`2 desc`)
-      : Promise.resolve([]),
-    includeExtendedSurfaces
-      ? db
-          .select({
-            name: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'viewportClass', ''), 'unknown')`,
-            sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
-            pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
-          })
-          .from(analyticsEvents)
-          .where(websiteAnalyticsWhere)
-          .groupBy(sql`1`)
-          .orderBy(sql`2 desc`)
-      : Promise.resolve([]),
     db
       .select({
         name: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'metricName', ''), 'unknown')`,
@@ -408,60 +225,7 @@ export async function getExperienceStats(
       })
       .from(landingPages),
     db.execute(buildLandingPagePerformanceQuery(filters)),
-    includeExtendedSurfaces
-      ? db.execute(sql`
-      select coalesce(nullif(metadata->>'landingBlockId', ''), 'page') as name,
-        count(*)::int as interactions,
-        count(*) filter (where event_name = 'add_to_cart')::int as add_to_carts,
-        count(*) filter (where event_name in ('begin_checkout', 'checkout_submit_attempt'))::int as checkouts
-      from ${analyticsEvents}
-      where ${storefrontAnalyticsWhere ?? sql`true`}
-        and metadata->>'landingPageId' ~ '^[0-9]+$'
-        and event_name not in ('page_view', 'web_vital')
-      group by 1 order by 2 desc limit 12
-    `)
-      : Promise.resolve({ rows: [] }),
-    includeExtendedSurfaces
-      ? getLiveAdminAiStats(db, filters)
-      : Promise.resolve(empty.aiAssistants.admin),
     getLiveStorefrontAiStats(db, filters),
-    customerSummaryPromise,
-    customerProductsPromise,
-    includeExtendedSurfaces
-      ? db.execute(sql`
-      select count(*)::int as visits,
-        count(*) filter (where order_id is not null)::int as created_orders,
-        count(*) filter (where purchase_count > 0)::int as purchases,
-        count(*) filter (where order_id is null and purchase_count = 0 and event_count <= 1)::int as landed_only
-      from ${analyticsPaidClickVisits}
-      where ${unrolledPaidWhere ?? sql`true`}
-    `)
-      : Promise.resolve({ rows: [] }),
-    includeExtendedSurfaces
-      ? db
-          .select({
-            visits: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.visits}), 0)::int`,
-            createdOrders: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.createdOrder} + ${analyticsPaidClickDailyRollups.purchased}), 0)::int`,
-            purchases: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.purchased}), 0)::int`,
-            landedOnly: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.landedOnly}), 0)::int`,
-          })
-          .from(analyticsPaidClickDailyRollups)
-          .where(paidRollupWhere)
-      : Promise.resolve([]),
-    includeExtendedSurfaces
-      ? db
-          .select({
-            name: sql<string>`coalesce(nullif(${analyticsPaidClickVisits.utmCampaign}, ''), 'Unattributed Meta')`,
-            visits: sql<number>`count(*)::int`,
-            orders: sql<number>`count(*) filter (where ${analyticsPaidClickVisits.orderId} is not null)::int`,
-            purchases: sql<number>`count(*) filter (where ${analyticsPaidClickVisits.purchaseCount} > 0)::int`,
-          })
-          .from(analyticsPaidClickVisits)
-          .where(unrolledPaidWhere)
-          .groupBy(sql`1`)
-          .orderBy(sql`2 desc`)
-          .limit(10)
-      : Promise.resolve([]),
   ]);
 
   const engagement = asRows(engagementResult)[0] ?? {};
@@ -527,31 +291,6 @@ export async function getExperienceStats(
     { sessions: 0, productViews: 0, addToCarts: 0, checkoutStarts: 0, purchases: 0, revenue: 0 },
   );
 
-  const customerRows = asRows(customerResult);
-  const firstCustomer = customerRows[0] ?? {};
-  const productsByPhone = new Map<string, Array<{ name: string; count: number }>>();
-  for (const row of asRows(customerProductResult)) {
-    const phone = String(row.phone ?? '');
-    const items = productsByPhone.get(phone) ?? [];
-    if (items.length < 5)
-      items.push({ name: String(row.product ?? ''), count: numberValue(row.count) });
-    productsByPhone.set(phone, items);
-  }
-  const customerCount = numberValue(firstCustomer.customer_count);
-  const repeatCustomers = numberValue(firstCustomer.repeat_customers);
-
-  const paid = asRows(paidResult)[0] ?? {};
-  const paidRollup = paidRollupRows[0] ?? {
-    visits: 0,
-    createdOrders: 0,
-    purchases: 0,
-    landedOnly: 0,
-  };
-  const paidVisits = numberValue(paid.visits) + numberValue(paidRollup.visits);
-  const paidCreatedOrders =
-    numberValue(paid.created_orders) + numberValue(paidRollup.createdOrders);
-  const paidPurchases = numberValue(paid.purchases) + numberValue(paidRollup.purchases);
-  const paidLandedOnly = numberValue(paid.landed_only) + numberValue(paidRollup.landedOnly);
   const acquisitionSources = new Map<
     string,
     { name: string; sessions: number; orders: number; successfulOrders: number }
@@ -592,39 +331,6 @@ export async function getExperienceStats(
       returningJourneys: numberValue(engagement.returning_journeys),
       errorEvents,
       errorRate: totalSessions ? round((errorSessions / totalSessions) * 100) : 0,
-      pageTypes: (
-        pageTypeRows as Array<{
-          name: string;
-          sessions: unknown;
-          pageViews: unknown;
-          interactions: unknown;
-        }>
-      ).map((row) => ({
-        name: row.name,
-        sessions: numberValue(row.sessions),
-        pageViews: numberValue(row.pageViews),
-        interactions: numberValue(row.interactions),
-      })),
-      locales: (
-        localeRows as Array<{
-          name: string;
-          sessions: unknown;
-          pageViews: unknown;
-          purchases: unknown;
-        }>
-      ).map((row) => ({
-        name: row.name,
-        sessions: numberValue(row.sessions),
-        pageViews: numberValue(row.pageViews),
-        purchases: numberValue(row.purchases),
-      })),
-      devices: (deviceRows as Array<{ name: string; sessions: unknown; pageViews: unknown }>).map(
-        (row) => ({
-          name: row.name,
-          sessions: numberValue(row.sessions),
-          pageViews: numberValue(row.pageViews),
-        }),
-      ),
       vitals: (
         vitalRows as Array<{
           name: string;
@@ -670,59 +376,9 @@ export async function getExperienceStats(
           : 0,
       },
       pages: landingRows,
-      blocks: asRows(landingBlockRows).map((row) => ({
-        name: String(row.name ?? ''),
-        interactions: numberValue(row.interactions),
-        addToCarts: numberValue(row.add_to_carts),
-        checkouts: numberValue(row.checkouts),
-      })),
     },
     aiAssistants: {
-      admin: adminAi,
       storefront: storefrontAi,
-    },
-    customers: {
-      summary: {
-        customers: customerCount,
-        successfulOrders: numberValue(firstCustomer.successful_orders),
-        repeatCustomers,
-        confirmedCustomers: numberValue(firstCustomer.confirmed_customers),
-        repeatRate: customerCount ? round((repeatCustomers / customerCount) * 100) : 0,
-        averageOrders: round(numberValue(firstCustomer.average_orders)),
-        averageOrderValue: round(numberValue(firstCustomer.overall_average_order_value)),
-      },
-      customers: customerRows.map((row) => ({
-        phone: String(row.phone ?? ''),
-        name: String(row.customer_name ?? '—'),
-        city: String(row.city ?? '—'),
-        orders: numberValue(row.orders),
-        confirmedOrders: numberValue(row.confirmed_orders),
-        totalValue: round(numberValue(row.total_value)),
-        averageOrderValue: round(numberValue(row.average_order_value)),
-        firstOrderAt: isoValue(row.first_order_at) ?? new Date(0).toISOString(),
-        lastOrderAt: isoValue(row.last_order_at) ?? new Date(0).toISOString(),
-        products: productsByPhone.get(String(row.phone ?? '')) ?? [],
-      })),
-    },
-    metaPaidAttribution: {
-      visits: paidVisits,
-      createdOrders: paidCreatedOrders,
-      purchases: paidPurchases,
-      landedOnly: paidLandedOnly,
-      conversionRate: paidVisits ? round((paidPurchases / paidVisits) * 100) : 0,
-      topCampaigns: (
-        paidCampaignRows as Array<{
-          name: string;
-          visits: unknown;
-          orders: unknown;
-          purchases: unknown;
-        }>
-      ).map((row) => ({
-        name: row.name,
-        visits: numberValue(row.visits),
-        orders: numberValue(row.orders),
-        purchases: numberValue(row.purchases),
-      })),
     },
   };
 }

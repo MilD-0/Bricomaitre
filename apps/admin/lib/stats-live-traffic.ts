@@ -3,7 +3,6 @@ import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '@bric/db/client';
 import {
   analyticsDailyRollups,
-  analyticsDistinctDailyMembers,
   analyticsEvents,
   analyticsPaidClickDailyRollups,
   analyticsPaidClickVisits,
@@ -16,7 +15,6 @@ import {
   buildAnalyticsRollupWhere,
   buildAnalyticsWhere,
   buildCanonicalStorefrontSessionsQuery,
-  buildWebsiteProductMetricsQuery,
 } from './stats-live-commerce';
 
 const analyticsResultsCountExpression = sql<number>`case
@@ -39,30 +37,6 @@ type WebsiteSearchRow = {
   term: string;
   searches: number;
   zeroResults: number;
-};
-
-type WebsiteTopProductRow = {
-  id: number;
-  title: string;
-  sku: string | null;
-  categoryName: string | null;
-  brandName: string | null;
-  viewCount: number;
-  addToCartCount: number;
-  checkoutCount: number;
-  websitePurchaseCount: number;
-  popularityScore: number;
-  websiteConversionRate: number;
-};
-
-export type WebsiteMetricRow = {
-  id: number;
-  viewCount: number;
-  addToCartCount: number;
-  checkoutCount: number;
-  websitePurchaseCount: number;
-  popularityScore: number;
-  websiteConversionRate: number;
 };
 
 type MetaTrackedEventSummaryRow = {
@@ -89,13 +63,9 @@ export async function getWebsiteAnalyticsData(
   analyticsWhere: ReturnType<typeof buildAnalyticsWhere>,
   rollupWhere: ReturnType<typeof buildAnalyticsRollupWhere>,
   filters: Required<StatsFilters>,
-  includeProductMetrics = true,
-  identityMode: 'rollup-members' | 'sessions' | 'daily-rollups' = 'rollup-members',
 ): Promise<{
-  websiteSummaryRows: WebsiteSummaryRow[];
-  websiteSearchRows: WebsiteSearchRow[];
-  websiteTopProductRows: WebsiteTopProductRow[];
-  websiteMetricRows: WebsiteMetricRow[];
+  summary: WebsiteSummaryRow;
+  searches: WebsiteSearchRow[];
 }> {
   const unrolledAnalyticsWhere = and(
     analyticsWhere,
@@ -109,7 +79,6 @@ export async function getWebsiteAnalyticsData(
   const [
     websiteSummaryRows,
     websiteSearchRows,
-    websiteProductResult,
     rollupSummaryRows,
     rollupSearchRows,
     exactIdentityResult,
@@ -144,9 +113,6 @@ export async function getWebsiteAnalyticsData(
       .groupBy(sql`1`)
       .orderBy(sql`2 desc`)
       .limit(8),
-    includeProductMetrics
-      ? db.execute(buildWebsiteProductMetricsQuery(filters))
-      : Promise.resolve({ rows: [] }),
     db
       .select({
         sessions: sql<number>`coalesce(sum(${analyticsDailyRollups.sessions}), 0)::int`,
@@ -175,28 +141,7 @@ export async function getWebsiteAnalyticsData(
         ),
       )
       .groupBy(analyticsDailyRollups.dimensionKey),
-    identityMode === 'daily-rollups'
-      ? Promise.resolve({ rows: [] })
-      : identityMode === 'sessions'
-        ? db.execute(buildCanonicalStorefrontSessionsQuery(filters))
-        : db.execute(sql`
-          select metric, dimension_key, count(distinct member_id)::int as members
-          from (
-            select metric, dimension_key, member_id
-            from ${analyticsDistinctDailyMembers}
-            where ${filters.startDate ? sql`${analyticsDistinctDailyMembers.day} >= ${filters.startDate}::date` : sql`true`}
-              and ${filters.endDate ? sql`${analyticsDistinctDailyMembers.day} <= ${filters.endDate}::date` : sql`true`}
-            union all
-            select 'journey', '', ${analyticsEvents.journeyId}
-            from ${analyticsEvents}
-            where ${unrolledAnalyticsWhere ?? sql`true`}
-            union all
-            select 'session', '', ${analyticsEvents.sessionId}
-            from ${analyticsEvents}
-            where ${unrolledAnalyticsWhere ?? sql`true`} and ${analyticsEvents.eventName} = 'page_view'
-          ) identities
-          group by metric, dimension_key
-        `),
+    db.execute(buildCanonicalStorefrontSessionsQuery(filters)),
   ]);
 
   const rawSummary = websiteSummaryRows[0] as WebsiteSummaryRow | undefined;
@@ -217,24 +162,8 @@ export async function getWebsiteAnalyticsData(
       numberOrZero(rawSummary?.[key]) + numberOrZero(rollupSummary?.[key]),
     ]),
   ) as WebsiteSummaryRow;
-  if (identityMode === 'sessions') {
-    const identity = exactIdentityResult.rows[0] as Record<string, unknown> | undefined;
-    mergedSummary.sessions = numberOrZero(identity?.sessions);
-  } else if (identityMode === 'rollup-members') {
-    const exactIdentityRows = exactIdentityResult.rows as Array<{
-      metric: string;
-      dimension_key: string;
-      members: number | string;
-    }>;
-    mergedSummary.sessions = numberOrZero(
-      exactIdentityRows.find((row) => row.metric === 'session' && row.dimension_key === '')
-        ?.members,
-    );
-    mergedSummary.journeys = numberOrZero(
-      exactIdentityRows.find((row) => row.metric === 'journey' && row.dimension_key === '')
-        ?.members,
-    );
-  }
+  const identity = exactIdentityResult.rows[0] as Record<string, unknown> | undefined;
+  mergedSummary.sessions = numberOrZero(identity?.sessions);
 
   const searchMap = new Map<string, WebsiteSearchRow>();
   for (const row of [...websiteSearchRows, ...rollupSearchRows] as WebsiteSearchRow[]) {
@@ -244,32 +173,11 @@ export async function getWebsiteAnalyticsData(
     searchMap.set(row.term, current);
   }
 
-  const websiteProductRows: WebsiteTopProductRow[] = (websiteProductResult.rows as unknown[]).map(
-    (row: unknown) => {
-      const value = row as Record<string, unknown>;
-      return {
-        id: numberOrZero(value.id),
-        title: String(value.title ?? ''),
-        sku: value.sku == null ? null : String(value.sku),
-        categoryName: value.category_name == null ? null : String(value.category_name),
-        brandName: value.brand_name == null ? null : String(value.brand_name),
-        viewCount: numberOrZero(value.view_count),
-        addToCartCount: numberOrZero(value.add_to_cart_count),
-        checkoutCount: numberOrZero(value.checkout_count),
-        websitePurchaseCount: numberOrZero(value.website_purchase_count),
-        popularityScore: numberOrZero(value.popularity_score),
-        websiteConversionRate: numberOrZero(value.website_conversion_rate),
-      } satisfies WebsiteTopProductRow;
-    },
-  );
-
   return {
-    websiteSummaryRows: [mergedSummary],
-    websiteSearchRows: Array.from(searchMap.values())
+    summary: mergedSummary,
+    searches: Array.from(searchMap.values())
       .sort((left, right) => right.searches - left.searches)
       .slice(0, 8),
-    websiteTopProductRows: websiteProductRows.slice(0, 8),
-    websiteMetricRows: websiteProductRows satisfies WebsiteMetricRow[],
   };
 }
 

@@ -14,7 +14,7 @@ import {
   type AiStatsFilters,
   type Database,
 } from './ai-stats-contract';
-import { estimateAdminAiModelCost } from './stats-experience';
+import { estimateAdminAiModelCost } from './stats-experience-ai';
 
 export async function loadOperations(
   db: Database,

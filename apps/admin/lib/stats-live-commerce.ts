@@ -11,7 +11,7 @@ import {
   orders,
   products,
 } from '@bric/db/schema';
-import { ADMIN_REPORTING_TIMEZONE } from './stats-experience';
+import { ADMIN_REPORTING_TIMEZONE } from './stats-experience-shared';
 import { numberOrZero, round, toDateInput } from './stats-values';
 import { type WebsiteAnalyticsData, type StatsFilters } from './stats-contract';
 

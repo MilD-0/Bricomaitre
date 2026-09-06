@@ -25,9 +25,6 @@ export type WebsiteExperienceStats = {
   returningJourneys: number;
   errorEvents: number;
   errorRate: number;
-  pageTypes: Array<{ name: string; sessions: number; pageViews: number; interactions: number }>;
-  locales: Array<{ name: string; sessions: number; pageViews: number; purchases: number }>;
-  devices: Array<{ name: string; sessions: number; pageViews: number }>;
   vitals: Array<{
     name: string;
     samples: number;
@@ -82,94 +79,21 @@ export type LandingPageStats = {
     revenue: number;
     conversionRate: number;
   }>;
-  blocks: Array<{ name: string; interactions: number; addToCarts: number; checkouts: number }>;
 };
 
-export type AiSurfaceStats = {
-  runs: number;
-  completed: number;
-  failed: number;
-  cancelled: number;
-  successRate: number;
-  helpful: number;
-  notHelpful: number;
-  helpfulRate: number;
-  conversations: number;
-  activeUsers: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  estimatedCostUsd: number | null;
-  costCoverageRate: number;
-  averageDurationMs: number;
-  toolCalls: number;
-  proposals: number;
-  appliedProposals: number;
-  topTasks: Array<{ name: string; runs: number; successRate: number; tokens: number }>;
-  models: Array<{ name: string; runs: number; tokens: number }>;
-  trend: Array<{ bucket: string; runs: number; completed: number; failed: number; tokens: number }>;
-};
-
-export type AiAssistantStats = {
-  admin: AiSurfaceStats;
-  storefront: AiSurfaceStats & {
-    enabled: boolean;
-    opens: number;
-    messages: number;
-    resultClicks: number;
-    errors: number;
-    clickThroughRate: number;
-    influencedOrders: number;
-    confirmedOrders: number;
-    completedOrders: number;
-    paidOrders: number;
-    recommendedProductOrders: number;
-    submittedValueDzd: number;
-    confirmationRate: number;
-    usageCoverageStartsAt: string | null;
-    topIntents: Array<{ name: string; messages: number }>;
-  };
-};
-
-export type CustomerStats = {
-  summary: {
-    customers: number;
-    successfulOrders: number;
-    repeatCustomers: number;
-    confirmedCustomers: number;
-    repeatRate: number;
-    averageOrders: number;
-    averageOrderValue: number;
-  };
-  customers: Array<{
-    phone: string;
-    name: string;
-    city: string;
-    orders: number;
-    confirmedOrders: number;
-    totalValue: number;
-    averageOrderValue: number;
-    firstOrderAt: string;
-    lastOrderAt: string;
-    products: Array<{ name: string; count: number }>;
-  }>;
-};
-
-export type MetaPaidAttributionStats = {
-  visits: number;
-  createdOrders: number;
-  purchases: number;
-  landedOnly: number;
-  conversionRate: number;
-  topCampaigns: Array<{ name: string; visits: number; orders: number; purchases: number }>;
+export type StorefrontAiStats = {
+  opens: number;
+  messages: number;
+  resultClicks: number;
+  influencedOrders: number;
+  confirmedOrders: number;
+  paidOrders: number;
 };
 
 export type ExperienceStats = {
   website: WebsiteExperienceStats;
   landingPages: LandingPageStats;
-  aiAssistants: AiAssistantStats;
-  customers: CustomerStats;
-  metaPaidAttribution: MetaPaidAttributionStats;
+  aiAssistants: { storefront: StorefrontAiStats };
 };
 
 export function isoValue(value: unknown) {
@@ -235,33 +159,6 @@ export function reportingTimestampCondition(column: SQLWrapper, filters: Experie
   return conditions.length ? and(...conditions) : undefined;
 }
 
-function emptyAiSurface(): AiSurfaceStats {
-  return {
-    runs: 0,
-    completed: 0,
-    failed: 0,
-    cancelled: 0,
-    successRate: 0,
-    helpful: 0,
-    notHelpful: 0,
-    helpfulRate: 0,
-    conversations: 0,
-    activeUsers: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    estimatedCostUsd: null,
-    costCoverageRate: 0,
-    averageDurationMs: 0,
-    toolCalls: 0,
-    proposals: 0,
-    appliedProposals: 0,
-    topTasks: [],
-    models: [],
-    trend: [],
-  };
-}
-
 export function emptyExperienceStats(): ExperienceStats {
   return {
     website: {
@@ -270,9 +167,6 @@ export function emptyExperienceStats(): ExperienceStats {
       returningJourneys: 0,
       errorEvents: 0,
       errorRate: 0,
-      pageTypes: [],
-      locales: [],
-      devices: [],
       vitals: [],
       acquisitionSources: [],
       acquisitionCoverageStartsAt: null,
@@ -292,48 +186,16 @@ export function emptyExperienceStats(): ExperienceStats {
         conversionRate: 0,
       },
       pages: [],
-      blocks: [],
     },
     aiAssistants: {
-      admin: emptyAiSurface(),
       storefront: {
-        ...emptyAiSurface(),
-        enabled: false,
         opens: 0,
         messages: 0,
         resultClicks: 0,
-        errors: 0,
-        clickThroughRate: 0,
         influencedOrders: 0,
         confirmedOrders: 0,
-        completedOrders: 0,
         paidOrders: 0,
-        recommendedProductOrders: 0,
-        submittedValueDzd: 0,
-        confirmationRate: 0,
-        usageCoverageStartsAt: null,
-        topIntents: [],
       },
-    },
-    customers: {
-      summary: {
-        customers: 0,
-        successfulOrders: 0,
-        repeatCustomers: 0,
-        confirmedCustomers: 0,
-        repeatRate: 0,
-        averageOrders: 0,
-        averageOrderValue: 0,
-      },
-      customers: [],
-    },
-    metaPaidAttribution: {
-      visits: 0,
-      createdOrders: 0,
-      purchases: 0,
-      landedOnly: 0,
-      conversionRate: 0,
-      topCampaigns: [],
     },
   };
 }

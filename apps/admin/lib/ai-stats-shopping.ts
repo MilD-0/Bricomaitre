@@ -23,7 +23,8 @@ import {
   type AiStatsFilters,
   type Database,
 } from './ai-stats-contract';
-import { CUSTOMER_SUCCESSFUL_ORDER_STATUSES, getAiUsagePricing } from './stats-experience';
+import { CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience-shared';
+import { getAiUsagePricing } from './stats-experience-ai';
 
 export async function loadShopping(
   db: Database,

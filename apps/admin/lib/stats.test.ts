@@ -8,7 +8,7 @@ import {
   getCartProductLookupKey,
 } from './order-product-references';
 import { statsQuerySchema, type WebsiteAnalyticsData } from './stats-contract';
-import { emptyExperienceStats } from './stats-experience';
+import { emptyExperienceStats } from './stats-experience-shared';
 import {
   buildAnalyticsWhere,
   buildResolvedFilters,

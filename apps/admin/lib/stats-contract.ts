@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { reportingDateSchema } from './analytics/contract';
-import type { WebsiteExperienceStats } from './stats-experience';
+import type { WebsiteExperienceStats } from './stats-experience-shared';
 
 const statsRangeSchema = z.enum(['all', '7d', '14d', '30d', '90d', 'year', 'custom']);
 const optionalDateSchema = reportingDateSchema.optional();
