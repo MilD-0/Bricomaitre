@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -26,24 +26,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const owner = session?.user?.email;
   if (!owner) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 
-  const [ownedMessage] = await getDb()
-    .select({ id: aiMessages.id })
-    .from(aiMessages)
-    .innerJoin(aiConversations, eq(aiConversations.id, aiMessages.conversationId))
-    .where(
-      and(
-        eq(aiMessages.id, params.data.id),
-        eq(aiMessages.role, 'assistant'),
-        eq(aiConversations.surface, 'admin'),
-        eq(aiConversations.actorId, owner),
-      ),
-    )
-    .limit(1);
-  if (!ownedMessage)
-    return NextResponse.json({ error: 'Assistant message not found.' }, { status: 404 });
-
+  const db = getDb();
   const feedbackAt = new Date().toISOString();
-  const [message] = await getDb()
+  const [message] = await db
     .update(aiMessages)
     .set({
       content: sql`${aiMessages.content} || ${JSON.stringify({
@@ -51,7 +36,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         feedbackAt,
       })}::jsonb`,
     })
-    .where(eq(aiMessages.id, ownedMessage.id))
+    .where(
+      and(
+        eq(aiMessages.id, params.data.id),
+        eq(aiMessages.role, 'assistant'),
+        inArray(
+          aiMessages.conversationId,
+          db
+            .select({ id: aiConversations.id })
+            .from(aiConversations)
+            .where(and(eq(aiConversations.surface, 'admin'), eq(aiConversations.actorId, owner))),
+        ),
+      ),
+    )
     .returning({ id: aiMessages.id });
   if (!message)
     return NextResponse.json({ error: 'Assistant message not found.' }, { status: 404 });

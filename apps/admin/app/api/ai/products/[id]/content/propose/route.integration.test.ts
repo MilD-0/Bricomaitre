@@ -53,6 +53,18 @@ describe('AI product content proposal route', () => {
     });
   });
 
+  it('does not generate content when the request body is malformed JSON', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/ai/products/1/content/propose', {
+        method: 'POST',
+        body: '{',
+      }),
+      { params: Promise.resolve({ id: '1' }) },
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.propose).not.toHaveBeenCalled();
+  });
+
   it('rejects unsupported product fields', async () => {
     const response = await POST(request({ fields: ['price'] }), {
       params: Promise.resolve({ id: '1' }),

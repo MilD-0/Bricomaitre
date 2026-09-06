@@ -12,6 +12,7 @@ import {
   landingPages,
 } from '@bric/db/schema';
 import { proposeProductCategoryAssignment } from '../lib/ai-product-category-proposals';
+import { executeAiProposalReview } from '../lib/ai-proposal-review-workflow';
 import { publishAiTaskTerminalMessage } from '../lib/ai-task-followups';
 import { runAiContentJob } from '../lib/background-jobs';
 import { createLandingPage, queryLandingPageSummaries } from '../lib/landing-pages';
@@ -33,6 +34,63 @@ afterAll(async () => {
 });
 
 describe('durable AI evidence', () => {
+  it.each(['product_content', 'product_category', 'product_relation'])(
+    'allows rejecting expired %s proposals while refusing approval',
+    async (proposalType) => {
+      const db = getDb();
+      const marker = randomUUID();
+      const [product] = await db
+        .insert(products)
+        .values({ title: marker, slug: marker, price: '100' })
+        .returning();
+      const [run] = await db
+        .insert(aiRuns)
+        .values({
+          surface: 'admin',
+          task: proposalType,
+          model: 'test',
+          promptVersion: 'test',
+          status: 'completed',
+        })
+        .returning();
+      const [proposal] = await db
+        .insert(aiProposals)
+        .values({
+          runId: run!.id,
+          entityType: 'products',
+          entityId: product!.id,
+          proposalType,
+          payload: {},
+          sourceUpdatedAt: product!.updatedAt,
+          expiresAt: new Date('2000-01-01'),
+        })
+        .returning();
+      try {
+        const input = {
+          proposalId: proposal!.id,
+          target: { proposalType, entityType: 'products' },
+          actor: { email: 'reviewer@example.invalid' },
+        };
+        await expect(
+          executeAiProposalReview({ ...input, action: 'approve' }),
+        ).rejects.toMatchObject({ code: 'proposal_expired' });
+        await expect(
+          executeAiProposalReview({ ...input, action: 'reject' }),
+        ).resolves.toMatchObject({ status: 'rejected', verified: true });
+        expect(
+          (await db.select().from(aiProposals).where(eq(aiProposals.id, proposal!.id)))[0],
+        ).toMatchObject({ status: 'rejected' });
+        expect((await db.select().from(products).where(eq(products.id, product!.id)))[0]).toEqual(
+          product,
+        );
+      } finally {
+        await db.delete(aiProposals).where(eq(aiProposals.runId, run!.id));
+        await db.delete(aiRuns).where(eq(aiRuns.id, run!.id));
+        await db.delete(products).where(eq(products.id, product!.id));
+      }
+    },
+  );
+
   it('serializes competing terminal publishers and tolerates a deleted conversation', async () => {
     const db = getDb();
     const [conversation] = await db

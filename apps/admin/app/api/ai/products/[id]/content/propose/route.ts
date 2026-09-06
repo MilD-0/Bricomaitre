@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   const productId = parsePositiveIntegerId((await params).id);
-  const parsed = requestSchema.safeParse(await request.json().catch(() => ({})));
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (productId === null || !parsed.success) {
     return NextResponse.json({ error: 'Invalid product content request.' }, { status: 400 });
   }

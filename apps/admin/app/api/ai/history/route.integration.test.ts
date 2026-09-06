@@ -6,16 +6,8 @@ const mocks = vi.hoisted(() => ({
   permissions: ['products_write'] as string[],
 }));
 
-vi.mock('../../../../lib/ai-background-jobs', () => ({
-  ADMIN_AI_ASSISTANT_JOB_ORIGIN: 'admin-ai-assistant',
-  allowedAdminBackgroundJobTypes: (permissions: string[]) => [
-    ...(permissions.includes('products_write')
-      ? ['ai_categorization', 'ai_content', 'product_export', 'catalog_feed_refresh']
-      : []),
-    ...(permissions.includes('analytics_manage')
-      ? ['stats_import', 'ad_cost_import', 'reporting_refresh']
-      : []),
-  ],
+vi.mock('../../../../lib/ai-background-jobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/ai-background-jobs')>()),
   listAdminBackgroundJobs: mocks.jobs,
 }));
 vi.mock('../../../../lib/auth', () => ({
@@ -23,9 +15,6 @@ vi.mock('../../../../lib/auth', () => ({
 }));
 vi.mock('../../../../lib/ai-task-followups', () => ({
   publishAiTaskTerminalMessage: mocks.publish,
-}));
-vi.mock('../../../../lib/permissions', () => ({
-  normalizePermissions: (permissions: string[] | undefined) => permissions ?? [],
 }));
 vi.mock('../../../../lib/rbac', () => ({ requireAppAccess: async () => null }));
 

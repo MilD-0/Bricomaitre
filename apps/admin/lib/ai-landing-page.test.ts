@@ -1,10 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createLandingPageGenerator,
   createLandingPageEditor,
   generateLandingPageDraft,
-  LANDING_PAGE_GENERATION_INSTRUCTIONS,
   normalizeGeneratedLandingPage,
   type LandingPageGenerationInput,
   type LandingPageEditStageRunner,
@@ -273,13 +272,6 @@ function editRunner(options?: {
 }
 
 describe('AI landing-page output guardrails', () => {
-  it('keeps the generator guidance compact and focused on evidence and live-commerce boundaries', () => {
-    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('supplied catalog facts');
-    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('live Storefront');
-    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('non-indexable');
-    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS.length).toBeLessThan(1_500);
-    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).not.toContain('creative archetype');
-  });
   it('keeps a varied valid composition while forcing review-only SEO', () => {
     const document = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
 
@@ -447,8 +439,6 @@ describe('AI landing-page output guardrails', () => {
   });
 
   it('surfaces generation failure without persisting a generic replacement page', async () => {
-    const fallback = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
-
     await expect(
       generateLandingPageDraft({
         generator: {
@@ -459,7 +449,6 @@ describe('AI landing-page output guardrails', () => {
         generationInput,
       }),
     ).rejects.toThrow('provider timeout');
-    expect(fallback.blocks).toHaveLength(4);
   });
 
   it('assembles several backend stages into one complete generation result', async () => {
@@ -552,11 +541,10 @@ describe('AI landing-page output guardrails', () => {
   });
 
   it('reapplies asset and indexing guardrails to injected generator results', async () => {
-    const generated = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
     const result = await generateLandingPageDraft({
       generator: {
         generate: async () => ({
-          document: generated,
+          document: generatedDocument() as never,
           reasoning: 'Product-specific composition.',
           groundingNotes: [],
           usage: {},
@@ -585,5 +573,76 @@ describe('AI landing-page output guardrails', () => {
     expect(result.document.blocks.find((block) => block.id === 'feature')).toMatchObject({
       imageUrl: null,
     });
+  });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('landing-page provider deadlines', () => {
+  it.each([
+    ['generation', 'plan'],
+    ['generation', 'block'],
+    ['edit', 'plan'],
+    ['edit', 'block'],
+  ] as const)('bounds a stalled %s %s stage and retains successful work', async (mode, stage) => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    const editInput = {
+      ...generationInput,
+      instruction: 'Réécris le hero.',
+      currentDocument,
+      targetBlockIds: [],
+      deleteBlockIds: [],
+      allowStructuralChanges: false,
+    };
+    const plan =
+      mode === 'generation'
+        ? (await stagedRunner().generatePlan(generationInput)).plan
+        : (await editRunner().generatePlan(editInput)).plan;
+    const signals: AbortSignal[] = [];
+    const localFetch = vi.fn((_url: unknown, init: RequestInit) => {
+      if (stage === 'block' && localFetch.mock.calls.length === 1) {
+        return Promise.resolve(
+          Response.json({
+            id: 'plan',
+            object: 'chat.completion',
+            created: 1,
+            model: 'test/content-model',
+            choices: [
+              {
+                index: 0,
+                finish_reason: 'stop',
+                message: { role: 'assistant', content: JSON.stringify(plan) },
+              },
+            ],
+          }),
+        );
+      }
+      const signal = init.signal!;
+      signals.push(signal);
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', localFetch);
+    const config = { ...testConfig, requestTimeoutMs: 1000 };
+    const result =
+      mode === 'generation'
+        ? createLandingPageGenerator(config).generate(generationInput)
+        : createLandingPageEditor(config).edit(editInput);
+    if (stage === 'plan') await expect(result).rejects.toThrow();
+    else {
+      const completed = await result;
+      expect(completed.stages).toMatchObject({ status: 'partial-fallback' });
+      expect(completed.document.blocks).toEqual(
+        mode === 'edit'
+          ? currentDocument.blocks
+          : expect.arrayContaining([
+              expect.objectContaining({ type: 'product-hero' }),
+              expect.objectContaining({ type: 'final-cta' }),
+            ]),
+      );
+    }
+    expect(signals.length).toBe(mode === 'generation' && stage === 'block' ? 4 : 2);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
   });
 });

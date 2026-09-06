@@ -3,11 +3,7 @@ import { z } from 'zod';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import {
-  AiContentNotFoundError,
-  AiProposalConflictError,
-} from '../../../../../lib/ai-product-content';
-import { AiProductRelationConflictError } from '../../../../../lib/ai-product-knowledge';
+import { AiContentNotFoundError } from '../../../../../lib/ai-product-content';
 import {
   AiProposalReviewConflictError,
   aiProposalReviewConflictPayload,
@@ -57,10 +53,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: error.message }, { status: 404 });
     if (error instanceof AiProposalReviewConflictError)
       return NextResponse.json(aiProposalReviewConflictPayload(error, proposalId), { status: 409 });
-    if (error instanceof AiProposalConflictError)
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    if (error instanceof AiProductRelationConflictError)
-      return NextResponse.json({ error: error.message }, { status: 409 });
     return NextResponse.json({ error: 'AI proposal review failed.' }, { status: 500 });
   }
 }

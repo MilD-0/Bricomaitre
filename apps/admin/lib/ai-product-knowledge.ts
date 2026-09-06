@@ -270,12 +270,6 @@ export async function reviewProductRelationProposal(input: {
         'proposal_already_reviewed',
       );
     }
-    if (proposal.expiresAt <= new Date()) {
-      throw new AiProductRelationConflictError(
-        'The relationship proposal has expired. Generate a new proposal.',
-        'proposal_expired',
-      );
-    }
 
     const now = new Date();
     if (input.action === 'reject') {
@@ -296,6 +290,13 @@ export async function reviewProductRelationProposal(input: {
         );
       }
       return { id: proposal.id, status: 'rejected' as const, verified: true };
+    }
+
+    if (proposal.expiresAt <= new Date()) {
+      throw new AiProductRelationConflictError(
+        'The relationship proposal has expired. Generate a new proposal.',
+        'proposal_expired',
+      );
     }
 
     const rawPayload = proposal.payload as Record<string, unknown>;

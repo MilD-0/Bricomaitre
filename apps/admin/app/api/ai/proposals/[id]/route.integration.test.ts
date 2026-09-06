@@ -10,9 +10,7 @@ const mocks = vi.hoisted(() => ({
   reviewAdmin: vi.fn(),
   proposalRow: vi.fn(),
   deleteRows: vi.fn(),
-  revalidateTags: vi.fn(),
-  revalidateProducts: vi.fn(),
-  refreshFeed: vi.fn(),
+  refreshConsumers: vi.fn(),
 }));
 vi.mock('../../../../../lib/rbac', () => ({
   requireAppAccess: mocks.appAccess,
@@ -37,19 +35,7 @@ vi.mock('../../../../../lib/ai-product-category-proposals', () => ({
   reviewProductCategoryProposal: mocks.reviewAdmin,
 }));
 vi.mock('../../../../../lib/background-jobs', () => ({
-  startProductCatalogFeedRefreshJob: mocks.refreshFeed,
-  refreshAppliedAiProposalConsumers: vi.fn(async () => {
-    mocks.revalidateTags('products', 'products-meta');
-    await mocks.revalidateProducts();
-    await mocks.refreshFeed();
-  }),
-}));
-vi.mock('../../../../../lib/server-cache', () => ({
-  CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
-  revalidateServerTags: mocks.revalidateTags,
-}));
-vi.mock('../../../../../lib/storefront-revalidate', () => ({
-  revalidateStorefrontProducts: mocks.revalidateProducts,
+  refreshAppliedAiProposalConsumers: mocks.refreshConsumers,
 }));
 
 import { DELETE, PATCH } from './route';
@@ -77,15 +63,13 @@ describe('AI proposal review route', () => {
       id: 4,
       status: 'applied',
       verified: true,
-      proposalType: 'featured_products',
+      proposalType: 'product_category',
     });
     mocks.proposalRow
       .mockReset()
       .mockResolvedValue([{ proposalType: 'product_content', entityType: 'products' }]);
     mocks.deleteRows.mockReset().mockResolvedValue([{ id: 4 }]);
-    mocks.revalidateTags.mockReset();
-    mocks.revalidateProducts.mockReset().mockResolvedValue(undefined);
-    mocks.refreshFeed.mockReset().mockResolvedValue(undefined);
+    mocks.refreshConsumers.mockReset().mockResolvedValue(undefined);
   });
 
   it('uses product access for category-assignment proposals', async () => {
@@ -127,8 +111,7 @@ describe('AI proposal review route', () => {
     expect(response.status).toBe(200);
     expect(mocks.appAccess).toHaveBeenCalledOnce();
     expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
-    expect(mocks.revalidateProducts).toHaveBeenCalled();
-    expect(mocks.refreshFeed).toHaveBeenCalled();
+    expect(mocks.refreshConsumers).toHaveBeenCalledOnce();
   });
 
   it('requires the proposal domain permission for rejection', async () => {
@@ -137,7 +120,7 @@ describe('AI proposal review route', () => {
     expect(response.status).toBe(200);
     expect(mocks.appAccess).toHaveBeenCalledOnce();
     expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
-    expect(mocks.revalidateProducts).not.toHaveBeenCalled();
+    expect(mocks.refreshConsumers).not.toHaveBeenCalled();
   });
 
   it('returns a machine-readable recovery action for stale proposal decisions', async () => {
@@ -157,7 +140,7 @@ describe('AI proposal review route', () => {
       proposalId: 4,
       nextAction: 'regenerate',
     });
-    expect(mocks.revalidateProducts).not.toHaveBeenCalled();
+    expect(mocks.refreshConsumers).not.toHaveBeenCalled();
   });
 
   it('deletes an expired pending proposal through its domain permission', async () => {

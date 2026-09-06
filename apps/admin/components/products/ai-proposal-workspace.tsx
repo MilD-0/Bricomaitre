@@ -160,6 +160,21 @@ export function AiProposalWorkspace({
     if (!isWideLayout) setMobileInspectorOpen(true);
   }
 
+  function removeCompleted(completed: number[]) {
+    const nextRemovedIds = new Set([...removedIds, ...completed]);
+    setRemovedIds(nextRemovedIds);
+    setSelectedIds((current) => new Set([...current].filter((id) => !completed.includes(id))));
+    if (completed.includes(selectedId ?? -1)) setMobileInspectorOpen(false);
+
+    const lastPage = Math.max(
+      1,
+      Math.ceil(
+        (initialData.pagination.total - nextRemovedIds.size) / initialData.pagination.pageSize,
+      ),
+    );
+    if (initialData.pagination.page > lastPage) router.replace(pageHref(initialData, lastPage));
+  }
+
   async function review(ids: number[], action: 'approve' | 'reject') {
     if (ids.length === 0) return;
     setReviewRequest(null);
@@ -185,9 +200,7 @@ export function AiProposalWorkspace({
       }
     }
 
-    setRemovedIds((current) => new Set([...current, ...completed]));
-    setSelectedIds((current) => new Set([...current].filter((id) => !completed.includes(id))));
-    if (completed.includes(selectedId ?? -1)) setMobileInspectorOpen(false);
+    removeCompleted(completed);
 
     if (failures.length > 0) toast.error(failures.join('\n'), { id: toastId });
     else
@@ -222,9 +235,7 @@ export function AiProposalWorkspace({
       }
     }
 
-    setRemovedIds((current) => new Set([...current, ...completed]));
-    setSelectedIds((current) => new Set([...current].filter((id) => !completed.includes(id))));
-    if (completed.includes(selectedId ?? -1)) setMobileInspectorOpen(false);
+    removeCompleted(completed);
     if (failures.length > 0) toast.error(failures.join('\n'), { id: toastId });
     else toast.success(t('deletedExpired', { count: completed.length }), { id: toastId });
     setPending(false);
@@ -326,83 +337,87 @@ export function AiProposalWorkspace({
             </div>
           </div>
 
-          {filtersOpen ? (
-            <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-              <NativeSelect
-                name="proposalType"
-                defaultValue={initialData.query.proposalType ?? ''}
-                aria-label={t('proposalType')}
+          <div
+            hidden={!filtersOpen}
+            className={cn(
+              'mt-3 gap-3 border-t border-border/50 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
+              filtersOpen ? 'grid' : 'hidden',
+            )}
+          >
+            <NativeSelect
+              name="proposalType"
+              defaultValue={initialData.query.proposalType ?? ''}
+              aria-label={t('proposalType')}
+            >
+              <NativeSelectOption value="">{t('allProposalTypes')}</NativeSelectOption>
+              {initialData.facets.proposalTypes.map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {humanizeProposalToken(value)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              name="entityType"
+              defaultValue={initialData.query.entityType ?? ''}
+              aria-label={t('entityType')}
+            >
+              <NativeSelectOption value="">{t('allEntityTypes')}</NativeSelectOption>
+              {initialData.facets.entityTypes.map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {humanizeProposalToken(value)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              name="model"
+              defaultValue={initialData.query.model ?? ''}
+              aria-label={t('model')}
+            >
+              <NativeSelectOption value="">{t('allModels')}</NativeSelectOption>
+              {initialData.facets.models.map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {value}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              name="expiry"
+              defaultValue={initialData.query.expiry}
+              aria-label={t('expiry')}
+            >
+              <NativeSelectOption value="all">{t('allExpiry')}</NativeSelectOption>
+              <NativeSelectOption value="active">{t('activeOnly')}</NativeSelectOption>
+              <NativeSelectOption value="expired">{t('expiredOnly')}</NativeSelectOption>
+            </NativeSelect>
+            <NativeSelect
+              name="evidence"
+              defaultValue={initialData.query.evidence}
+              aria-label={t('evidenceFilter')}
+            >
+              <NativeSelectOption value="all">{t('allEvidence')}</NativeSelectOption>
+              <NativeSelectOption value="present">{t('withEvidence')}</NativeSelectOption>
+              <NativeSelectOption value="missing">{t('withoutEvidence')}</NativeSelectOption>
+            </NativeSelect>
+            <NativeSelect
+              name="pageSize"
+              defaultValue={String(initialData.query.pageSize)}
+              aria-label={t('pageSize')}
+            >
+              {[10, 20, 50, 100].map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {t('perPage', { count: value })}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            {activeFilterCount > 0 || initialData.query.q ? (
+              <Link
+                href={`/${locale}/ai-proposals`}
+                className="text-sm font-medium text-muted-foreground hover:text-foreground sm:col-span-2 lg:col-span-3 xl:col-span-6"
               >
-                <NativeSelectOption value="">{t('allProposalTypes')}</NativeSelectOption>
-                {initialData.facets.proposalTypes.map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {humanizeProposalToken(value)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <NativeSelect
-                name="entityType"
-                defaultValue={initialData.query.entityType ?? ''}
-                aria-label={t('entityType')}
-              >
-                <NativeSelectOption value="">{t('allEntityTypes')}</NativeSelectOption>
-                {initialData.facets.entityTypes.map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {humanizeProposalToken(value)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <NativeSelect
-                name="model"
-                defaultValue={initialData.query.model ?? ''}
-                aria-label={t('model')}
-              >
-                <NativeSelectOption value="">{t('allModels')}</NativeSelectOption>
-                {initialData.facets.models.map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {value}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <NativeSelect
-                name="expiry"
-                defaultValue={initialData.query.expiry}
-                aria-label={t('expiry')}
-              >
-                <NativeSelectOption value="all">{t('allExpiry')}</NativeSelectOption>
-                <NativeSelectOption value="active">{t('activeOnly')}</NativeSelectOption>
-                <NativeSelectOption value="expired">{t('expiredOnly')}</NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
-                name="evidence"
-                defaultValue={initialData.query.evidence}
-                aria-label={t('evidenceFilter')}
-              >
-                <NativeSelectOption value="all">{t('allEvidence')}</NativeSelectOption>
-                <NativeSelectOption value="present">{t('withEvidence')}</NativeSelectOption>
-                <NativeSelectOption value="missing">{t('withoutEvidence')}</NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
-                name="pageSize"
-                defaultValue={String(initialData.query.pageSize)}
-                aria-label={t('pageSize')}
-              >
-                {[10, 20, 50, 100].map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {t('perPage', { count: value })}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              {activeFilterCount > 0 || initialData.query.q ? (
-                <Link
-                  href={`/${locale}/ai-proposals`}
-                  className="text-sm font-medium text-muted-foreground hover:text-foreground sm:col-span-2 lg:col-span-3 xl:col-span-6"
-                >
-                  {t('resetFilters')}
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
+                {t('resetFilters')}
+              </Link>
+            ) : null}
+          </div>
         </form>
       </WorkspaceToolbar>
 

@@ -8,17 +8,12 @@ const mocks = vi.hoisted(() => ({
   permissions: ['products_write'] as string[],
 }));
 
-vi.mock('../../../../../lib/background-jobs', () => ({
-  ADMIN_AI_CONTENT_QUEUE: 'admin-ai-content',
-  ADMIN_AI_CATEGORIZATION_QUEUE: 'admin-ai-categorization',
+vi.mock('../../../../../lib/background-jobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../../lib/background-jobs')>()),
   cancelExportJob: mocks.cancel,
 }));
-vi.mock('../../../../../lib/ai-background-jobs', () => ({
-  ADMIN_BACKGROUND_JOB_TYPES: ['ai_categorization', 'ai_content', 'reporting_refresh'],
-  allowedAdminBackgroundJobTypes: (permissions: string[]) => [
-    ...(permissions.includes('products_write') ? ['ai_categorization', 'ai_content'] : []),
-    ...(permissions.includes('analytics_manage') ? ['reporting_refresh'] : []),
-  ],
+vi.mock('../../../../../lib/ai-background-jobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../../lib/ai-background-jobs')>()),
   cancelAdminBackgroundJob: mocks.cancelExact,
 }));
 vi.mock('../../../../../lib/auth', () => ({
@@ -50,6 +45,15 @@ describe('POST /api/ai/jobs/cancel', () => {
     const response = await POST(request({ kind: 'categorization' }));
     expect(response.status).toBe(200);
     expect(mocks.cancel).toHaveBeenCalledWith('admin-ai-categorization', 'admin@example.com');
+  });
+
+  it('does not cancel the current job when the request body is malformed JSON', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/ai/jobs/cancel', { method: 'POST', body: '{' }),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.cancel).not.toHaveBeenCalled();
+    expect(mocks.cancelExact).not.toHaveBeenCalled();
   });
 
   it('rejects unknown job kinds', async () => {

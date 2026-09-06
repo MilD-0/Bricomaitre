@@ -45,39 +45,37 @@ export async function proposeProductCategoryAssignment(input: {
     throw new ProductCategoryProposalError('The product is already assigned to this category.');
   }
 
-  return db.transaction(async (tx) => {
-    const expiresAt = new Date(Date.now() + 7 * 86_400_000);
-    const [proposal] = await tx
-      .insert(aiProposals)
-      .values({
-        runId: input.runId,
-        proposalType: 'product_category',
-        entityType: 'products',
-        entityId: product.id,
-        sourceUpdatedAt: input.sourceUpdatedAt,
-        payload: {
-          before: { categoryId: product.categoryId },
-          changes,
-          dependencies: {
-            category: { id: category.id, updatedAt: input.categoryUpdatedAt.toISOString() },
-          },
+  const expiresAt = new Date(Date.now() + 7 * 86_400_000);
+  const [proposal] = await db
+    .insert(aiProposals)
+    .values({
+      runId: input.runId,
+      proposalType: 'product_category',
+      entityType: 'products',
+      entityId: product.id,
+      sourceUpdatedAt: input.sourceUpdatedAt,
+      payload: {
+        before: { categoryId: product.categoryId },
+        changes,
+        dependencies: {
+          category: { id: category.id, updatedAt: input.categoryUpdatedAt.toISOString() },
         },
-        reasoning: input.reasoning,
-        confidence: input.confidence.toFixed(4),
-        requestedBy: input.actorId ?? null,
-        expiresAt,
-      })
-      .returning({ id: aiProposals.id });
-
-    return {
-      id: proposal.id,
-      type: 'product_category' as const,
-      status: 'proposed' as const,
+      },
       reasoning: input.reasoning,
-      expiresAt: expiresAt.toISOString(),
-      payload: { before: { categoryId: product.categoryId }, changes },
-    };
-  });
+      confidence: input.confidence.toFixed(4),
+      requestedBy: input.actorId ?? null,
+      expiresAt,
+    })
+    .returning({ id: aiProposals.id });
+
+  return {
+    id: proposal.id,
+    type: 'product_category' as const,
+    status: 'proposed' as const,
+    reasoning: input.reasoning,
+    expiresAt: expiresAt.toISOString(),
+    payload: { before: { categoryId: product.categoryId }, changes },
+  };
 }
 
 const categoryDependencySchema = z

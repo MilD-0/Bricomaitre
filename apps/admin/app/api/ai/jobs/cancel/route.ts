@@ -23,7 +23,7 @@ const requestSchema = z.union([
 export async function POST(request: NextRequest) {
   const denied = await requireAppAccess();
   if (denied) return denied;
-  const parsed = requestSchema.safeParse(await request.json().catch(() => ({})));
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json({ error: 'Invalid AI job cancellation request.' }, { status: 400 });
   const session = await auth();

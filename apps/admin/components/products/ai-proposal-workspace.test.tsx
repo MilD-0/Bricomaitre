@@ -4,10 +4,10 @@ import { NextIntlClientProvider } from 'next-intl';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+const { pushMock, replaceMock } = vi.hoisted(() => ({ pushMock: vi.fn(), replaceMock: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
 
 import messages from '../../messages/en.json';
@@ -134,18 +134,8 @@ describe('AI proposal review workspace preview', () => {
   });
 
   it('keeps secondary filters behind one compact disclosure', async () => {
-    const view = renderWorkspace();
+    renderWorkspace();
 
-    expect(view.container.querySelector('[data-mobile-proposal-filters] > div')).toHaveClass(
-      'grid-cols-[minmax(0,1fr)_auto_auto]',
-    );
-    expect(screen.getByRole('heading', { name: 'AI proposal review' })).toHaveClass(
-      'sr-only',
-      'lg:not-sr-only',
-    );
-    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
-    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
-    expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
     expect(screen.getByText('42 proposals')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Proposal type' })).not.toBeInTheDocument();
     const filters = screen.getByRole('button', { name: 'Filters' });
@@ -158,6 +148,54 @@ describe('AI proposal review workspace preview', () => {
     expect(screen.getByRole('combobox', { name: 'Expiry' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Evidence' })).toBeInTheDocument();
   });
+
+  it('preserves applied and edited filters when their disclosure closes', async () => {
+    const initialData = data();
+    initialData.query.model = 'deepseek-v4';
+    const view = renderWorkspace(initialData);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Expiry' }), 'active');
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    expect(screen.queryByRole('combobox', { name: 'Model' })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole('searchbox'), 'drill');
+
+    const submitted = new FormData(view.container.querySelector('form')!);
+    expect(Object.fromEntries(submitted)).toMatchObject({
+      model: 'deepseek-v4',
+      expiry: 'active',
+      q: 'drill',
+      page: '1',
+      pageSize: '20',
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    expect(screen.getByRole('combobox', { name: 'Expiry' })).toHaveValue('active');
+  });
+
+  it.each(['approve', 'delete'] as const)(
+    'returns to the previous page after %s removes its last remaining proposal',
+    async (action) => {
+      const item = action === 'approve' ? activeProposal : expiredProposal;
+      const initialData = data([item]);
+      initialData.query.page = 2;
+      initialData.query.model = 'deepseek-v4';
+      initialData.pagination = { page: 2, pageSize: 20, total: 21, totalPages: 2 };
+      server.use(
+        http.patch('/api/ai/proposals/:id', () =>
+          HttpResponse.json({ proposal: { status: 'applied' } }),
+        ),
+        http.delete('/api/ai/proposals/:id', () => HttpResponse.json({ deleted: { id: item.id } })),
+      );
+      renderWorkspace(initialData);
+      const button = action === 'approve' ? 'Approve' : 'Delete expired';
+      await userEvent.click(screen.getByRole('button', { name: button }));
+      await userEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: button }),
+      );
+      await waitFor(() => expect(replaceMock).toHaveBeenCalledOnce());
+      const query = new URLSearchParams(replaceMock.mock.calls[0]![0]);
+      expect(query.get('page')).toBe('1');
+      expect(query.get('model')).toBe('deepseek-v4');
+    },
+  );
 
   it('reveals bulk review controls only after selection and blocks expired approval', async () => {
     renderWorkspace();

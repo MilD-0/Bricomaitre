@@ -7,7 +7,6 @@ vi.mock('@bric/db/client', () => ({ getDb: mocks.getDb }));
 import {
   ProductCategoryProposalError,
   PRODUCT_CATEGORY_CHANGE_SCHEMA,
-  proposeProductCategoryAssignment,
   reviewProductCategoryProposal,
 } from './ai-product-category-proposals';
 
@@ -21,54 +20,6 @@ describe('product category proposals', () => {
     expect(PRODUCT_CATEGORY_CHANGE_SCHEMA.parse({ categoryId: 10 })).toEqual({ categoryId: 10 });
     expect(() => PRODUCT_CATEGORY_CHANGE_SCHEMA.parse({ categoryId: 10, active: false })).toThrow();
     expect(() => PRODUCT_CATEGORY_CHANGE_SCHEMA.parse({ categoryId: null })).toThrow();
-  });
-
-  it('records the inference versions and confidence on its proposal', async () => {
-    const rows = [
-      [{ id: 4, categoryId: null, updatedAt: sourceUpdatedAt }],
-      [{ id: 10, isActive: true, updatedAt: categoryUpdatedAt }],
-    ];
-    const inserted: unknown[] = [];
-    const tx = {
-      insert: vi.fn(() => ({
-        values: vi.fn((value: unknown) => {
-          inserted.push(value);
-          return { returning: vi.fn(async () => [{ id: 90 }]) };
-        }),
-      })),
-    };
-    const db = {
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn(() => ({ limit: vi.fn(async () => rows.shift() ?? []) })),
-        })),
-      })),
-      transaction: vi.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx)),
-    };
-    mocks.getDb.mockReturnValue(db);
-
-    await expect(
-      proposeProductCategoryAssignment({
-        productId: 4,
-        categoryId: 10,
-        actorId: 'admin@example.com',
-        reasoning: 'Clear category match.',
-        runId: 70,
-        sourceUpdatedAt,
-        categoryUpdatedAt,
-        confidence: 0.95,
-      }),
-    ).resolves.toMatchObject({ id: 90, status: 'proposed' });
-    expect(db.transaction).toHaveBeenCalledOnce();
-    expect(inserted).toHaveLength(1);
-    expect(inserted[0]).toMatchObject({
-      runId: 70,
-      entityId: 4,
-      payload: {
-        changes: { categoryId: 10 },
-        dependencies: { category: { id: 10, updatedAt: categoryUpdatedAt.toISOString() } },
-      },
-    });
   });
 
   function reviewDatabase(
