@@ -24,6 +24,7 @@ import {
   type Database,
 } from './ai-stats-contract';
 import { CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience-shared';
+import { correctedEcotrackStatusSql } from './ecotrack-status-policy';
 import { getAiUsagePricing } from './stats-experience-ai';
 
 export async function loadShopping(
@@ -151,15 +152,15 @@ export async function loadShopping(
         )::int as confirmed_assisted,
         count(*) filter (
           where ${orderAiInfluence.level} in ('engaged', 'recommendation_clicked', 'recommended_product_ordered')
-            and ${ecotrackOrderStates.currentStatus} in ('payed', 'paye_et_archive')
+            and ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('payed', 'paye_et_archive')
         )::int as paid_assisted,
         coalesce(sum(${analyticsOrderCohortFacts.automaticPaidProfitDzd}::double precision) filter (
           where ${orderAiInfluence.level} in ('engaged', 'recommendation_clicked', 'recommended_product_ordered')
-            and ${ecotrackOrderStates.currentStatus} in ('payed', 'paye_et_archive')
+            and ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('payed', 'paye_et_archive')
         ), 0)::double precision as paid_contribution_dzd,
         count(*) filter (
           where ${orderAiInfluence.level} in ('engaged', 'recommendation_clicked', 'recommended_product_ordered')
-            and ${ecotrackOrderStates.currentStatus} in ('payed', 'paye_et_archive')
+            and ${correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus })} in ('payed', 'paye_et_archive')
             and ${analyticsOrderCohortFacts.automaticPaidProfitDzd} is not null
         )::int as contribution_orders
       from ${orderAiInfluence}

@@ -50,7 +50,7 @@ async function readProductPayload(
   return productMutationPayload(product, promoCodes);
 }
 
-function productMutationPayload(
+export function productMutationPayload(
   product: typeof products.$inferSelect,
   promoCodes: (typeof productPromoCodes.$inferSelect)[],
 ): ProductPayload {

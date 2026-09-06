@@ -10,7 +10,10 @@ import {
 } from '@bric/db/schema';
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
 import { getAdminAiModelPricing } from './admin-ai-models';
-import { ANALYTICS_PAID_SHIPMENT_STATUSES } from './ecotrack-status-policy';
+import {
+  ANALYTICS_PAID_SHIPMENT_STATUSES,
+  correctedEcotrackStatusSql,
+} from './ecotrack-status-policy';
 import {
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   dateCondition,
@@ -126,7 +129,7 @@ export async function getLiveStorefrontAiStats(
         count(*) filter (where ${orderAiInfluence.level} <> 'none' and ${inArray(orders.inHouseStatus, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES])})::int as confirmed_orders,
         count(*) filter (
           where ${orderAiInfluence.level} <> 'none'
-            and ${inArray(ecotrackOrderStates.currentStatus, [...ANALYTICS_PAID_SHIPMENT_STATUSES])}
+            and ${inArray(correctedEcotrackStatusSql({ localStatus: orders.inHouseStatus, providerStatus: ecotrackOrderStates.currentStatus }), [...ANALYTICS_PAID_SHIPMENT_STATUSES])}
         )::int as paid_orders
       from ${orderAiInfluence}
       inner join ${orders} on ${orders.id} = ${orderAiInfluence.orderId}

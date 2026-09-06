@@ -1,13 +1,11 @@
 import { getDb } from '@bric/db/client';
 import { z } from 'zod';
 
-import { findAdminProducts } from './admin-ai-domain';
-import { readBrand, readCategory } from './brands-categories-api';
-import {
-  ProductMutationNotFoundError,
-  readArchivedProductMutationPayload,
-  readProductMutationPayload,
-} from './product-update-workflow';
+import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
+import { brands, categories, productPromoCodes, products } from '@bric/db/schema';
+import { searchAssetProductOptions } from './admin-assets-data';
+import { productMutationPayload } from './product-update-workflow';
 
 export const adminAiCatalogProductLookupSchema = z
   .object({
@@ -46,138 +44,127 @@ export async function findAdminCatalogProducts(
   raw: z.input<typeof adminAiCatalogProductLookupSchema>,
 ) {
   const input = adminAiCatalogProductLookupSchema.parse(raw);
-  return findAdminProducts(input);
+  return searchAssetProductOptions({
+    search: input.query,
+    ids: input.productIds,
+    page: input.page,
+    limit: input.limit,
+  });
 }
 
-function taxonomyBrand(value: Awaited<ReturnType<typeof readBrand>>) {
-  return value
-    ? {
-        id: Number(value.id),
-        name: value.name,
-        slug: value.slug,
-        active: value.isActive,
-      }
-    : null;
-}
-
-function taxonomyCategory(value: Awaited<ReturnType<typeof readCategory>>) {
-  return value
-    ? {
-        id: Number(value.id),
-        name: value.name,
-        nameAr: value.nameAr ?? null,
-        slug: value.slug,
-        active: value.isActive,
-        parentId: value.parentId ? Number(value.parentId) : null,
-        parentName: value.parentName,
-      }
-    : null;
-}
-
-async function productDetails(
-  productId: number,
-  product: Awaited<ReturnType<typeof readProductMutationPayload>>,
-  archivedAt: string | null,
-) {
-  const [brand, category] = await Promise.all([
-    product.brandId ? readBrand(product.brandId) : Promise.resolve(null),
-    product.categoryId ? readCategory(product.categoryId) : Promise.resolve(null),
-  ]);
-
+async function inspectProducts(productIds: number[], archived: boolean) {
+  const db = getDb();
+  const requestedIds = [...new Set(productIds)];
+  const parent = alias(categories, 'parent_category');
+  const rows = await db
+    .select({
+      product: products,
+      brand: {
+        id: brands.id,
+        name: brands.name,
+        slug: brands.slug,
+        active: brands.isActive,
+      },
+      category: {
+        id: categories.id,
+        name: categories.name,
+        nameAr: categories.nameAr,
+        slug: categories.slug,
+        active: categories.isActive,
+        parentId: categories.parentId,
+        parentName: parent.name,
+      },
+    })
+    .from(products)
+    .leftJoin(brands, eq(brands.id, products.brandId))
+    .leftJoin(categories, eq(categories.id, products.categoryId))
+    .leftJoin(parent, eq(parent.id, categories.parentId))
+    .where(
+      and(
+        inArray(products.id, requestedIds),
+        archived ? isNotNull(products.archivedAt) : isNull(products.archivedAt),
+      ),
+    );
+  const promotions =
+    rows.length > 0
+      ? await db
+          .select()
+          .from(productPromoCodes)
+          .where(
+            inArray(
+              productPromoCodes.productId,
+              rows.map(({ product }) => product.id),
+            ),
+          )
+          .orderBy(asc(productPromoCodes.id))
+      : [];
+  const promotionsByProduct = new Map<number, typeof promotions>();
+  for (const promotion of promotions) {
+    const current = promotionsByProduct.get(promotion.productId) ?? [];
+    current.push(promotion);
+    promotionsByProduct.set(promotion.productId, current);
+  }
+  const byId = new Map(rows.map((row) => [row.product.id, row]));
   return {
-    id: productId,
-    archivedAt,
-    identity: {
-      title: product.title,
-      titleAr: product.titleAr,
-      slug: product.slug,
-      sku: product.sku,
-      barcode: product.barcode,
-    },
-    pricing: {
-      sellingPriceDzd: product.price,
-      compareAtPriceDzd: product.oldPrice,
-      purchaseCostDzd: product.purchasePrice,
-      promoCodes: product.promoCodes,
-    },
-    availability: {
-      active: product.active,
-      inStock: product.inStock,
-      status: product.availabilityStatus,
-      inventoryQuantity: product.inventoryQuantity,
-    },
-    taxonomy: {
-      brand: taxonomyBrand(brand),
-      category: taxonomyCategory(category),
-      assignedBrandId: product.brandId,
-      assignedCategoryId: product.categoryId,
-    },
-    content: {
-      description: product.description,
-      descriptionAr: product.descriptionAr,
-      images: product.images,
-    },
+    requestedIds,
+    missingIds: requestedIds.filter((id) => !byId.has(id)),
+    items: requestedIds.flatMap((id) => {
+      const row = byId.get(id);
+      if (!row) return [];
+      const product = productMutationPayload(row.product, promotionsByProduct.get(id) ?? []);
+      return [
+        {
+          id,
+          archivedAt: row.product.archivedAt?.toISOString() ?? null,
+          identity: {
+            title: product.title,
+            titleAr: product.titleAr,
+            slug: product.slug,
+            sku: product.sku,
+            barcode: product.barcode,
+          },
+          pricing: {
+            sellingPriceDzd: product.price,
+            compareAtPriceDzd: product.oldPrice,
+            purchaseCostDzd: product.purchasePrice,
+            promoCodes: product.promoCodes,
+          },
+          availability: {
+            active: product.active,
+            inStock: product.inStock,
+            status: product.availabilityStatus,
+            inventoryQuantity: product.inventoryQuantity,
+          },
+          taxonomy: {
+            brand: row.brand,
+            category: row.category?.id ? row.category : null,
+            assignedBrandId: product.brandId,
+            assignedCategoryId: product.categoryId,
+          },
+          content: {
+            description: product.description,
+            descriptionAr: product.descriptionAr,
+            images: product.images,
+          },
+        },
+      ];
+    }),
   };
-}
-
-async function inspectProduct(productId: number) {
-  const product = await readProductMutationPayload(getDb(), productId);
-  return productDetails(productId, product, null);
-}
-
-async function inspectArchivedProduct(productId: number) {
-  const archived = await readArchivedProductMutationPayload(getDb(), productId);
-  return productDetails(productId, archived.product, archived.archivedAt);
 }
 
 export async function inspectAdminCatalogProducts(
   raw: z.input<typeof adminAiCatalogProductInspectionSchema>,
 ) {
   const input = adminAiCatalogProductInspectionSchema.parse(raw);
-  const requestedIds = [...new Set(input.productIds)];
-  const inspected = await Promise.all(
-    requestedIds.map(async (productId) => {
-      try {
-        return { productId, item: await inspectProduct(productId) } as const;
-      } catch (error) {
-        if (error instanceof ProductMutationNotFoundError) {
-          return { productId, item: null } as const;
-        }
-        throw error;
-      }
-    }),
-  );
-
-  return {
-    kind: 'catalog_products' as const,
-    requestedIds,
-    missingIds: inspected.flatMap(({ productId, item }) => (item ? [] : [productId])),
-    items: inspected.flatMap(({ item }) => (item ? [item] : [])),
-  };
+  return { kind: 'catalog_products' as const, ...(await inspectProducts(input.productIds, false)) };
 }
 
 export async function inspectAdminArchivedCatalogProducts(
   raw: z.input<typeof adminAiArchivedCatalogProductInspectionSchema>,
 ) {
   const input = adminAiArchivedCatalogProductInspectionSchema.parse(raw);
-  const requestedIds = [...new Set(input.productIds)];
-  const inspected = await Promise.all(
-    requestedIds.map(async (productId) => {
-      try {
-        return { productId, item: await inspectArchivedProduct(productId) } as const;
-      } catch (error) {
-        if (error instanceof ProductMutationNotFoundError) {
-          return { productId, item: null } as const;
-        }
-        throw error;
-      }
-    }),
-  );
-
   return {
     kind: 'archived_catalog_products' as const,
-    requestedIds,
-    missingIds: inspected.flatMap(({ productId, item }) => (item ? [] : [productId])),
-    items: inspected.flatMap(({ item }) => (item ? [item] : [])),
+    ...(await inspectProducts(input.productIds, true)),
   };
 }

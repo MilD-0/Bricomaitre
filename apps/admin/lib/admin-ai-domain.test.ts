@@ -3,44 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   loadOrderRecordsByIds: vi.fn(),
   loadOrdersPageData: vi.fn(),
-  searchProducts: vi.fn(),
 }));
 
 vi.mock('./admin-orders-data', () => ({
   loadOrderRecordsByIds: mocks.loadOrderRecordsByIds,
   loadOrdersPageData: mocks.loadOrdersPageData,
 }));
-vi.mock('./admin-assets-data', () => ({
-  searchAssetProductOptions: mocks.searchProducts,
-}));
 
-import { findAdminProducts, inspectAdminOrders } from './admin-ai-domain';
+import { inspectAdminOrders } from './admin-ai-domain';
 
 describe('shared Admin AI source adapters', () => {
   beforeEach(() => vi.clearAllMocks());
-
-  it('resolves product identities through the canonical product-option search', async () => {
-    mocks.searchProducts.mockResolvedValue({
-      items: [{ id: 12, title: 'Perceuse', slug: 'perceuse' }],
-      page: 1,
-      limit: 10,
-      total: 1,
-      totalPages: 1,
-    });
-
-    await expect(
-      findAdminProducts({ query: 'perceuse', productIds: [], page: 1, limit: 10 }),
-    ).resolves.toMatchObject({
-      items: [{ id: 12, title: 'Perceuse' }],
-      total: 1,
-    });
-    expect(mocks.searchProducts).toHaveBeenCalledWith({
-      search: 'perceuse',
-      ids: [],
-      page: 1,
-      limit: 10,
-    });
-  });
 
   it('preserves complete operational order evidence for exact inspection', async () => {
     mocks.loadOrderRecordsByIds.mockResolvedValue([

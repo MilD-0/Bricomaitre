@@ -1,29 +1,4 @@
-import { z } from 'zod';
-
-import { searchAssetProductOptions } from './admin-assets-data';
 import { loadOrderRecordsByIds, loadOrdersPageData } from './admin-orders-data';
-
-export const adminAiProductLookupSchema = z
-  .object({
-    query: z.string().trim().max(200).default(''),
-    productIds: z.array(z.number().int().positive()).max(100).default([]),
-    page: z.number().int().positive().default(1),
-    limit: z.number().int().min(1).max(50).default(10),
-  })
-  .refine((input) => input.query.length > 0 || input.productIds.length > 0, {
-    message: 'Provide a search query or at least one product ID.',
-  });
-
-export async function findAdminProducts(input: z.input<typeof adminAiProductLookupSchema>) {
-  const values = adminAiProductLookupSchema.parse(input);
-  return searchAssetProductOptions({
-    search: values.query,
-    ids: values.productIds,
-    page: values.page,
-    limit: values.limit,
-  });
-}
-
 function assistantOrder(order: Awaited<ReturnType<typeof loadOrderRecordsByIds>>[number]) {
   return {
     id: order.id,
