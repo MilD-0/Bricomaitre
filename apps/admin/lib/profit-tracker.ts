@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { dayInTimezone } from './analytics/date-range';
+import { reportingDateSchema as dateOnlySchema } from './analytics/contract';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -32,21 +33,12 @@ import {
 
 type Database = ReturnType<typeof getDb>;
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SETTINGS: ProfitTrackerSettings = {
   fxRate: 280,
   defaultReturnRate: 10,
   restFrom: null,
 };
 const ANALYTICS_TIMEZONE = 'Africa/Algiers';
-
-const dateOnlySchema = z
-  .string()
-  .regex(ISO_DATE_PATTERN)
-  .refine((value) => {
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-  }, 'Invalid calendar date');
 
 const nullableNonnegative = z.number().finite().nonnegative().nullable().optional();
 
@@ -943,6 +935,44 @@ async function listAdsetPerformance(
   };
 }
 
+function indexMetaDays(
+  metaDays: MetaDayEconomics[],
+  dayRows: Array<typeof profitTrackerDays.$inferSelect>,
+) {
+  const metaByDate = new Map(metaDays.map((day) => [day.date, day]));
+  // A successful range sync records days that Meta omitted because activity was zero.
+  // Historical manual inputs and days outside those synced ranges remain unknown.
+  for (const row of dayRows) {
+    const evidence = row.rawMetaJson as {
+      source?: string;
+      rows?: number;
+      currency?: string;
+    } | null;
+    if (
+      !metaByDate.has(row.day) &&
+      row.metaSyncedAt &&
+      evidence?.source === 'meta_ads_daily_insights' &&
+      evidence.rows === 0 &&
+      evidence.currency === 'EUR'
+    ) {
+      metaByDate.set(row.day, {
+        date: row.day,
+        accountCurrency: 'EUR',
+        spendEur: 0,
+        impressions: 0,
+        fbPurchases: 0,
+        cpm: 0,
+        ctr: 0,
+        linkClicks: 0,
+        landingPageViews: 0,
+        metaSyncedAt: isoTimestamp(row.metaSyncedAt),
+      });
+    }
+  }
+
+  return metaByDate;
+}
+
 export async function getProfitTrackerReport(
   input: ProfitTrackerRangeInput,
   options: { db?: Database; now?: Date } = {},
@@ -976,7 +1006,7 @@ export async function getProfitTrackerReport(
 
   const manualByDate = new Map(dayRows.map((row) => [row.day, mapDay(row)]));
   const automaticByDate = new Map(automaticDays.map((day) => [day.date, day]));
-  const metaByDate = new Map(metaDays.map((day) => [day.date, day]));
+  const metaByDate = indexMetaDays(metaDays, dayRows);
   const realizedByDate = new Map(realizedDays.map((day) => [day.date, day]));
   const dates = new Set<string>([
     ...manualByDate.keys(),
@@ -1239,7 +1269,7 @@ export async function getCanonicalOrderProjectionDays(
   ]);
   const manualByDate = new Map(manualRows.map((row) => [row.day, mapDay(row)]));
   const cohortByDate = new Map(cohortDays.map((day) => [day.date, day]));
-  const metaByDate = new Map(metaDays.map((day) => [day.date, day]));
+  const metaByDate = indexMetaDays(metaDays, manualRows);
   const inputs = calculationDates.map((date) => {
     const manual = manualByDate.get(date);
     const cohort = cohortByDate.get(date);

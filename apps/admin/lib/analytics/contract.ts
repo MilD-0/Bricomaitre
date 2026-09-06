@@ -18,7 +18,7 @@ export type AnalyticsRange = '7d' | '14d' | '30d' | '90d' | 'year' | 'all' | 'cu
 
 export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-const dateOnlySchema = z
+export const reportingDateSchema = z
   .string()
   .regex(ISO_DATE_PATTERN)
   .refine((value) => {
@@ -40,10 +40,10 @@ export const analyticsQuerySchema = z
       .describe(
         'Use custom whenever the operator supplies explicit dates or a calendar period such as this month, last month, this week, or last week; resolve both boundaries from the supplied current application date. A calendar month is not a rolling 30-day preset. Use a preset only when the operator requests that rolling preset or supplies no date period.',
       ),
-    startDate: dateOnlySchema
+    startDate: reportingDateSchema
       .optional()
       .describe('Inclusive YYYY-MM-DD start date; required when range is custom.'),
-    endDate: dateOnlySchema
+    endDate: reportingDateSchema
       .optional()
       .describe('Inclusive YYYY-MM-DD end date; required when range is custom.'),
     grain: z

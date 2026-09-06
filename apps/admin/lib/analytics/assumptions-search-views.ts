@@ -30,7 +30,7 @@ export async function loadAssumptionsView(
   const economicsFilters = clipAnalyticsFilters(
     filters,
     commonCutoff(cutoffs.posted, cutoffs.meta),
-    commonCoverageStart(cutoffs.postedFrom, cutoffs.metaFrom),
+    cutoffs.metaFrom,
   );
   const economics = await getProfitTrackerReport(
     economicsInput(economicsFilters.startDate, economicsFilters.endDate),

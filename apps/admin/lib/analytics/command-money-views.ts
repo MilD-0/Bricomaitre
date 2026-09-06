@@ -44,7 +44,7 @@ export async function loadCommandView(
   const economicsFilters = clipAnalyticsFilters(
     filters,
     commonCutoff(cutoffs.posted, cutoffs.meta),
-    commonCoverageStart(cutoffs.postedFrom, cutoffs.metaFrom),
+    cutoffs.metaFrom,
   );
   const fulfillmentFilters = clipAnalyticsFilters(
     filters,
@@ -80,9 +80,10 @@ export async function loadCommandView(
     leadingForecast,
     fulfillmentCompletion,
   ] = await Promise.all([
-    loadEconomicsPair(db, economicsFilters, cutoffs.postedFrom, cutoffs.metaFrom).then(
-      async (pair) => ({ ...pair, sources: await loadSourceHealth(db, filters, pair.current) }),
-    ),
+    loadEconomicsPair(db, economicsFilters, cutoffs.metaFrom).then(async (pair) => ({
+      ...pair,
+      sources: await loadSourceHealth(db, filters, pair.current),
+    })),
     loadStorefrontOrderConversion(db, storefrontFilters),
     priorStorefront ? loadStorefrontOrderConversion(db, priorStorefront) : Promise.resolve(null),
     loadFulfillmentSummary(db, fulfillmentFilters.startDate, fulfillmentFilters.endDate),
@@ -226,7 +227,7 @@ export async function loadMoneyView(
   const economicsFilters = clipAnalyticsFilters(
     filters,
     commonCutoff(cutoffs.posted, cutoffs.meta),
-    commonCoverageStart(cutoffs.postedFrom, cutoffs.metaFrom),
+    cutoffs.metaFrom,
   );
   const fulfillmentFilters = clipAnalyticsFilters(
     filters,
@@ -239,12 +240,7 @@ export async function loadMoneyView(
     cutoffs.ecotrackFrom,
     cutoffs.paidFrom,
   );
-  const { current, previous } = await loadEconomicsPair(
-    db,
-    economicsFilters,
-    cutoffs.postedFrom,
-    cutoffs.metaFrom,
-  );
+  const { current, previous } = await loadEconomicsPair(db, economicsFilters, cutoffs.metaFrom);
   const [sources, automaticPaid, previousAutomaticPaid, cohorts, leadingForecast] =
     await Promise.all([
       loadSourceHealth(db, filters, current),

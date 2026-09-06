@@ -6,6 +6,7 @@ import {
   analyticsEvents,
   ecotrackOrderStates,
   metaAdsDailyInsights,
+  profitTrackerDays,
   orders,
   orderStatusHistory,
 } from '@bric/db/schema';
@@ -13,7 +14,8 @@ import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 import type { getProfitTrackerReport } from '../profit-tracker';
 import type { AnalyticsFilters, AnalyticsSource } from './contract';
-import { inclusiveDays } from './date-range';
+import { inclusiveDays, dayInTimezone } from './date-range';
+import { metaCoverageThroughSql } from './data-boundaries';
 import { datePredicate, isoValue, numeric, timestampPredicate } from './query-values';
 
 type Database = ReturnType<typeof getDb>;
@@ -57,9 +59,7 @@ export async function loadSourceHealth(
       (select count(*)::int from ${orders}
         where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
         as order_records,
-      (select (max(${orders.createdAt}) at time zone 'Africa/Algiers')::date from ${orders}
-        where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
-        as orders_through_date,
+      least(${filters.endDate}::date, ${dayInTimezone(new Date())}::date) as orders_through_date,
       (select max(${orders.updatedAt}) from ${orders}) as orders_updated_at,
       (select count(*)::int from posted) as posted_records,
       (select count(tracked_order_id)::int from posted) as ecotrack_records,
@@ -72,14 +72,20 @@ export async function loadSourceHealth(
         )) at time zone 'Africa/Algiers')::date
         from ${ecotrackOrderStates}
         where ${ecotrackOrderStates.deletedAt} is null) as ecotrack_through_date,
-      (select count(distinct ${metaAdsDailyInsights.day})::int from ${metaAdsDailyInsights}
-        where ${datePredicate(metaAdsDailyInsights.day, filters.startDate, filters.endDate)})
-        as meta_days,
-      (select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}
-        where ${datePredicate(metaAdsDailyInsights.day, filters.startDate, filters.endDate)})
-        as meta_through_date,
-      (select max(${metaAdsDailyInsights.syncedAt}) from ${metaAdsDailyInsights})
-        as meta_updated_at,
+      (select count(distinct day)::int from (
+        select ${metaAdsDailyInsights.day} as day from ${metaAdsDailyInsights}
+          where ${datePredicate(metaAdsDailyInsights.day, filters.startDate, filters.endDate)}
+        union
+        select ${profitTrackerDays.day} as day from ${profitTrackerDays}
+          where ${profitTrackerDays.metaSyncedAt} is not null
+            and ${datePredicate(profitTrackerDays.day, filters.startDate, filters.endDate)}
+      ) covered_meta_days) as meta_days,
+      case when ${metaCoverageThroughSql} is null then null
+        else least(${filters.endDate}::date, ${metaCoverageThroughSql}) end as meta_through_date,
+      greatest(
+        (select max(${metaAdsDailyInsights.syncedAt}) from ${metaAdsDailyInsights}),
+        (select max(${profitTrackerDays.metaSyncedAt}) from ${profitTrackerDays})
+      ) as meta_updated_at,
       (select count(*)::int from ${analyticsDailyRollups}
         where ${analyticsDailyRollups.dimension} = 'overall'
           and ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)})

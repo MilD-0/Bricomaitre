@@ -14,6 +14,7 @@ import {
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 import { ISO_DATE_PATTERN } from './contract';
+import { dayInTimezone } from './date-range';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -51,16 +52,25 @@ export async function loadDatasetCutoffDate(db: Database) {
   return typeof value === 'string' && ISO_DATE_PATTERN.test(value) ? value : null;
 }
 
-export async function loadCanonicalCutoffs(db: Database): Promise<AnalyticsCanonicalCutoffs> {
+export const metaCoverageThroughSql = sql`greatest(
+  (select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}),
+  (select max(${profitTrackerDays.day}) from ${profitTrackerDays} where ${profitTrackerDays.metaSyncedAt} is not null)
+)`;
+export const metaCoverageFromSql = sql`least(
+  (select min(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}),
+  (select min(${profitTrackerDays.day}) from ${profitTrackerDays} where ${profitTrackerDays.metaSyncedAt} is not null)
+)`;
+
+export async function loadCanonicalCutoffs(
+  db: Database,
+  throughDate = dayInTimezone(new Date()),
+): Promise<AnalyticsCanonicalCutoffs> {
   const result = await db.execute(sql`
     select
-      to_char((select (max(${orders.createdAt}) at time zone 'Africa/Algiers')::date from ${orders}), 'YYYY-MM-DD')
-        as orders_through,
+      ${throughDate}::text as orders_through,
       to_char((select (min(${orders.createdAt}) at time zone 'Africa/Algiers')::date from ${orders}), 'YYYY-MM-DD')
         as orders_from,
-      to_char((select (max(${orderStatusHistory.changedAt}) at time zone 'Africa/Algiers')::date
-        from ${orderStatusHistory} where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}), 'YYYY-MM-DD')
-        as posted_through,
+      ${throughDate}::text as posted_through,
       to_char((select (min(${orderStatusHistory.changedAt}) at time zone 'Africa/Algiers')::date
         from ${orderStatusHistory} where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}), 'YYYY-MM-DD')
         as posted_from,
@@ -75,10 +85,8 @@ export async function loadCanonicalCutoffs(db: Database): Promise<AnalyticsCanon
       to_char((select min(${ecotrackOrderTrackingEvents.eventDate})
         from ${ecotrackOrderTrackingEvents}
         where ${ecotrackOrderTrackingEvents.status} = 'payed'), 'YYYY-MM-DD') as paid_from,
-      to_char((select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}), 'YYYY-MM-DD')
-        as meta_through,
-      to_char((select min(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}), 'YYYY-MM-DD')
-        as meta_from,
+      to_char(${metaCoverageThroughSql}, 'YYYY-MM-DD') as meta_through,
+      to_char(${metaCoverageFromSql}, 'YYYY-MM-DD') as meta_from,
       to_char(greatest(
         (select max(${analyticsDailyRollups.day}) from ${analyticsDailyRollups}),
         (select (max(${analyticsEvents.occurredAt}) at time zone 'Africa/Algiers')::date

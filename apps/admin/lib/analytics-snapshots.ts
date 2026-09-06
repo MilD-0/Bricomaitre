@@ -139,8 +139,16 @@ export function createAnalyticsSnapshotStore(dependencies: {
     const token = randomUUID();
     const lock = `${key}:lock`;
     const waitingSince = now();
-    while (!(await redis.set(lock, token, 'EX', LOCK_SECONDS, 'NX'))) {
-      const completed = readSnapshot(await redis.get(key));
+    while (true) {
+      let acquired: unknown;
+      let completed: Snapshot | null = null;
+      try {
+        acquired = await redis.set(lock, token, 'EX', LOCK_SECONDS, 'NX');
+        if (!acquired) completed = readSnapshot(await redis.get(key));
+      } catch {
+        return computeInSequence(query);
+      }
+      if (acquired) break;
       if (completed && completed.computedAt !== previous) return present(completed, 'fresh');
       if (now() - waitingSince > 5 * 60_000)
         throw new Error('Analytics refresh is still running. Try again shortly.');
@@ -161,7 +169,12 @@ export function createAnalyticsSnapshotStore(dependencies: {
     renewal.unref();
     try {
       // Another process may have completed between our read and lock acquisition.
-      const completed = readSnapshot(await redis.get(key));
+      let completed: Snapshot | null;
+      try {
+        completed = readSnapshot(await redis.get(key));
+      } catch {
+        return computeInSequence(query);
+      }
       if (completed && completed.computedAt !== previous) return present(completed, 'fresh');
       // A report fans out into several database queries. Keep distinct cold
       // reports sequential inside each process so simultaneous navigations or

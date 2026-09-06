@@ -1,5 +1,6 @@
 import { sql, type SQLWrapper } from 'drizzle-orm';
 import { z } from 'zod';
+import { reportingDateSchema } from './analytics/contract';
 import { numberOrZero as numberValue } from './stats-values';
 export { numberOrZero as numberValue } from './stats-values';
 
@@ -13,14 +14,13 @@ export type AiStatsSurface = (typeof aiStatsSurfaces)[number];
 export type AiStatsRange = AnalyticsRange;
 
 export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const dateOnlySchema = z.string().regex(ISO_DATE_PATTERN);
 
 export const aiStatsQuerySchema = z
   .object({
     surface: z.enum(aiStatsSurfaces).default('operations'),
     range: z.enum(['7d', '14d', '30d', '90d', 'year', 'all', 'custom']).default('30d'),
-    startDate: dateOnlySchema.optional(),
-    endDate: dateOnlySchema.optional(),
+    startDate: reportingDateSchema.optional(),
+    endDate: reportingDateSchema.optional(),
     grain: z.enum(['auto', 'day', 'week', 'month']).default('auto'),
   })
   .strict()

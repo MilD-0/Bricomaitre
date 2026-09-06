@@ -84,7 +84,8 @@ export async function getAnalyticsData(
     ? clampQueryToReference(query, clock.referenceDate)
     : query;
   const filters = resolveAnalyticsFilters(effectiveQuery, now);
-  const cutoffs = filters.view === 'search' ? null : await loadCanonicalCutoffs(db);
+  const cutoffs =
+    filters.view === 'search' ? null : await loadCanonicalCutoffs(db, clock.referenceDate);
   let loaded: LoadedAnalyticsSection;
 
   switch (filters.view) {

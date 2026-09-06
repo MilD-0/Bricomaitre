@@ -55,6 +55,16 @@ describe('GET /api/stats/ai', () => {
     expect(getAiStatsDataMock).not.toHaveBeenCalled();
   });
 
+  it('rejects impossible calendar dates before querying', async () => {
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/stats/ai?range=custom&startDate=2026-02-31&endDate=2026-03-03',
+      ),
+    );
+    expect(response.status).toBe(400);
+    expect(getAiStatsDataMock).not.toHaveBeenCalled();
+  });
+
   it('enforces analytics access and database availability', async () => {
     requireAnalyticsAccessMock.mockResolvedValueOnce(
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),

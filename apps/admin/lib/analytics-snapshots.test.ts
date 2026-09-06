@@ -141,6 +141,23 @@ describe('analytics snapshots', () => {
     await expect(store.load(query)).resolves.toEqual(payload);
   });
 
+  it.each(['lock', 'after-lock', 'waiting'] as const)(
+    'still calculates when Redis fails at %s',
+    async (stage) => {
+      const store = setup();
+      if (stage === 'lock') store.redis.set.mockRejectedValueOnce(new Error('Redis unavailable'));
+      else {
+        if (stage === 'waiting') store.redis.set.mockResolvedValueOnce(null);
+        store.redis.get
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(null)
+          .mockRejectedValueOnce(new Error('Redis unavailable'));
+      }
+      await expect(store.load(query)).resolves.toEqual(payload);
+      expect(store.compute).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('does not reuse a snapshot across an invalidation or Algiers midnight', async () => {
     const store = setup();
     await store.load(query);

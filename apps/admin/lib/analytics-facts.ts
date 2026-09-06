@@ -1,13 +1,9 @@
 import { sql } from 'drizzle-orm';
 import { dayInTimezone } from './analytics/date-range';
+import { metaCoverageThroughSql } from './analytics/data-boundaries';
 
 import type { getDb } from '@bric/db/client';
-import {
-  analyticsEconomicsDailyFacts,
-  metaAdsDailyInsights,
-  orders,
-  orderStatusHistory,
-} from '@bric/db/schema';
+import { analyticsEconomicsDailyFacts, orders } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 import { loadAutomaticPaidEconomics, resolveAnalyticsFilters } from './analytics';
@@ -107,11 +103,7 @@ export async function refreshAnalyticsFacts(
   const sourceCutoffResult = options.endDate
     ? null
     : await db.execute(sql`
-        select to_char(least(
-          (select max((${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date)
-            from ${orderStatusHistory} where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}),
-          (select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights})
-        ), 'YYYY-MM-DD') as end_date
+        select to_char(${metaCoverageThroughSql}, 'YYYY-MM-DD') as end_date
       `);
   const sourceCutoff = sourceCutoffResult
     ? (sourceCutoffResult.rows[0] as { end_date?: unknown } | undefined)?.end_date
