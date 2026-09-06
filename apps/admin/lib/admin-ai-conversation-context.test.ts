@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildAdminAiConversationContext,
-  latestAdminAiAnalyticsContinuation,
-} from './admin-ai-conversation-context';
+import { buildAdminAiConversationContext } from './admin-ai-conversation-context';
 
 describe('admin AI conversation context', () => {
   it('retains long conversations beyond 20 messages and restores exact saved tool evidence', () => {
@@ -63,80 +60,5 @@ describe('admin AI conversation context', () => {
     ]);
     const serialized = context[0]!.content.split('instructions):\n')[1]!;
     expect(JSON.parse(serialized)).toEqual(evidence);
-  });
-
-  it('restores the latest canonical analytics query for conversational follow-ups', () => {
-    const continuation = latestAdminAiAnalyticsContinuation([
-      {
-        role: 'assistant',
-        content: {
-          text: 'Campaign Alpha declined.',
-          toolResults: [
-            {
-              type: 'tool-result',
-              toolName: 'query_analytics',
-              input: { view: 'acquisition', range: '30d' },
-              output: {
-                view: 'acquisition',
-                filters: {
-                  view: 'acquisition',
-                  range: 'custom',
-                  startDate: '2026-08-01',
-                  endDate: '2026-08-23',
-                  grain: 'day',
-                },
-                focus: {
-                  dimension: 'campaigns',
-                  search: 'Alpha',
-                  identifiers: ['cmp-1'],
-                  limit: 20,
-                },
-              },
-            },
-          ],
-        },
-      },
-    ]);
-
-    expect(continuation).toEqual({
-      view: 'acquisition',
-      range: 'custom',
-      startDate: '2026-08-01',
-      endDate: '2026-08-23',
-      grain: 'day',
-      focus: {
-        dimension: 'campaigns',
-        search: 'Alpha',
-        identifiers: ['cmp-1'],
-        limit: 20,
-      },
-    });
-  });
-
-  it('does not resurrect stale analytics after a newer tool-bearing subject change', () => {
-    expect(
-      latestAdminAiAnalyticsContinuation([
-        {
-          role: 'assistant',
-          content: {
-            text: 'Product updated.',
-            toolResults: [{ type: 'tool-result', toolName: 'update_products', output: {} }],
-          },
-        },
-        {
-          role: 'assistant',
-          content: {
-            text: 'Earlier analytics.',
-            toolResults: [
-              {
-                type: 'tool-result',
-                toolName: 'query_analytics',
-                output: { view: 'money', filters: { range: '30d' } },
-              },
-            ],
-          },
-        },
-      ]),
-    ).toBeNull();
   });
 });

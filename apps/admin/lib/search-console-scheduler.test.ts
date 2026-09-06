@@ -15,15 +15,15 @@ vi.mock('./search-console', () => ({
 }));
 
 import {
-  resetSearchConsoleSchedulerForTests,
   runScheduledSearchConsoleSync,
   startSearchConsoleScheduler,
+  stopSearchConsoleScheduler,
 } from './search-console-scheduler';
 
 describe('Search Console scheduler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetSearchConsoleSchedulerForTests();
+    stopSearchConsoleScheduler();
   });
 
   it('stays disabled unless explicitly enabled', () => {

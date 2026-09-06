@@ -12,9 +12,7 @@ vi.mock('./auth', () => ({
 import { normalizePermissions, normalizeRole } from './permissions';
 import {
   canMutateResource,
-  requireAnyMutationAccess,
   requireAnalyticsAccess,
-  requireAdministrationAccess,
   requireAppAccess,
   requireMutationAccess,
   requireOpsAccess,
@@ -95,12 +93,12 @@ describe('rbac helpers', () => {
     expect(canMutateResource(['ops_view'], 'stats')).toBe(false);
   });
 
-  it('allows settings managers through requireAdministrationAccess', async () => {
+  it('allows settings managers through requireSettingsAccess', async () => {
     authMock.mockResolvedValue({
       user: { isAllowed: true, role: 'operations-manager', permissions: ['settings_manage'] },
     });
 
-    await expect(requireAdministrationAccess()).resolves.toBeNull();
+    await expect(requireSettingsAccess()).resolves.toBeNull();
   });
 
   it('makes the AI assistant available to every allowed user', async () => {
@@ -110,22 +108,12 @@ describe('rbac helpers', () => {
     await expect(requireAppAccess()).resolves.toBeNull();
   });
 
-  it('allows access when any requested mutation domain is granted', async () => {
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['brands_categories_write'] },
-    });
-    await expect(
-      requireAnyMutationAccess(['products', 'assets', 'brandsCategories']),
-    ).resolves.toBeNull();
-    expect((await requireAnyMutationAccess(['products', 'assets']))?.status).toBe(403);
-  });
-
-  it('rejects users without settings permission through requireAdministrationAccess', async () => {
+  it('rejects users without settings permission through requireSettingsAccess', async () => {
     authMock.mockResolvedValue({
       user: { isAllowed: true, role: 'employee', permissions: ['ops_view'] },
     });
 
-    const res = await requireAdministrationAccess();
+    const res = await requireSettingsAccess();
 
     expect(res?.status).toBe(403);
     await expect(res?.json()).resolves.toEqual({ error: 'Forbidden' });

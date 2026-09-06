@@ -9,18 +9,30 @@ import { requestJson as request } from '../../lib/admin-api';
 import type { OrdersResponse } from '../../lib/order-admin-contracts';
 import { ORDER_STATUS, parseNumericAmount, type OrderRecord } from '../../lib/orders';
 import {
+  buildShoppingListInventoryPreview,
   reconcileShoppingListAllocations,
   type ShoppingListDraftItem,
   type ShoppingListDraftRecord,
   type ShoppingListSourceMode,
 } from '../../lib/shopping-list-drafts';
-import {
-  ShoppingInventoryReviewDialog,
-  shoppingInventoryReviewLabel,
-} from './shopping-inventory-review';
 import { toast } from '../../lib/toast';
 import { SplitActionButton } from '../split-action-button';
 import type { ProductSearchItem } from './order-products-editor';
+import {
+  buildMergedShoppingListState,
+  buildShoppingListPrintHtml,
+  buildShoppingListStateFromDraft,
+  fetchShoppingListDraft,
+  recalculateShoppingListInventory,
+  resetShoppingListDraft,
+  saveShoppingListDraft,
+  type BrandLookupResponse,
+  type ProductLookupResponse,
+} from './orders-shopping-list';
+import {
+  EcotrackPostingWorkspaceDialog,
+  ShoppingListWorkspaceDialog,
+} from './orders-workflow-dialogs';
 import type {
   EcotrackPostingPreviewState,
   EcotrackPostingSummary,
@@ -30,21 +42,9 @@ import type {
   ShoppingListState,
 } from './orders-workflow-model';
 import {
-  buildInventoryPreview,
-  buildMergedShoppingListState,
-  resetShoppingListDraft,
-  buildShoppingListPrintHtml,
-  buildShoppingListStateFromDraft,
-  fetchShoppingListDraft,
-  recalculateShoppingListInventory,
-  saveShoppingListDraft,
-  type BrandLookupResponse,
-  type ProductLookupResponse,
-} from './orders-shopping-list';
-import {
-  EcotrackPostingWorkspaceDialog,
-  ShoppingListWorkspaceDialog,
-} from './orders-workflow-dialogs';
+  ShoppingInventoryReviewDialog,
+  shoppingInventoryReviewLabel,
+} from './shopping-inventory-review';
 
 type OrderJob = {
   id: string;
@@ -493,7 +493,7 @@ export function OrdersWorkflows({
             detail.purchasePrice == null ? null : parseNumericAmount(detail.purchasePrice),
           thumbnailUrl: detail.images?.[0] ?? product.images[0] ?? null,
           inventoryQuantity: detail.inventoryQuantity,
-          ...buildInventoryPreview(1, detail.inventoryQuantity),
+          ...buildShoppingListInventoryPreview(1, detail.inventoryQuantity),
           notes: [],
           checked: false,
           isCustom: true,

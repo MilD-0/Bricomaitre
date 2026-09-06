@@ -1,4 +1,5 @@
-function canonicalizeNonnegativeDecimal(value: unknown) {
+/** Matches the persisted PostgreSQL numeric(…, 2) representation. */
+export function normalizeEcotrackMonetaryValue(value: unknown) {
   const text = String(value ?? '').trim();
   if (!text) return null;
 
@@ -18,11 +19,6 @@ function canonicalizeNonnegativeDecimal(value: unknown) {
   return `${cents / centsPerUnit}.${String(cents % centsPerUnit).padStart(2, '0')}`;
 }
 
-/** Matches the persisted PostgreSQL numeric(…, 2) representation. */
-export function normalizeEcotrackMonetaryValue(value: unknown) {
-  return canonicalizeNonnegativeDecimal(value);
-}
-
 /**
  * Canonicalizes valid monetary values while retaining invalid provider values
  * so audit comparisons cannot silently equate corrupt input with a real null.
@@ -30,5 +26,5 @@ export function normalizeEcotrackMonetaryValue(value: unknown) {
 export function normalizeEcotrackMonetarySnapshotValue(value: unknown) {
   const text = String(value ?? '').trim();
   if (!text) return null;
-  return canonicalizeNonnegativeDecimal(value) ?? text;
+  return normalizeEcotrackMonetaryValue(value) ?? text;
 }

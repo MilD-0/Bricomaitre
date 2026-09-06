@@ -3,29 +3,30 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { getDb } from '@bric/db/client';
 import {
   marketingEventOutbox,
-  orderAiInfluence,
   orderAcquisitionAttribution,
+  orderAiInfluence,
   orderLineItems,
   orderMarketingAttribution,
   orders,
 } from '@bric/db/schema';
-import { ORDER_STATUS, parseNumericAmount } from '../orders-support';
+import { ORDER_STATUS } from '../orders-support';
+import { classifyAcquisition, isNonDirectAcquisition } from './acquisition';
+import {
+  MARKETING_SEMANTICS_VERSION,
+  ORDER_ACQUISITION_SEMANTICS_VERSION,
+  ORDER_AI_INFLUENCE_SEMANTICS_VERSION,
+  type StorefrontAcquisitionTouch,
+  type StorefrontOrderMarketing,
+} from './marketing-contracts';
 import {
   getOrderCompletedEventId,
   getOrderConfirmedEventId,
   hashMetaValue,
+  lineRowToCommerceLine,
   normalizeAlgeriaPhone,
   type MetaCommerceLine,
   type MetaRequestContext,
 } from './meta';
-import {
-  MARKETING_SEMANTICS_VERSION,
-  ORDER_AI_INFLUENCE_SEMANTICS_VERSION,
-  ORDER_ACQUISITION_SEMANTICS_VERSION,
-  type StorefrontAcquisitionTouch,
-  type StorefrontOrderMarketing,
-} from './marketing-contracts';
-import { classifyAcquisition, isNonDirectAcquisition } from './acquisition';
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -222,25 +223,6 @@ export function isMarketingDestinationConfigured(
 function normalizeIdentifier(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized.slice(0, 250) : null;
-}
-
-function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): MetaCommerceLine {
-  return {
-    productId: row.productId ?? Number(row.contentId),
-    contentId: row.contentId,
-    rawValue: row.rawValue,
-    title: row.titleSnapshot,
-    originalUnitPrice: parseNumericAmount(row.originalUnitPrice),
-    effectiveUnitPrice: parseNumericAmount(row.effectiveUnitPrice),
-    unitPurchasePrice:
-      row.unitPurchasePriceSnapshot == null
-        ? null
-        : parseNumericAmount(row.unitPurchasePriceSnapshot),
-    quantity: row.quantity,
-    discountAmount: parseNumericAmount(row.discountAmount),
-    lineTotal: parseNumericAmount(row.lineTotal),
-    thumbnailUrl: row.thumbnailUrl,
-  };
 }
 
 function commerceValue(lines: MetaCommerceLine[]) {

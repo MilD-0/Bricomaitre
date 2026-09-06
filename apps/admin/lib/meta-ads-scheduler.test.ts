@@ -34,12 +34,12 @@ describe('Meta Ads Insights scheduler', () => {
   it('registers one opt-in schedule and runs the direct reporting sync', async () => {
     const {
       DEFAULT_META_ADS_SYNC_CRON,
-      resetMetaAdsSchedulerForTests,
+      stopMetaAdsScheduler,
       runScheduledMetaAdsSync,
       startMetaAdsScheduler,
     } = await import('./meta-ads-scheduler');
 
-    resetMetaAdsSchedulerForTests();
+    stopMetaAdsScheduler();
     startMetaAdsScheduler();
     startMetaAdsScheduler();
     expect(validateMock).toHaveBeenCalledWith(DEFAULT_META_ADS_SYNC_CRON);
@@ -53,9 +53,8 @@ describe('Meta Ads Insights scheduler', () => {
 
   it('does not register until shadow synchronization is explicitly enabled', async () => {
     vi.stubEnv('ADMIN_META_ADS_SYNC_ENABLED', 'false');
-    const { resetMetaAdsSchedulerForTests, startMetaAdsScheduler } =
-      await import('./meta-ads-scheduler');
-    resetMetaAdsSchedulerForTests();
+    const { stopMetaAdsScheduler, startMetaAdsScheduler } = await import('./meta-ads-scheduler');
+    stopMetaAdsScheduler();
     expect(startMetaAdsScheduler()).toBeNull();
     expect(scheduleMock).not.toHaveBeenCalled();
   });
@@ -64,9 +63,8 @@ describe('Meta Ads Insights scheduler', () => {
     readMetaAdsConfigMock.mockImplementation(() => {
       throw new Error('Meta Ads credentials are incomplete.');
     });
-    const { resetMetaAdsSchedulerForTests, startMetaAdsScheduler } =
-      await import('./meta-ads-scheduler');
-    resetMetaAdsSchedulerForTests();
+    const { stopMetaAdsScheduler, startMetaAdsScheduler } = await import('./meta-ads-scheduler');
+    stopMetaAdsScheduler();
 
     expect(() => startMetaAdsScheduler()).toThrow('Meta Ads credentials are incomplete.');
     expect(scheduleMock).not.toHaveBeenCalled();

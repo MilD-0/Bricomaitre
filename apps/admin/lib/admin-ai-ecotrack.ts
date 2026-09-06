@@ -1,14 +1,13 @@
 import { z } from 'zod';
+import { dayInTimezone } from './analytics/date-range';
 
 import { getDb } from '@bric/db/client';
 import type { ActionActor } from './action-history';
 import { inspectAdminOrders } from './admin-ai-domain';
-import { loadOrdersPageData } from './admin-orders-data';
+import { loadConfirmedOrderIds } from './admin-orders-data';
 import { startOrderEcotrackJob } from './background-jobs';
 import { buildEcotrackPostingPreview, readEcotrackCatalog } from './ecotrack';
-import { ORDER_STATUS } from './orders';
 
-const ECOTRACK_BUSINESS_TIMEZONE = 'Africa/Algiers';
 const ecotrackPostingScopeValues = [
   'selected',
   'confirmed_today',
@@ -54,44 +53,8 @@ export type ResolvedAdminAiEcotrackPostingScope = {
   dateBasis: 'explicit_order_selection' | 'order_created_africa_algiers' | 'all_confirmed';
 };
 
-function dateInTimezone(now: Date, timeZone = ECOTRACK_BUSINESS_TIMEZONE) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
 function uniqueOrderIds(orderIds: readonly number[]) {
   return [...new Set(orderIds)];
-}
-
-async function loadConfirmedOrders() {
-  const items = [];
-  let page = 1;
-  let totalPages = 1;
-
-  do {
-    const response = await loadOrdersPageData(
-      {
-        page,
-        limit: 100,
-        inHouseStatus: ORDER_STATUS.CONFIRMED,
-        search: '',
-        sortKey: 'createdAt',
-        sortDirection: 'desc',
-      },
-      false,
-    );
-    items.push(...response.items);
-    totalPages = response.pagination.totalPages;
-    page += 1;
-  } while (page <= totalPages);
-
-  return items;
 }
 
 export async function resolveAdminAiEcotrackPostingScope(
@@ -115,7 +78,7 @@ export async function resolveAdminAiEcotrackPostingScope(
 
   const businessDate =
     parsed.scope === 'confirmed_today'
-      ? dateInTimezone(now)
+      ? dayInTimezone(now)
       : parsed.scope === 'confirmed_date'
         ? parsed.businessDate
         : null;
@@ -130,10 +93,7 @@ export async function resolveAdminAiEcotrackPostingScope(
   const orderIds =
     previewedOrderIds.length > 0
       ? previewedOrderIds
-      : (await loadConfirmedOrders()).flatMap((order) => {
-          if (!businessDate) return [order.id];
-          return dateInTimezone(new Date(order.createdAt)) === businessDate ? [order.id] : [];
-        });
+      : await loadConfirmedOrderIds({ businessDate });
 
   return {
     scope: parsed.scope,

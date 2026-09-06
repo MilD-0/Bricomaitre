@@ -10,8 +10,6 @@ export {
   coerceNoAnswerCount,
   coerceOrderStatus,
   DEGRADED_CAPTURE_VARIANT,
-  getDeliveryTypeLabelKey,
-  getOrderFullName,
   getOrderStatusLabelKey,
   isConfirmedLifecycleStatus,
   isMongoObjectId,

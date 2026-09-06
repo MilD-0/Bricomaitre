@@ -6,10 +6,10 @@ import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { analyticsAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
+import { requestJson as request } from '../../lib/admin-api';
 import type { AnalyticsPayload, AnalyticsRange } from '../../lib/analytics';
 import { statsPath } from '../../lib/analytics-routes';
-import { requestJson as request } from '../../lib/admin-api';
-import { analyticsAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
 import { cn } from '../../lib/utils';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
@@ -20,14 +20,14 @@ import {
   WorkspaceHeading,
   WorkspaceToolbar,
 } from '../ui/workspace';
-import { AnalyticsRangeControls } from './analytics-range-controls';
 import { AcquisitionView } from './analytics-acquisition-view';
 import { AssumptionsView } from './analytics-assumptions-view';
 import { CatalogView } from './analytics-catalog-view';
 import { CommandView, MoneyView } from './analytics-command-money-views';
 import { getAnalyticsCopy } from './analytics-copy';
-import { FulfillmentView } from './analytics-fulfillment-view';
 import { ANALYTICS_TIME_ZONE } from './analytics-format';
+import { FulfillmentView } from './analytics-fulfillment-view';
+import { AnalyticsRangeControls } from './analytics-range-controls';
 import { SearchVisibilityView } from './analytics-search-view';
 import { StorefrontView } from './analytics-storefront-view';
 import {
@@ -35,8 +35,6 @@ import {
   SourceRail,
   WarningRail,
 } from './analytics-workspace-primitives';
-
-export { completedTrendBuckets, splitPartialSeries } from './analytics-workspace-primitives';
 
 export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload }) {
   const locale = useLocale();

@@ -4,11 +4,11 @@ import { z } from 'zod';
 
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
 
-import { buildMetaServerEvent, deliverClientMarketingEvent } from '@/lib/marketing-destinations';
 import {
   captureStorefrontAttribution,
   getStorefrontAnalyticsContext,
 } from '@/lib/marketing-attribution';
+import { buildMetaServerEvent, deliverClientMarketingEvent } from '@/lib/marketing-destinations';
 
 const productEventNameSchema = z.enum([
   'view_item',
@@ -192,18 +192,6 @@ function createId() {
   return (
     globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
   );
-}
-
-export function sanitizeAnalyticsReferrer(value: string, currentOrigin: string) {
-  if (!value) return null;
-  try {
-    const referrer = new URL(value);
-    return referrer.origin === currentOrigin
-      ? `${referrer.origin}${referrer.pathname}`
-      : referrer.origin;
-  } catch {
-    return null;
-  }
 }
 
 export function buildProductAnalyticsPayload(input: ProductAnalyticsEventInput) {

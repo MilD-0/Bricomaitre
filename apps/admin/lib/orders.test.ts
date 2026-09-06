@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { getDeliveryTypeLabelKey, getOrderFullName } from '@bric/storefront-core/order-domain';
 import {
-  coerceDeliveryType,
   buildOrderProductSummaries,
+  coerceDeliveryType,
   coerceNoAnswerCount,
   coerceOrderStatus,
-  getDeliveryTypeLabelKey,
-  getOrderFullName,
   getOrderStatusLabelKey,
   isConfirmedLifecycleStatus,
   isMongoObjectId,

@@ -4,15 +4,14 @@ import { ecotrackOrderStates, orderStatusHistory } from '@bric/db/schema';
 import {
   buildEcotrackOrderPayload,
   classifyOrdersForEcotrackPosting,
-  cleanEcotrackEnvValue,
   createEcotrackOrdersBatch,
   fetchEcotrackCatalogSnapshot,
-  getEcotrackConfig,
   postOrdersToEcotrack,
   validateEcotrackToken,
   type EcotrackCatalogRecord,
   type EcotrackOrderInput,
 } from './ecotrack';
+import { cleanEcotrackEnvValue, getEcotrackConfig } from '@bric/storefront-core/ecotrack-client';
 
 describe('lib/ecotrack', () => {
   const env = {
@@ -608,7 +607,9 @@ describe('lib/ecotrack', () => {
         returning: vi.fn().mockResolvedValue([{ ...orderInput.row, ...values }]),
       })),
     }));
-    const onConflictDoUpdateMock = vi.fn().mockResolvedValue(undefined);
+    const onConflictDoUpdateMock = vi.fn(({ set }) => ({
+      returning: vi.fn().mockResolvedValue([{ id: 101, ...set }]),
+    }));
     const upsertValuesMock = vi
       .fn()
       .mockReturnValue({ onConflictDoUpdate: onConflictDoUpdateMock });

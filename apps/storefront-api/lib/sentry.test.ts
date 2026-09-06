@@ -1,10 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { sanitizeSentryEvent } from './sentry';
+const init = vi.hoisted(() => vi.fn());
+vi.mock('@sentry/nextjs', () => ({ init }));
+
+import '../sentry.server.config';
 
 describe('storefront API Sentry privacy boundary', () => {
-  it('removes request bodies and query details while preserving the route path', () => {
-    const sanitized = sanitizeSentryEvent({
+  it('installs a server hook that removes private data before sending events', () => {
+    expect(init).toHaveBeenCalledOnce();
+    const config = init.mock.calls[0]![0];
+    expect(config.sendDefaultPii).toBe(false);
+    expect(config.beforeSend).toBeTypeOf('function');
+    const sanitized = config.beforeSend({
       request: {
         data: { phone: '0550000000' },
         url: 'https://api.bricomaitre.com/storefront/orders?accessToken=secret#result',

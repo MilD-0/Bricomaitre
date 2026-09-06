@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  aiRate,
-  aiStatsQuerySchema,
-  classifyAiWorkload,
-  isAssistedInfluenceLevel,
-} from './ai-stats';
+import { aiStatsQuerySchema } from './ai-stats';
+import { aiRate, classifyAiWorkload } from './ai-stats-contract';
 
 describe('AI analytics semantics', () => {
   it('separates interactive, deterministic, and batch work', () => {
@@ -14,14 +10,6 @@ describe('AI analytics semantics', () => {
     expect(classifyAiWorkload('product_categorization', 'deepseek/deepseek-v4-flash')).toBe(
       'batch',
     );
-  });
-
-  it('does not call an assistant open an assisted order', () => {
-    expect(isAssistedInfluenceLevel('none')).toBe(false);
-    expect(isAssistedInfluenceLevel('opened')).toBe(false);
-    expect(isAssistedInfluenceLevel('engaged')).toBe(true);
-    expect(isAssistedInfluenceLevel('recommendation_clicked')).toBe(true);
-    expect(isAssistedInfluenceLevel('recommended_product_ordered')).toBe(true);
   });
 
   it('returns unavailable rates instead of a false zero when there is no denominator', () => {

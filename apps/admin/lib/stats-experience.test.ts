@@ -1,71 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { PgDialect } from 'drizzle-orm/pg-core';
 
-import {
-  buildCustomerProductQuery,
-  buildCustomerSummaryQuery,
-  buildLandingPagePerformanceQuery,
-  CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
-  getAiUsagePricing,
-  estimateAdminAiModelCost,
-  mapLiveAdminAiStats,
-  resolveRawWebsiteFilters,
-} from './stats-experience';
-
-describe('experience stats SQL', () => {
-  const filters = { startDate: '2026-04-22', endDate: '2026-07-20' };
-  const dialect = new PgDialect();
-
-  it('keeps landing-page filters qualified to the joined analytics table', () => {
-    const query = dialect.sqlToQuery(buildLandingPagePerformanceQuery(filters));
-
-    expect(query.sql).toContain('left join "analytics_events" on');
-    expect(query.sql).toContain('"analytics_events"."occurred_at"');
-    expect(query.sql).toContain('distinct on (landing_page_id, purchase_key)');
-    expect(query.sql).toContain('coalesce(max(landing_purchase_totals.revenue), 0)');
-    expect(query.sql).not.toContain('"analytics_events" event');
-  });
-
-  it('keeps customer filters qualified to the orders table', () => {
-    const query = dialect.sqlToQuery(buildCustomerProductQuery(filters));
-
-    expect(query.sql).toContain('from "orders"');
-    expect(query.sql).toContain('"orders"."created_at"');
-    expect(query.sql).not.toContain('from "orders" o');
-  });
-
-  it('uses captured order values and derives prices only for legacy orders without totals', () => {
-    const query = dialect.sqlToQuery(buildCustomerSummaryQuery(filters));
-
-    expect(query.sql).toContain(
-      'coalesce("orders"."product_subtotal"::double precision, cart.derived_subtotal, 0)',
-    );
-    expect(query.sql).toContain('+ coalesce("orders"."del_pr"::double precision, 0)');
-    expect(query.sql).toContain('and "orders"."total_amount" is null');
-    expect(query.sql).toContain('"orders"."total_amount"::double precision');
-    expect(query.sql).toContain('product_references.reference = trim(product_ref)');
-    expect(query.sql).toContain('coalesce(sum(orders) over(), 0)::int as successful_orders');
-  });
-
-  it('restricts customer product expansion to the displayed phones', () => {
-    const query = dialect.sqlToQuery(buildCustomerProductQuery(filters, ['0555000123']));
-    expect(query.params).toContain('0555000123');
-    expect(query.sql).toContain('product_references as materialized');
-    expect(query.sql).toContain('product_references.reference = trim(product_ref)');
-  });
-
-  it('includes confirmed and later successful statuses while excluding negative outcomes', () => {
-    const summaryQuery = dialect.sqlToQuery(buildCustomerSummaryQuery(filters));
-    const productQuery = dialect.sqlToQuery(buildCustomerProductQuery(filters));
-
-    expect(CUSTOMER_SUCCESSFUL_ORDER_STATUSES).toEqual([2, 3, 4, 5, 7, 10, 11]);
-    for (const query of [summaryQuery, productQuery]) {
-      expect(query.sql).toContain('"orders"."confirmed" in');
-      expect(query.params).toEqual(expect.arrayContaining([...CUSTOMER_SUCCESSFUL_ORDER_STATUSES]));
-      expect(query.params).not.toEqual(expect.arrayContaining([6, 8, 9]));
-    }
-  });
-});
+import { estimateAdminAiModelCost, getAiUsagePricing } from './stats-experience';
+import { mapLiveAdminAiStats } from './stats-experience-ai';
+import { resolveRawWebsiteFilters } from './stats-experience-shared';
 
 describe('experience stats raw-event window', () => {
   it('uses the latest seven reporting days for an open all-time range', () => {

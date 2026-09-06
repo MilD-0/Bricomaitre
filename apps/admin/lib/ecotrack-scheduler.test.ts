@@ -46,13 +46,13 @@ describe('lib/ecotrack-scheduler', () => {
 
   it('registers the scheduler only once', async () => {
     const {
-      resetEcotrackSchedulerForTests,
+      stopEcotrackScheduler,
       startEcotrackScheduler,
       DEFAULT_ECOTRACK_SYNC_CRON,
       DEFAULT_ECOTRACK_SHIPMENT_SYNC_CRON,
     } = await import('./ecotrack-scheduler');
 
-    resetEcotrackSchedulerForTests();
+    stopEcotrackScheduler();
     startEcotrackScheduler();
     startEcotrackScheduler();
 
@@ -62,10 +62,10 @@ describe('lib/ecotrack-scheduler', () => {
   });
 
   it('runs the sync job when the scheduler entrypoint is invoked', async () => {
-    const { resetEcotrackSchedulerForTests, runEcotrackSyncJob, startEcotrackScheduler } =
+    const { stopEcotrackScheduler, runEcotrackSyncJob, startEcotrackScheduler } =
       await import('./ecotrack-scheduler');
 
-    resetEcotrackSchedulerForTests();
+    stopEcotrackScheduler();
     startEcotrackScheduler();
 
     const scheduledCallback = scheduleMock.mock.calls[0]?.[1] as (() => Promise<void>) | undefined;
@@ -81,10 +81,9 @@ describe('lib/ecotrack-scheduler', () => {
     scheduleMock
       .mockReturnValueOnce({ stop: stopSync })
       .mockReturnValueOnce({ stop: stopShipment });
-    const { resetEcotrackSchedulerForTests, startEcotrackScheduler, stopEcotrackScheduler } =
-      await import('./ecotrack-scheduler');
+    const { startEcotrackScheduler, stopEcotrackScheduler } = await import('./ecotrack-scheduler');
 
-    resetEcotrackSchedulerForTests();
+    stopEcotrackScheduler();
     startEcotrackScheduler();
     stopEcotrackScheduler();
 
@@ -93,10 +92,9 @@ describe('lib/ecotrack-scheduler', () => {
   });
 
   it('returns false when queue start fails', async () => {
-    const { runEcotrackSyncJob, resetEcotrackSchedulerForTests } =
-      await import('./ecotrack-scheduler');
+    const { runEcotrackSyncJob, stopEcotrackScheduler } = await import('./ecotrack-scheduler');
 
-    resetEcotrackSchedulerForTests();
+    stopEcotrackScheduler();
     startEcotrackSyncJobMock.mockRejectedValue(new Error('queue offline'));
 
     await expect(runEcotrackSyncJob()).resolves.toBe(false);

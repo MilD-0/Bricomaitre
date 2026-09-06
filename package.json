@@ -37,7 +37,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dead-code:check": "knip",
+    "dead-code:check": "knip && knip --production --include files,exports,types",
     "dependencies:check": "bash ops/scripts/check-production-dependencies.sh",
     "analyze:storefront": "pnpm --filter @bric/storefront build",
     "demo:up": "./demo up",

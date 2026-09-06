@@ -1,20 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { parseEcotrackShipmentUpdateDraft } from './admin-ecotrack-orders-data';
+import type { EcotrackCatalogRecord } from './ecotrack';
+import { buildUpdatePayload } from './ecotrack-shipment-input';
 import {
-  buildUpdatePayload,
   deriveLatestUpstreamActivityAt,
+  getUpstreamTrackingValues,
   mapEcotrackOrderSnapshot,
   mapEcotrackStatusToOrderStatus,
   parseEcotrackProviderTimestamp,
-  parseEcotrackShipmentUpdateDraft,
   resolveEcotrackStatusEvidence,
-} from './admin-ecotrack-orders-data';
-import type { EcotrackCatalogRecord } from './ecotrack';
-import { getUpstreamTrackingValues } from './ecotrack-shipment-status';
+} from './ecotrack-shipment-status';
 import {
   ANALYTICS_PAID_SHIPMENT_STATUSES,
   ANALYTICS_RESOLVED_SHIPMENT_STATUSES,
-  localOrderCanRemainInCashPipeline,
 } from './ecotrack-status-policy';
 
 describe('admin ECOTRACK shipment mapping', () => {
@@ -47,15 +46,6 @@ describe('admin ECOTRACK shipment mapping', () => {
     expect(
       mapEcotrackStatusToOrderStatus('status_inconnu', new Date('2026-04-02T12:00:01.000Z')),
     ).toBeNull();
-  });
-
-  it('keeps terminal local outcomes out of the active cash pipeline', () => {
-    expect(localOrderCanRemainInCashPipeline(11)).toBe(true);
-    expect(localOrderCanRemainInCashPipeline(4)).toBe(true);
-    expect(localOrderCanRemainInCashPipeline(6)).toBe(false);
-    expect(localOrderCanRemainInCashPipeline(8)).toBe(false);
-    expect(localOrderCanRemainInCashPipeline(9)).toBe(false);
-    expect(localOrderCanRemainInCashPipeline(10)).toBe(false);
   });
 
   it('keeps both EcoTrack paid aliases in analytics semantics', () => {

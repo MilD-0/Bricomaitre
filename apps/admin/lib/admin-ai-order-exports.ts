@@ -2,15 +2,14 @@ import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 
-import { loadOrderDetail, loadOrdersPageData } from './admin-orders-data';
+import { loadConfirmedOrderIds, loadOrderRecordsByIds } from './admin-orders-data';
 import { startOrderExportJob } from './background-jobs';
 import { readEcotrackCatalog } from './ecotrack';
 import {
   buildOrderExportFileName,
   buildOrderExportRows,
-  filterRecentConfirmedOrders,
+  CONFIRMED_EXPORT_MAX_AGE_MS,
 } from './order-export';
-import { ORDER_STATUS } from './orders';
 
 export const adminAiOrderExportScopeSchema = z
   .object({
@@ -35,52 +34,32 @@ export const adminAiOrderExportScopeSchema = z
     }
   });
 
-async function loadAllConfirmedOrders() {
-  const items = [];
-  let page = 1;
-  let totalPages = 1;
-  do {
-    const response = await loadOrdersPageData(
-      {
-        page,
-        limit: 100,
-        inHouseStatus: ORDER_STATUS.CONFIRMED,
-        search: '',
-        sortKey: 'createdAt',
-        sortDirection: 'desc',
-      },
-      false,
-    );
-    items.push(...response.items);
-    totalPages = response.pagination.totalPages;
-    page += 1;
-  } while (page <= totalPages);
-  return items;
-}
-
 async function resolveOrderExportScope(
   input: z.output<typeof adminAiOrderExportScopeSchema>,
   now = new Date(),
 ) {
   if (input.mode === 'selected') {
     const orderIds = [...new Set(input.orderIds)];
-    const loaded = await Promise.all(orderIds.map((orderId) => loadOrderDetail(orderId)));
+    const loaded = await loadOrderRecordsByIds(orderIds);
+    const loadedIds = new Set(loaded.map((order) => order.id));
     return {
-      orders: loaded.flatMap((order) => (order ? [order] : [])),
-      missingOrderIds: orderIds.filter((_, index) => loaded[index] == null),
+      orders: loaded,
+      missingOrderIds: orderIds.filter((id) => !loadedIds.has(id)),
       staleConfirmedOrderIds: [] as number[],
     };
   }
 
-  const confirmed = await loadAllConfirmedOrders();
-  const recent = filterRecentConfirmedOrders(confirmed, now);
-  const recentIds = new Set(recent.map((order) => order.id));
+  const cutoff = new Date(now.getTime() - CONFIRMED_EXPORT_MAX_AGE_MS);
+  const [recentIds, staleConfirmedOrderIds] = await Promise.all([
+    loadConfirmedOrderIds({ createdAtOrAfter: cutoff }),
+    loadConfirmedOrderIds({ createdBefore: cutoff }),
+  ]);
+  const orders = await loadOrderRecordsByIds(recentIds);
+  const loadedIds = new Set(orders.map((order) => order.id));
   return {
-    orders: recent,
-    missingOrderIds: [] as number[],
-    staleConfirmedOrderIds: confirmed
-      .filter((order) => !recentIds.has(order.id))
-      .map((order) => order.id),
+    orders,
+    missingOrderIds: recentIds.filter((id) => !loadedIds.has(id)),
+    staleConfirmedOrderIds,
   };
 }
 

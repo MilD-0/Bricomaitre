@@ -1,4 +1,4 @@
-import { normalizeRole, type Role } from './permissions';
+import { type Role } from './permissions';
 
 /**
  * Privileged access is bootstrapped from environment variables.
@@ -19,9 +19,6 @@ function parseConfiguredEmails(rawValue: string | undefined) {
 export const configuredAdminEmails = parseConfiguredEmails(process.env.ADMIN_EMAILS);
 
 export const configuredDeveloperEmails = parseConfiguredEmails(process.env.DEVELOPER_EMAILS);
-
-export const editableRoles = ['viewer', 'employee'] as const;
-export const codeManagedRoles = ['admin', 'developer'] as const;
 
 const configuredRoleEmails = {
   admin: new Set(configuredAdminEmails),
@@ -48,14 +45,4 @@ export function getConfiguredPrivilegedRole(email?: string | null): Role | null 
 
 export function isConfiguredPrivilegedEmail(email?: string | null) {
   return getConfiguredPrivilegedRole(email) !== null;
-}
-
-export function resolveUserRole(email: string | null | undefined, persistedRole: unknown): Role {
-  const configuredPrivilegedRole = getConfiguredPrivilegedRole(email);
-
-  if (configuredPrivilegedRole) {
-    return configuredPrivilegedRole;
-  }
-
-  return normalizeRole(persistedRole);
 }

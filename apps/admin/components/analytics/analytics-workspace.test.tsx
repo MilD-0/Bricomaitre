@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AnalyticsPayload } from '../../lib/analytics';
 import { AdminAiSurfaceProvider, useAdminAiSurfaceContext } from '../admin-ai-surface-context';
-import { completedTrendBuckets, splitPartialSeries, StatsWorkspace } from './analytics-workspace';
+import { StatsWorkspace } from './analytics-workspace';
+import { completedTrendBuckets, splitPartialSeries } from './analytics-workspace-primitives';
 
 const { localeState, pushMock, replaceMock, searchParamsState } = vi.hoisted(() => ({
   localeState: { current: 'en' },

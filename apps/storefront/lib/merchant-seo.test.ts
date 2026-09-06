@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildMerchantReturnPolicy,
   buildOfferShippingDetails,
-  getMerchantPolicyCopy,
   STOREFRONT_MERCHANT,
 } from './merchant-seo';
 
@@ -29,6 +28,6 @@ describe('storefront merchant SEO constants', () => {
       returnFees: 'https://schema.org/FreeReturn',
       description: 'الإرجاع مجاني قبل فتح الطرد.',
     });
-    expect(getMerchantPolicyCopy('fr').returnPolicy).toContain('avant ouverture');
+    expect(buildMerchantReturnPolicy('fr').description).toContain('avant ouverture');
   });
 });

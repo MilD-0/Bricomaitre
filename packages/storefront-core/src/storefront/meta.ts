@@ -780,7 +780,7 @@ export async function processMetaOutboxBatch(db: Database, limit = 50) {
   return { claimed: rows.length, delivered, retryable, failed, skipped };
 }
 
-function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): MetaCommerceLine {
+export function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): MetaCommerceLine {
   return {
     productId: row.productId ?? Number(row.contentId),
     contentId: row.contentId,
@@ -797,26 +797,6 @@ function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): MetaCom
     lineTotal: parseNumericAmount(row.lineTotal),
     thumbnailUrl: row.thumbnailUrl,
   };
-}
-
-export function buildPurchaseAnalyticsItems(
-  lines: MetaCommerceLine[],
-  dimensions: MetaProductDimension[],
-) {
-  const dimensionByProductId = new Map(
-    dimensions.map((dimension) => [dimension.productId, dimension]),
-  );
-  return lines.map((line) => {
-    const dimension = dimensionByProductId.get(line.productId);
-    return {
-      productId: line.productId,
-      productSlug: dimension?.productSlug ?? null,
-      categoryId: dimension?.categoryId ?? null,
-      brandId: dimension?.brandId ?? null,
-      quantity: line.quantity,
-      price: line.effectiveUnitPrice,
-    };
-  });
 }
 
 export async function ensureOrderConfirmedEventForOrder(

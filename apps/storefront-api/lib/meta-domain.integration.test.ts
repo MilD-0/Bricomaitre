@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   metaEventOutbox,
   orderLineItems,
@@ -6,25 +5,25 @@ import {
   orders,
   products,
 } from '@bric/db/schema';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { storefrontAnalyticsEventSchema } from '@bric/storefront-core/analytics';
 import {
   buildMetaCommerceCustomData,
-  buildPurchaseAnalyticsItems,
   buildMetaUserData,
   enqueueMetaBrowserEvent,
-  ensureOrderConfirmedEventForOrder,
   ensureOrderCompletedEventForOrder,
-  getOrderConfirmedEventId,
+  ensureOrderConfirmedEventForOrder,
   getOrderCompletedEventId,
+  getOrderConfirmedEventId,
   isMetaCompletedStatus,
   isMetaOrderConfirmedStatus,
   normalizeAlgeriaPhone,
   normalizeMetaEventTime,
-  resolveMetaOrderLocation,
   reconcileOrderConfirmedEvents,
+  resolveMetaOrderLocation,
   sendMetaEvent,
 } from '@bric/storefront-core/meta';
-import { storefrontAnalyticsEventSchema } from '@bric/storefront-core/analytics';
 
 describe('Meta domain rules', () => {
   afterEach(() => {
@@ -474,45 +473,6 @@ describe('Meta domain rules', () => {
       value: 1600,
       order_id: '99',
     });
-  });
-
-  it('enriches Purchase analytics items with catalog dimensions', () => {
-    expect(
-      buildPurchaseAnalyticsItems(
-        [
-          {
-            productId: 12,
-            contentId: '12',
-            rawValue: '12',
-            title: 'Drill',
-            originalUnitPrice: 1000,
-            effectiveUnitPrice: 800,
-            unitPurchasePrice: 600,
-            quantity: 2,
-            discountAmount: 400,
-            lineTotal: 1600,
-            thumbnailUrl: null,
-          },
-        ],
-        [
-          {
-            productId: 12,
-            productSlug: 'drill',
-            categoryId: 3,
-            brandId: 4,
-          },
-        ],
-      ),
-    ).toEqual([
-      {
-        productId: 12,
-        productSlug: 'drill',
-        categoryId: 3,
-        brandId: 4,
-        quantity: 2,
-        price: 800,
-      },
-    ]);
   });
 
   it('hashes order PII while preserving valid browser match cookies', () => {

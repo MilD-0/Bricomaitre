@@ -1,28 +1,31 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  analyticsQuerySchema,
+  loadAutomaticPaidEconomics,
+  resolveAnalyticsFilters,
+  resolveAnalyticsReferenceNow,
+} from './analytics';
+import { ANALYTICS_FACT_SEMANTICS_VERSION } from './analytics-fact-contract';
+import { finalizeSearchFilters } from './analytics/assumptions-search-views';
+import { projectCohortCompletionGroups } from './analytics/cohort-completion';
+
+import { storefrontPathCoverage } from './analytics/commerce-data';
+import { clipAnalyticsFilters, dayInTimezone, remainingDayFraction } from './analytics/date-range';
+import { economicsSummaryMetrics, materializedFactsAreUsable } from './analytics/economics-data';
+import {
   aggregateAutomaticPaidSeries,
   aggregateEconomicsSeries,
-  analyticsQuerySchema,
+} from './analytics/economics-series';
+import {
   appendEconomicsForecastSeries,
   buildEconomicsForecast,
   buildLeadingOrderForecast,
-  clipAnalyticsFilters,
-  economicsSummaryMetrics,
-  finalizeSearchFilters,
-  freshnessState,
-  loadAutomaticPaidEconomics,
-  materializedFactsAreUsable,
-  metricChange,
   projectOpenEconomicsSeries,
-  projectCohortCompletion,
-  resolveAnalyticsReferenceNow,
-  resolveAnalyticsFilters,
-  storefrontPathCoverage,
-} from './analytics';
-import { ANALYTICS_FACT_SEMANTICS_VERSION } from './analytics-fact-contract';
-import { dayInTimezone, remainingDayFraction } from './analytics/date-range';
+} from './analytics/forecast';
 import { metricWithProjectedComparison } from './analytics/loaders-shared';
+import { metricChange } from './analytics/metrics';
+import { freshnessState } from './analytics/source-health';
 
 describe('analytics filter model', () => {
   it('resolves the Algiers reporting day across the UTC midnight boundary', () => {
@@ -120,32 +123,40 @@ describe('analytics filter model', () => {
   });
 
   it('compares posted cohorts at projected completion without changing the return assumption', () => {
-    const projection = projectCohortCompletion(
+    const projection = projectCohortCompletionGroups(
       [
         {
           postedDay: '2026-08-18',
-          deliveredDay: '2026-08-19',
+          delivered: true,
+          observedOrders: 1,
+          profitSamples: 1,
           outcome: 'livre_non_encaisse',
           grossProfitDzd: 90,
           units: 3,
         },
         {
           postedDay: '2026-08-18',
-          deliveredDay: null,
+          delivered: false,
+          observedOrders: 1,
+          profitSamples: 1,
           outcome: 'paye_et_archive',
           grossProfitDzd: 100,
           units: 2,
         },
         {
           postedDay: '2026-08-18',
-          deliveredDay: null,
+          delivered: false,
+          observedOrders: 1,
+          profitSamples: 1,
           outcome: 'retour_archive',
           grossProfitDzd: 80,
           units: 1,
         },
         {
           postedDay: '2026-08-19',
-          deliveredDay: null,
+          delivered: false,
+          observedOrders: 1,
+          profitSamples: 1,
           outcome: 'en_livraison',
           grossProfitDzd: 200,
           units: 4,

@@ -1,4 +1,4 @@
-import { and, count, desc, ilike, inArray, isNotNull, or } from 'drizzle-orm';
+import { and, count, desc, ilike, isNotNull, or } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
@@ -93,24 +93,4 @@ export async function loadArchivedProductsPage(
       hasPreviousPage: page > 1,
     },
   };
-}
-
-export async function loadArchivedProductsByIds(
-  db: Database,
-  productIds: readonly number[],
-): Promise<ArchivedProduct[]> {
-  const ids = [...new Set(productIds)];
-  if (ids.length === 0) return [];
-  const rows = await db
-    .select({
-      id: products.id,
-      title: products.title,
-      sku: products.sku,
-      barcode: products.barcode,
-      archivedAt: products.archivedAt,
-    })
-    .from(products)
-    .where(and(isNotNull(products.archivedAt), inArray(products.id, ids)))
-    .orderBy(desc(products.archivedAt), desc(products.id));
-  return serializeArchivedProducts(rows);
 }

@@ -1,5 +1,5 @@
 import type { EcotrackCatalogResponse } from './ecotrack-admin-contracts';
-import { parseNumericAmount, type OrderProductSummary } from './orders';
+import { parseNumericAmount } from './orders';
 
 export function formatOrderPhoneForDisplay(value: string | null | undefined) {
   const trimmed = value?.trim() ?? '';
@@ -21,12 +21,6 @@ export function normalizeOrderPhoneForStorage(value: string) {
   return trimmed;
 }
 
-export function buildOrderPhoneTelHref(value: string | null | undefined) {
-  const displayValue = formatOrderPhoneForDisplay(value);
-
-  return displayValue ? `tel:${displayValue.replace(/\s+/g, '')}` : null;
-}
-
 export function splitOrderFullNameDraft(value: string) {
   const normalized = value.trim().replace(/\s+/g, ' ');
   if (!normalized) {
@@ -38,25 +32,6 @@ export function splitOrderFullNameDraft(value: string) {
     firstName,
     lastName: rest.length > 0 ? rest.join(' ') : null,
   };
-}
-
-export function getOrderProductHoverKey(orderId: number, product: OrderProductSummary) {
-  return `${orderId}:${product.productId ?? product.rawValue}`;
-}
-
-export function formatOrderProductLabel(
-  product: OrderProductSummary,
-  formatMoney: (value: number) => string,
-) {
-  if (product.missing) {
-    return product.quantity > 1 ? `${product.title} x${product.quantity}` : product.title;
-  }
-
-  if (product.quantity > 1) {
-    return `${product.title} x${product.quantity} · ${formatMoney(product.lineTotal)}`;
-  }
-
-  return `${product.title} · ${formatMoney(product.unitPrice)}`;
 }
 
 export function formatOrderStateValue(state: number | null) {

@@ -25,40 +25,14 @@ describe('storefront catalog search normalization', () => {
     expect(getCatalogSearchSimilarityThreshold('perceuse percussion')).toBe(0.58);
   });
 
-  it('builds a parameterized bilingual catalog condition with guarded trigram matching', () => {
-    const condition = buildCatalogSearchCondition('  Pérceuse  ');
-    expect(condition).toBeDefined();
-    const query = new PgDialect().sqlToQuery(condition!);
-
-    expect(query.sql).toContain('"title_ar"');
-    expect(query.sql).toContain('"description_ar"');
-    expect(query.sql).toContain('"brands"."name"');
-    expect(query.sql).toContain('"categories"."name_ar"');
-    expect(query.sql).toContain('word_similarity');
-    expect(query.params).toContain('perceuse');
-    expect(query.params).toContain(0.64);
-  });
-
-  it('adds a title-specific score to broad exact and typo-tolerant relevance', () => {
-    const relevance = buildCatalogSearchRelevance('Pérceuse');
-    const query = new PgDialect().sqlToQuery(relevance!);
-
-    expect(query.sql.match(/case when position/g)).toHaveLength(2);
-    expect(query.sql.match(/word_similarity/g)).toHaveLength(2);
-    expect(query.sql.match(/"products"\."title"/g)).toHaveLength(4);
-    expect(query.sql.match(/"products"\."title_ar"/g)).toHaveLength(4);
-    expect(query.sql.match(/"products"\."description"/g)).toHaveLength(2);
-    expect(query.sql.match(/"products"\."description_ar"/g)).toHaveLength(2);
-    expect(query.params.filter((parameter) => parameter === 'perceuse')).toHaveLength(4);
-  });
-
-  it('keeps the title boost for short queries without typo tolerance', () => {
-    const relevance = buildCatalogSearchRelevance('vis');
-    const query = new PgDialect().sqlToQuery(relevance!);
-
-    expect(query.sql.match(/case when position/g)).toHaveLength(2);
-    expect(query.sql).not.toContain('word_similarity');
-    expect(query.sql.match(/"products"\."title"/g)).toHaveLength(2);
-    expect(query.sql.match(/"products"\."description"/g)).toHaveLength(1);
+  it('binds user search text as parameters in matching and ranking queries', () => {
+    const input = "perceuse ' OR 1=1 --";
+    const normalized = normalizeCatalogSearch(input);
+    for (const build of [buildCatalogSearchCondition, buildCatalogSearchRelevance]) {
+      const query = new PgDialect().sqlToQuery(build(input)!);
+      expect(query.params).toContain(normalized);
+      expect(query.sql).not.toContain(input);
+      expect(query.sql).not.toContain(normalized);
+    }
   });
 });

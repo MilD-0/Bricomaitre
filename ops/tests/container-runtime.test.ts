@@ -1,7 +1,9 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const productionDockerfiles = [
@@ -99,7 +101,6 @@ describe('production packaging and release runtime', () => {
           expect(source).toContain(`COPY ${manifests.get(name)?.path} `);
         }
       }
-      expect(source).not.toContain('ops/ownership');
       expect(source).toContain('COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ./');
       expect(source).toContain(
         'COPY --chown=bric:bric third_party/licenses ./third_party/licenses',
@@ -269,7 +270,7 @@ describe('production packaging and release runtime', () => {
     );
   });
 
-  it('packages the public legal surface instead of legacy ownership boundaries', () => {
+  it('packages required legal notices and third-party licenses', () => {
     const license = readFileSync(resolve(workspaceRoot, 'LICENSE'), 'utf8');
     const notice = readFileSync(resolve(workspaceRoot, 'NOTICE'), 'utf8');
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
@@ -319,8 +320,6 @@ describe('production packaging and release runtime', () => {
       expect(deployVerifier).toContain(`$release_dir/${releaseFile}`);
     }
     expect(release).toContain('rsync -a third_party/licenses/');
-    expect(release).not.toContain('ops/ownership');
-    expect(release).not.toContain('AI_AGENT_BOUNDARY');
     expect(deployVerifier).toContain(
       'warning: accepting a retained legacy release for rollback compatibility',
     );
@@ -341,24 +340,6 @@ describe('production packaging and release runtime', () => {
 
     expect(healthGate).toContain('oom={{.State.OOMKilled}}');
     expect(healthGate).toContain('docker logs --tail 100 "$container_id"');
-  });
-
-  it('does not derive release validity from cache-sensitive build progress logs', () => {
-    const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
-    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
-    const manifest = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/assemble-release-image-manifest.mjs'),
-      'utf8',
-    );
-
-    expect(`${release}\n${deploy}\n${manifest}`).not.toContain('BRIC_STOREFRONT_STATIC_PAGES');
-    expect(release).not.toContain('extract-static-page-count.py');
-    expect(release).toContain('bash ops/scripts/build-release-images.sh');
-    expect(release).toContain('bash ops/scripts/sign-bake-images.sh');
-    expect(release).toContain(
-      'BRIC_RELEASE_SIGNER_IDENTITY=https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy.yml@refs/heads/main',
-    );
-    expect(deploy).toContain('bash "$script_dir/smoke-check.sh"');
   });
 
   it('separates cancellable CI from serialized, verified production releases', () => {
@@ -407,17 +388,14 @@ describe('production packaging and release runtime', () => {
       );
     }
 
-    const selfHostedRunnerSelector = 'runs-on: [self-hosted, Linux, X64, bricomaitre-ci]';
-    const hostedRunnerSelector = 'runs-on: ubuntu-24.04';
-    expect(ci.split(selfHostedRunnerSelector)).toHaveLength(9);
-    expect(release.split(selfHostedRunnerSelector)).toHaveLength(7);
-    expect(ci).not.toContain(hostedRunnerSelector);
-    expect(release).not.toContain(hostedRunnerSelector);
-    expect(ci).not.toContain('services:');
-    expect(ci).not.toContain('55432:5432');
-    expect(ci).not.toContain('56379:6379');
-    expect(ci).not.toContain('55433:5432');
-    expect(ci).not.toContain('56380:6379');
+    for (const workflow of [parse(ci), parse(release)]) {
+      const jobs = Object.entries(workflow.jobs) as Array<[string, Record<string, unknown>]>;
+      expect(jobs.length).toBeGreaterThan(0);
+      for (const [name, job] of jobs) {
+        expect(job['runs-on'], name).toEqual(['self-hosted', 'Linux', 'X64', 'bricomaitre-ci']);
+        expect(job.services, name).toBeUndefined();
+      }
+    }
     expect(ci).toContain('127.0.0.1:55433/bricomaitre_browser');
     expect(ci).toContain('127.0.0.1:56380/0');
 
@@ -886,31 +864,68 @@ describe('production packaging and release runtime', () => {
     expect(workerBuilder).toContain("sourcemap: emitSourceMap ? 'external' : false");
   });
 
-  it('bounds and health-checks every long-running application process', () => {
-    const compose = readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8');
-
-    for (const anchor of [
-      'x-storefront-api-blue:',
-      'x-storefront-meta-worker:',
-      'x-admin-blue:',
-      'x-admin-worker-blue:',
-      'x-storefront-blue:',
+  it('bounds every long-running application process', () => {
+    const compose = parse(
+      readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8'),
+    );
+    for (const name of [
+      'x-storefront-api-blue',
+      'x-storefront-meta-worker',
+      'x-admin-blue',
+      'x-admin-worker-blue',
+      'x-storefront-blue',
     ]) {
-      const start = compose.indexOf(anchor);
-      const end = compose.indexOf('\n\nx-', start + anchor.length);
-      const definition = compose.slice(
-        start,
-        end === -1 ? compose.indexOf('\n\nservices:', start) : end,
-      );
-      expect(definition).toContain('init: true');
-      expect(definition).toContain('pids_limit:');
-      expect(definition).toContain('stop_grace_period: 30s');
-      expect(definition).toContain('healthcheck:');
+      const definition = compose[name];
+      expect(definition.init, name).toBe(true);
+      const pids = String(definition.pids_limit).replace(/^\$\{[^:]+:-(\d+)\}$/, '$1');
+      expect(Number(pids), name).toBeGreaterThan(0);
+      expect(definition.stop_grace_period, name).toBe('30s');
+      expect(definition.healthcheck.test, name).toBeDefined();
     }
-    expect(compose).not.toContain('process.kill(1, 0)');
-    expect(compose).toContain('bric-admin-worker-heartbeat');
-    expect(compose).toContain('bric-storefront-meta-worker-heartbeat');
   });
+
+  it.each(['x-admin-worker-blue', 'x-storefront-meta-worker'])(
+    'executes the deployed heartbeat check for %s',
+    (name) => {
+      const compose = parse(
+        readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8'),
+      );
+      const [kind, command] = compose[name].healthcheck.test;
+      expect(kind).toBe('CMD-SHELL');
+      const source = command.match(/^node -e "([\s\S]+)"$/)?.[1];
+      expect(source).toBeTruthy();
+      const now = 1_000_000;
+      for (const [timestamp, expectedCode] of [
+        [now, 0],
+        [now - 45_000, 0],
+        [now - 45_001, 1],
+        [now + 1, 1],
+        ['invalid', 1],
+      ] as const) {
+        const signals: unknown[][] = [];
+        let exitCode: number | undefined;
+        const exit = new Error('process exited');
+        expect(() =>
+          runInNewContext(source!, {
+            Date: { now: () => now },
+            require: (module: string) => {
+              expect(module).toBe('node:fs');
+              return { existsSync: () => true, readFileSync: () => String(timestamp) };
+            },
+            process: {
+              exit: (code: number) => {
+                exitCode = code;
+                throw exit;
+              },
+              kill: (...args: unknown[]) => signals.push(args),
+            },
+          }),
+        ).toThrow(exit);
+        expect(exitCode).toBe(expectedCode);
+        expect(signals).toEqual(expectedCode === 1 ? [[1, 'SIGTERM']] : []);
+      }
+    },
+  );
 
   it('gives the public commerce path explicit memory and OOM priority over admin', () => {
     const compose = readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8');

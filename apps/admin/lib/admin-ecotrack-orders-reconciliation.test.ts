@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   getDbMock,
@@ -37,12 +37,6 @@ vi.mock('@bric/storefront-core/ecotrack-client', async () => {
 });
 
 import {
-  deletePostedEcotrackOrder,
-  refreshEcotrackOrdersBatch,
-  shouldRetireShipmentMissingFromStatusFeed,
-  syncEcotrackShipmentStates,
-} from './admin-ecotrack-orders-data';
-import {
   ecotrackOrderMajEntries,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
@@ -50,6 +44,12 @@ import {
   orderLineItems,
   orders,
 } from '@bric/db/schema';
+import {
+  deletePostedEcotrackOrder,
+  refreshEcotrackOrdersBatch,
+  syncEcotrackShipmentStates,
+} from './admin-ecotrack-orders-data';
+import { shouldRetireShipmentMissingFromStatusFeed } from './admin-ecotrack-shipment-state';
 
 function createShipmentRow(orderId = 11) {
   const now = new Date();

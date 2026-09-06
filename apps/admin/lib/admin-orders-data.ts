@@ -1,13 +1,28 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, or, sql } from 'drizzle-orm';
+import { dayInTimezone } from './analytics/date-range';
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
   ecotrackOrderMajEntries,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
-  orderStatusHistory,
   orders,
+  orderStatusHistory,
 } from '@bric/db/schema';
+import type {
+  DailyOrderStatusOverview,
+  DailyOrderStatusReport,
+  DailyProfitProjection,
+  OrdersResponse,
+  ProfitProjectionBasis,
+} from './order-admin-contracts';
+import { orderProductSearchCondition } from './order-product-search';
+import { getOrderProductLookup, toOrderRecord } from './order-records';
+import {
+  orderIdentifierSearchCondition,
+  withOrderSearchTimeout,
+  type OrderSearchDatabase,
+} from './order-search';
 import {
   coerceNoAnswerCount,
   coerceOrderStatus,
@@ -17,21 +32,7 @@ import {
   type OrderSortRule,
   type OrderStatusHistoryRecord,
 } from './orders';
-import { getOrderProductLookup, toOrderRecord } from './order-records';
-import { orderProductSearchCondition } from './order-product-search';
-import {
-  orderIdentifierSearchCondition,
-  withOrderSearchTimeout,
-  type OrderSearchDatabase,
-} from './order-search';
 import { getCanonicalOrderProjectionDays } from './profit-tracker';
-import type {
-  DailyOrderStatusOverview,
-  DailyOrderStatusReport,
-  DailyProfitProjection,
-  OrdersResponse,
-  ProfitProjectionBasis,
-} from './order-admin-contracts';
 
 type OrdersQueryInput = {
   page?: string | number | undefined;
@@ -81,15 +82,6 @@ function buildOrderHistory(
       changedByName: entry.changedByName,
     };
   });
-}
-
-function getAlgiersReportDay(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: DAILY_ORDER_STATUS_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
 }
 
 function shiftIsoDate(value: string, days: number) {
@@ -289,7 +281,7 @@ export async function loadDailyOrderStatusOverview(
   }
 
   const db = getDb();
-  const reportDay = getAlgiersReportDay();
+  const reportDay = dayInTimezone(new Date());
   const profitProjectionBasis = options.profitProjectionBasis ?? 'confirmed';
   const reportDays = Math.min(7, Math.max(1, Math.trunc(options.reportDays ?? 2)));
   const requestedDays = Array.from({ length: reportDays }, (_, index) =>
@@ -460,4 +452,46 @@ export async function loadOrderDetail(id: number): Promise<OrderRecord | null> {
   const productLookup = await getOrderProductLookup(db, [row]);
 
   return toOrderRecord(row, buildOrderHistory(historyRows), productLookup);
+}
+
+export async function loadConfirmedOrderIds(
+  filters: { businessDate?: string | null; createdAtOrAfter?: Date; createdBefore?: Date } = {},
+  db = getDb(),
+) {
+  const rows = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.inHouseStatus, ORDER_STATUS.CONFIRMED),
+        filters.businessDate
+          ? reportDayPredicate(sql`${orders.createdAt}`, filters.businessDate)
+          : undefined,
+        filters.createdAtOrAfter ? gte(orders.createdAt, filters.createdAtOrAfter) : undefined,
+        filters.createdBefore ? lt(orders.createdAt, filters.createdBefore) : undefined,
+      ),
+    )
+    .orderBy(desc(orders.createdAt), desc(orders.id));
+  return rows.map(({ id }) => id);
+}
+
+/** Loads export records in bounded batches, preserving the caller's selection order. */
+export async function loadOrderRecordsByIds(
+  ids: readonly number[],
+  db = getDb(),
+): Promise<OrderRecord[]> {
+  const uniqueIds = [...new Set(ids)];
+  const records = new Map<number, OrderRecord>();
+  for (let start = 0; start < uniqueIds.length; start += 500) {
+    const rows = await db
+      .select()
+      .from(orders)
+      .where(inArray(orders.id, uniqueIds.slice(start, start + 500)));
+    const lookup = await getOrderProductLookup(db, rows);
+    for (const row of rows) records.set(row.id, toOrderRecord(row, [], lookup));
+  }
+  return uniqueIds.flatMap((id) => {
+    const record = records.get(id);
+    return record ? [record] : [];
+  });
 }

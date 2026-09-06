@@ -19,27 +19,27 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
+import { bulletinAiSurfaceDetails } from '../lib/admin-ai-live-surface-details';
+import { requestJson as request } from '../lib/admin-api';
 import {
-  type BulletinAttachment,
-  type BulletinComposerFormValues,
-  type BulletinPostRecord,
-  type BulletinPagination,
-  type BulletinReactionRecord,
-  type BulletinReplyRecord,
   bulletinComposerFormSchema,
   bulletinPostSchema,
   formatBulletinTags,
   parseBulletinTags,
+  type BulletinAttachment,
+  type BulletinComposerFormValues,
+  type BulletinPagination,
+  type BulletinPostRecord,
+  type BulletinReactionRecord,
+  type BulletinReplyRecord,
 } from '../lib/bulletin';
-import { requestJson as request } from '../lib/admin-api';
-import { bulletinAiSurfaceDetails } from '../lib/admin-ai-live-surface-details';
 import { toast } from '../lib/toast';
-import { Badge } from './ui/badge';
 import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
+import { FileUploadField } from './file-upload-field';
+import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { CompactMenu, CompactMenuItem } from './ui/compact-menu';
-import { WorkspacePagination } from './ui/workspace-pagination';
 import {
   Dialog,
   DialogContent,
@@ -49,7 +49,6 @@ import {
   DialogTitle,
 } from './ui/dialog';
 import { Field, FieldContent, FieldLabel } from './ui/field';
-import { FileUploadField } from './file-upload-field';
 import { Input } from './ui/input';
 import { Markdown } from './ui/markdown';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
@@ -61,6 +60,7 @@ import {
   WorkspaceHeading,
   WorkspaceToolbar,
 } from './ui/workspace';
+import { WorkspacePagination } from './ui/workspace-pagination';
 
 type BulletinResponse = {
   posts: BulletinPostRecord[];
@@ -763,6 +763,90 @@ export function BulletinBoard() {
     replyDeleteMutation.isPending ||
     replyReactionMutation.isPending;
 
+  const renderPost = (post: BulletinPostRecord) => (
+    <BulletinPostCard
+      key={post.id}
+      post={post}
+      currentUserId={boardQuery.data.currentUserId}
+      busy={busy}
+      reactionOptions={reactionOptions}
+      labels={{
+        actions: labelsT('actions'),
+        delete: t('actions.delete'),
+        edit: t('actions.edit'),
+        unpin: t('actions.unpin'),
+        pin: t('actions.pin'),
+        pinned: t('post.pinned'),
+        byYou: t('post.byYou'),
+        updated: t('post.updated'),
+        refreshReply: t('actions.reply'),
+        sendReply: t('actions.sendReply'),
+        cancel: t('actions.cancel'),
+        addReaction: t('actions.addReaction'),
+        deleteReply: t('actions.deleteReply'),
+        replyPlaceholder: t('reply.placeholder'),
+        reactionsBy: t('reactions.by'),
+        replies: t('reply.title', { count: post.replies.length }),
+      }}
+      onDelete={() => setDeletePost(post)}
+      onEdit={() => {
+        setEditingPost(post);
+        setComposerOpen(true);
+        form.reset({
+          title: post.title,
+          body: post.body,
+          tagsInput: formatBulletinTags(post.tags),
+          pinned: post.pinned,
+          attachments: post.attachments,
+        });
+      }}
+      onTogglePin={() => pinMutation.mutate({ id: post.id, pinned: !post.pinned })}
+      onReact={(emoji) =>
+        postReactionMutation.mutate({
+          postId: post.id,
+          emoji,
+          messages: {
+            loading: t('notifications.react.loading', { emoji, title: post.title }),
+            success: t('notifications.react.success', { emoji, title: post.title }),
+            error: t('notifications.react.error', { emoji, title: post.title }),
+          },
+        })
+      }
+      onReply={(body) =>
+        replyCreateMutation.mutate({
+          postId: post.id,
+          body,
+          messages: {
+            loading: t('notifications.reply.loading', { title: post.title }),
+            success: t('notifications.reply.success', { title: post.title }),
+            error: t('notifications.reply.error', { title: post.title }),
+          },
+        })
+      }
+      onDeleteReply={(reply) =>
+        replyDeleteMutation.mutate({
+          replyId: reply.id,
+          messages: {
+            loading: t('notifications.replyDelete.loading'),
+            success: t('notifications.replyDelete.success'),
+            error: t('notifications.replyDelete.error'),
+          },
+        })
+      }
+      onReplyReact={(reply, emoji) =>
+        replyReactionMutation.mutate({
+          replyId: reply.id,
+          emoji,
+          messages: {
+            loading: t('notifications.replyReact.loading', { emoji }),
+            success: t('notifications.replyReact.success', { emoji }),
+            error: t('notifications.replyReact.error', { emoji }),
+          },
+        })
+      }
+    />
+  );
+
   return (
     <WorkspaceFrame className="overflow-hidden" data-admin-workspace="bulletin">
       <WorkspaceHeader>
@@ -994,91 +1078,7 @@ export function BulletinBoard() {
                 {t('sections.pinned')}
               </p>
             </div>
-            <div className="divide-y divide-border/60">
-              {pinnedPosts.map((post) => (
-                <BulletinPostCard
-                  key={post.id}
-                  post={post}
-                  currentUserId={boardQuery.data.currentUserId}
-                  busy={busy}
-                  reactionOptions={reactionOptions}
-                  labels={{
-                    actions: labelsT('actions'),
-                    delete: t('actions.delete'),
-                    edit: t('actions.edit'),
-                    unpin: t('actions.unpin'),
-                    pin: t('actions.pin'),
-                    pinned: t('post.pinned'),
-                    byYou: t('post.byYou'),
-                    updated: t('post.updated'),
-                    refreshReply: t('actions.reply'),
-                    sendReply: t('actions.sendReply'),
-                    cancel: t('actions.cancel'),
-                    addReaction: t('actions.addReaction'),
-                    deleteReply: t('actions.deleteReply'),
-                    replyPlaceholder: t('reply.placeholder'),
-                    reactionsBy: t('reactions.by'),
-                    replies: t('reply.title', { count: post.replies.length }),
-                  }}
-                  onDelete={() => setDeletePost(post)}
-                  onEdit={() => {
-                    setEditingPost(post);
-                    setComposerOpen(true);
-                    form.reset({
-                      title: post.title,
-                      body: post.body,
-                      tagsInput: formatBulletinTags(post.tags),
-                      pinned: post.pinned,
-                      attachments: post.attachments,
-                    });
-                  }}
-                  onTogglePin={() => pinMutation.mutate({ id: post.id, pinned: !post.pinned })}
-                  onReact={(emoji) =>
-                    postReactionMutation.mutate({
-                      postId: post.id,
-                      emoji,
-                      messages: {
-                        loading: t('notifications.react.loading', { emoji, title: post.title }),
-                        success: t('notifications.react.success', { emoji, title: post.title }),
-                        error: t('notifications.react.error', { emoji, title: post.title }),
-                      },
-                    })
-                  }
-                  onReply={(body) =>
-                    replyCreateMutation.mutate({
-                      postId: post.id,
-                      body,
-                      messages: {
-                        loading: t('notifications.reply.loading', { title: post.title }),
-                        success: t('notifications.reply.success', { title: post.title }),
-                        error: t('notifications.reply.error', { title: post.title }),
-                      },
-                    })
-                  }
-                  onDeleteReply={(reply) =>
-                    replyDeleteMutation.mutate({
-                      replyId: reply.id,
-                      messages: {
-                        loading: t('notifications.replyDelete.loading'),
-                        success: t('notifications.replyDelete.success'),
-                        error: t('notifications.replyDelete.error'),
-                      },
-                    })
-                  }
-                  onReplyReact={(reply, emoji) =>
-                    replyReactionMutation.mutate({
-                      replyId: reply.id,
-                      emoji,
-                      messages: {
-                        loading: t('notifications.replyReact.loading', { emoji }),
-                        success: t('notifications.replyReact.success', { emoji }),
-                        error: t('notifications.replyReact.error', { emoji }),
-                      },
-                    })
-                  }
-                />
-              ))}
-            </div>
+            <div className="divide-y divide-border/60">{pinnedPosts.map(renderPost)}</div>
           </section>
         ) : null}
 
@@ -1099,91 +1099,7 @@ export function BulletinBoard() {
             </div>
           ) : null}
 
-          <div className="divide-y divide-border/60">
-            {recentPosts.map((post) => (
-              <BulletinPostCard
-                key={post.id}
-                post={post}
-                currentUserId={boardQuery.data.currentUserId}
-                busy={busy}
-                reactionOptions={reactionOptions}
-                labels={{
-                  actions: labelsT('actions'),
-                  delete: t('actions.delete'),
-                  edit: t('actions.edit'),
-                  unpin: t('actions.unpin'),
-                  pin: t('actions.pin'),
-                  pinned: t('post.pinned'),
-                  byYou: t('post.byYou'),
-                  updated: t('post.updated'),
-                  refreshReply: t('actions.reply'),
-                  sendReply: t('actions.sendReply'),
-                  cancel: t('actions.cancel'),
-                  addReaction: t('actions.addReaction'),
-                  deleteReply: t('actions.deleteReply'),
-                  replyPlaceholder: t('reply.placeholder'),
-                  reactionsBy: t('reactions.by'),
-                  replies: t('reply.title', { count: post.replies.length }),
-                }}
-                onDelete={() => setDeletePost(post)}
-                onEdit={() => {
-                  setEditingPost(post);
-                  setComposerOpen(true);
-                  form.reset({
-                    title: post.title,
-                    body: post.body,
-                    tagsInput: formatBulletinTags(post.tags),
-                    pinned: post.pinned,
-                    attachments: post.attachments,
-                  });
-                }}
-                onTogglePin={() => pinMutation.mutate({ id: post.id, pinned: !post.pinned })}
-                onReact={(emoji) =>
-                  postReactionMutation.mutate({
-                    postId: post.id,
-                    emoji,
-                    messages: {
-                      loading: t('notifications.react.loading', { emoji, title: post.title }),
-                      success: t('notifications.react.success', { emoji, title: post.title }),
-                      error: t('notifications.react.error', { emoji, title: post.title }),
-                    },
-                  })
-                }
-                onReply={(body) =>
-                  replyCreateMutation.mutate({
-                    postId: post.id,
-                    body,
-                    messages: {
-                      loading: t('notifications.reply.loading', { title: post.title }),
-                      success: t('notifications.reply.success', { title: post.title }),
-                      error: t('notifications.reply.error', { title: post.title }),
-                    },
-                  })
-                }
-                onDeleteReply={(reply) =>
-                  replyDeleteMutation.mutate({
-                    replyId: reply.id,
-                    messages: {
-                      loading: t('notifications.replyDelete.loading'),
-                      success: t('notifications.replyDelete.success'),
-                      error: t('notifications.replyDelete.error'),
-                    },
-                  })
-                }
-                onReplyReact={(reply, emoji) =>
-                  replyReactionMutation.mutate({
-                    replyId: reply.id,
-                    emoji,
-                    messages: {
-                      loading: t('notifications.replyReact.loading', { emoji }),
-                      success: t('notifications.replyReact.success', { emoji }),
-                      error: t('notifications.replyReact.error', { emoji }),
-                    },
-                  })
-                }
-              />
-            ))}
-          </div>
+          <div className="divide-y divide-border/60">{recentPosts.map(renderPost)}</div>
         </section>
 
         <WorkspacePagination

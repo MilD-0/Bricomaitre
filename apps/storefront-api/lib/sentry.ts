@@ -1,11 +1,10 @@
-import * as Sentry from '@sentry/nextjs';
 import {
   getRequestId,
   readSampleRate,
-  sanitizeDiagnosticEvent,
   scrubDiagnosticValue,
   withRequestIdHeaders,
 } from '@bric/runtime/diagnostics';
+import * as Sentry from '@sentry/nextjs';
 
 export { getRequestId, readSampleRate, withRequestIdHeaders };
 
@@ -14,9 +13,7 @@ export function getSentryRelease() {
   return release || undefined;
 }
 
-export function sanitizeSentryEvent(event: Sentry.ErrorEvent) {
-  return sanitizeDiagnosticEvent(event);
-}
+export { sanitizeDiagnosticEvent as sanitizeSentryEvent } from '@bric/runtime/diagnostics';
 
 export function captureStorefrontApiException(
   error: unknown,

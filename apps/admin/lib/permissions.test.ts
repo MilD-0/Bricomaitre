@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  canEdit,
   canExportAllProducts,
   canManageAnalytics,
   canManageSettings,
-  canViewOps,
   canViewProfitStats,
   getPermissionsForRole,
   permissionKeySchema,
@@ -30,22 +28,6 @@ describe('roleDefinitionFormSchema', () => {
 });
 
 describe('permissions role matrix', () => {
-  it('matches expected canEdit permissions', () => {
-    expect(canEdit('viewer')).toBe(false);
-    expect(canEdit('employee')).toBe(true);
-    expect(canEdit('admin')).toBe(true);
-    expect(canEdit('developer')).toBe(true);
-  });
-
-  it('matches expected canViewOps permissions', () => {
-    expect(canViewOps('viewer')).toBe(false);
-    expect(canViewOps('employee')).toBe(false);
-    expect(canViewOps('admin')).toBe(true);
-    expect(canViewOps('developer')).toBe(true);
-    expect(canViewOps(['settings_manage'])).toBe(false);
-    expect(canViewOps(['ops_view'])).toBe(true);
-  });
-
   it('maps built-in roles to the expected permission sets', () => {
     expect(getPermissionsForRole('employee')).toEqual([
       'products_write',

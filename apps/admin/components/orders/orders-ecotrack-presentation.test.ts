@@ -5,7 +5,6 @@ import {
   formatEcotrackAmountInput,
   formatEcotrackDateTime,
   formatEcotrackMoney,
-  getEcotrackDeliveryLabelKey,
   getTrackingHistoryStatusKey,
 } from './orders-ecotrack-presentation';
 
@@ -34,9 +33,7 @@ describe('Ecotrack presentation helpers', () => {
     expect(formatEcotrackMoney('en-US', null)).toBe('0.00');
   });
 
-  it('maps delivery modes and known tracking statuses to translation keys', () => {
-    expect(getEcotrackDeliveryLabelKey(0)).toBe('ordersManager.delivery.home');
-    expect(getEcotrackDeliveryLabelKey(1)).toBe('ordersManager.delivery.office');
+  it('maps known tracking statuses to translation keys', () => {
     expect(getTrackingHistoryStatusKey(' PICKED ')).toBe(
       'ordersEcotrackManager.historyStatuses.picked',
     );

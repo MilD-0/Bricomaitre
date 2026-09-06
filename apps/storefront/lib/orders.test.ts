@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  CheckoutOrderError,
-  createCheckoutOrder,
-  verifyCheckoutOrder,
-  verifyCheckoutOrderByToken,
-} from './orders';
+import { CheckoutOrderError, createCheckoutOrder, verifyCheckoutOrderByToken } from './orders';
 
 const order = {
   id: 42,
@@ -114,16 +109,6 @@ describe('checkout order client', () => {
     });
   });
 
-  it('verifies a public order token through the local BFF', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ item: order }), { status: 200 }),
-    );
-    await expect(verifyCheckoutOrder(42, 'token with spaces')).resolves.toEqual(order);
-    expect(fetch).toHaveBeenCalledWith('/api/orders/42', {
-      headers: { accept: 'application/json', 'x-order-token': 'token with spaces' },
-    });
-  });
-
   it('verifies a shareable tracking link without requiring the order ID', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ item: order }), { status: 200 }),
@@ -141,8 +126,10 @@ describe('checkout order client', () => {
     await expect(createCheckoutOrder(payload, 'attempt-1')).rejects.toBeInstanceOf(
       CheckoutOrderError,
     );
-    await expect(verifyCheckoutOrder(42, 'public-order-token-1234567890')).rejects.toMatchObject({
-      code: 'network',
-    });
+    await expect(verifyCheckoutOrderByToken('public-order-token-1234567890')).rejects.toMatchObject(
+      {
+        code: 'network',
+      },
+    );
   });
 });

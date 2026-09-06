@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  buildCheckoutAnalyticsPayload,
   buildCatalogAnalyticsPayload,
-  buildProductAnalyticsPayload,
+  buildCheckoutAnalyticsPayload,
   buildNavigationAnalyticsPayload,
   buildPageAnalyticsPayload,
-  sanitizeAnalyticsReferrer,
+  buildProductAnalyticsPayload,
   trackProductEvent,
 } from './analytics';
 
@@ -116,21 +115,6 @@ describe('Product Detail analytics', () => {
       eventName: 'view_item_media',
       metadata: { mediaAction: 'navigate', mediaIndex: 1, mediaCount: 2 },
     });
-  });
-
-  it('removes queries and external paths from analytics referrers', () => {
-    expect(
-      sanitizeAnalyticsReferrer(
-        'https://bricomaitre.com/fr/products?email=private@example.com',
-        'https://bricomaitre.com',
-      ),
-    ).toBe('https://bricomaitre.com/fr/products');
-    expect(
-      sanitizeAnalyticsReferrer(
-        'https://search.example/results/private-query?q=secret',
-        'https://bricomaitre.com',
-      ),
-    ).toBe('https://search.example');
   });
 
   it('keeps collection failures non-blocking', async () => {

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { dayInTimezone } from './analytics/date-range';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -16,8 +17,8 @@ import {
 } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
-import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from './analytics-fact-contract';
 import { runIdempotentAdminMutation } from './admin-mutation-idempotency';
+import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from './analytics-fact-contract';
 import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import {
   applyProfitTrackerRollforward,
@@ -145,10 +146,6 @@ function nullableNumeric(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function decimal(value: number) {
-  return String(value);
-}
-
 function isoTimestamp(value: unknown) {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(String(value));
@@ -159,17 +156,6 @@ function addDays(date: string, amount: number) {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() + amount);
   return value.toISOString().slice(0, 10);
-}
-
-function dayInTimezone(now: Date, timezone = 'Africa/Algiers') {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
 }
 
 type AutomaticDayEconomics = {
@@ -589,8 +575,8 @@ export async function updateProfitTrackerSettings(
     .insert(profitTrackerSettings)
     .values({
       id: 1,
-      fxRate: decimal(value.fxRate),
-      defaultReturnRate: decimal(value.defaultReturnRate),
+      fxRate: String(value.fxRate),
+      defaultReturnRate: String(value.defaultReturnRate),
       restFrom: value.restFrom,
       createdAt: now,
       updatedAt: now,
@@ -598,8 +584,8 @@ export async function updateProfitTrackerSettings(
     .onConflictDoUpdate({
       target: profitTrackerSettings.id,
       set: {
-        fxRate: decimal(value.fxRate),
-        defaultReturnRate: decimal(value.defaultReturnRate),
+        fxRate: String(value.fxRate),
+        defaultReturnRate: String(value.defaultReturnRate),
         restFrom: value.restFrom,
         updatedAt: now,
       },
@@ -618,17 +604,17 @@ export async function upsertProfitTrackerDay(
   const provided = new Set(Object.keys(input));
   const insertValue: typeof profitTrackerDays.$inferInsert = {
     day: value.date,
-    spendEur: value.spendEur == null ? null : decimal(value.spendEur),
-    fbPurchases: value.fbPurchases == null ? null : decimal(value.fbPurchases),
-    cpm: value.cpm == null ? null : decimal(value.cpm),
-    ctr: value.ctr == null ? null : decimal(value.ctr),
+    spendEur: value.spendEur == null ? null : String(value.spendEur),
+    fbPurchases: value.fbPurchases == null ? null : String(value.fbPurchases),
+    cpm: value.cpm == null ? null : String(value.cpm),
+    ctr: value.ctr == null ? null : String(value.ctr),
     linkClicks: value.linkClicks ?? null,
-    landingPageViews: value.landingPageViews == null ? null : decimal(value.landingPageViews),
-    grossProfitDzd: value.grossProfitDzd == null ? null : decimal(value.grossProfitDzd),
-    returnRatePct: value.returnRatePct == null ? null : decimal(value.returnRatePct),
+    landingPageViews: value.landingPageViews == null ? null : String(value.landingPageViews),
+    grossProfitDzd: value.grossProfitDzd == null ? null : String(value.grossProfitDzd),
+    returnRatePct: value.returnRatePct == null ? null : String(value.returnRatePct),
     confirmedOrders: value.confirmedOrders ?? null,
     note: value.note || null,
-    fxRateUsed: decimal(settings.fxRate),
+    fxRateUsed: String(settings.fxRate),
     createdAt: now,
     updatedAt: now,
   };
@@ -676,8 +662,8 @@ async function invalidateDeletedEconomics(db: Pick<Database, 'insert'>) {
     .insert(profitTrackerSettings)
     .values({
       id: 1,
-      fxRate: decimal(DEFAULT_SETTINGS.fxRate),
-      defaultReturnRate: decimal(DEFAULT_SETTINGS.defaultReturnRate),
+      fxRate: String(DEFAULT_SETTINGS.fxRate),
+      defaultReturnRate: String(DEFAULT_SETTINGS.defaultReturnRate),
       restFrom: DEFAULT_SETTINGS.restFrom,
       updatedAt: now,
     })
@@ -703,7 +689,7 @@ export async function createProfitTrackerCost(
       .insert(profitTrackerOperatingCosts)
       .values({
         name: value.name,
-        amountDzd: decimal(value.amountDzd),
+        amountDzd: String(value.amountDzd),
         period: value.period,
         startDate: value.startDate,
         endDate: value.endDate,
@@ -732,7 +718,7 @@ export async function updateProfitTrackerCost(
     .update(profitTrackerOperatingCosts)
     .set({
       name: value.name,
-      amountDzd: decimal(value.amountDzd),
+      amountDzd: String(value.amountDzd),
       period: value.period,
       startDate: value.startDate,
       endDate: value.endDate,
@@ -820,22 +806,22 @@ export async function syncProfitTrackerMetaRows(
 
   const values = [...byDay.entries()].map(([day, aggregate]) => ({
     day,
-    spendEur: decimal(aggregate.spend),
-    fbPurchases: decimal(aggregate.purchases),
+    spendEur: String(aggregate.spend),
+    fbPurchases: String(aggregate.purchases),
     cpm:
-      aggregate.impressions > 0 ? decimal((aggregate.spend / aggregate.impressions) * 1_000) : '0',
+      aggregate.impressions > 0 ? String((aggregate.spend / aggregate.impressions) * 1_000) : '0',
     ctr:
       aggregate.impressions > 0
-        ? decimal((aggregate.inlineLinkClicks / aggregate.impressions) * 100)
+        ? String((aggregate.inlineLinkClicks / aggregate.impressions) * 100)
         : '0',
     linkClicks: aggregate.inlineLinkClicks,
-    landingPageViews: decimal(aggregate.landingPageViews),
+    landingPageViews: String(aggregate.landingPageViews),
     rawMetaJson: {
       source: 'meta_ads_daily_insights',
       currency: 'EUR',
       rows: aggregate.rowCount,
     },
-    fxRateUsed: decimal(settings.fxRate),
+    fxRateUsed: String(settings.fxRate),
     metaSyncedAt: aggregate.syncedAt,
     updatedAt: aggregate.syncedAt,
   })) satisfies Array<typeof profitTrackerDays.$inferInsert>;

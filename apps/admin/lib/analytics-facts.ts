@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { dayInTimezone } from './analytics/date-range';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -24,15 +25,6 @@ function decimal(value: number | null) {
   return value == null ? null : value.toFixed(6);
 }
 
-function dayInAlgiers(now: Date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Algiers',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
-
 type EconomicsReport = Awaited<ReturnType<typeof getProfitTrackerReport>>;
 type AutomaticPaidEconomics = Awaited<ReturnType<typeof loadAutomaticPaidEconomics>>;
 
@@ -40,7 +32,7 @@ export function resolveAnalyticsFactRefreshFilters(
   options: { startDate?: string | null; endDate?: string },
   now: Date,
 ) {
-  const endDate = options.endDate ?? dayInAlgiers(now);
+  const endDate = options.endDate ?? dayInTimezone(now);
   const resolved = resolveAnalyticsFilters(
     options.startDate
       ? { view: 'money', range: 'custom', startDate: options.startDate, endDate }

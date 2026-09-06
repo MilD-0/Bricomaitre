@@ -19,10 +19,6 @@ const copy = {
   },
 } as const;
 
-export function getMerchantPolicyCopy(locale: Locale) {
-  return copy[locale];
-}
-
 export function buildMerchantReturnPolicy(locale: Locale) {
   const siteUrl = getStorefrontSiteUrl();
   return {

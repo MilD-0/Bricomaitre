@@ -6,14 +6,6 @@ import type { AnalyticsFilters } from './contract';
 import type { Database } from './loaders-shared';
 import { nullableNumeric, numeric } from './query-values';
 
-export type CohortCompletionOrder = {
-  postedDay: string;
-  deliveredDay: string | null;
-  outcome: string;
-  grossProfitDzd: number | null;
-  units: number;
-};
-
 export type CohortCompletionProjection = {
   observedOrders: number;
   unresolvedOrders: number;
@@ -41,30 +33,17 @@ function isTerminalLoss(outcome: string) {
   return outcome === 'retour_archive' || outcome === 'annule' || outcome === 'failed';
 }
 
-type CohortCompletionGroup = Omit<CohortCompletionOrder, 'deliveredDay'> & {
+type CohortCompletionGroup = {
+  postedDay: string;
+  outcome: string;
+  grossProfitDzd: number | null;
+  units: number;
   delivered: boolean;
   observedOrders: number;
   profitSamples: number;
 };
 
-export function projectCohortCompletion(
-  orders: CohortCompletionOrder[],
-  range: Pick<AnalyticsFilters, 'startDate' | 'endDate'>,
-  fallbackPaidRate: number,
-): CohortCompletionProjection {
-  return projectCohortCompletionGroups(
-    orders.map((order) => ({
-      ...order,
-      delivered: order.deliveredDay != null,
-      observedOrders: 1,
-      profitSamples: order.grossProfitDzd == null ? 0 : 1,
-    })),
-    range,
-    fallbackPaidRate,
-  );
-}
-
-function projectCohortCompletionGroups(
+export function projectCohortCompletionGroups(
   orders: CohortCompletionGroup[],
   range: Pick<AnalyticsFilters, 'startDate' | 'endDate'>,
   fallbackPaidRate: number,

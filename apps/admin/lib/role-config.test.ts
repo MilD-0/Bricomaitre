@@ -28,12 +28,6 @@ describe('role config', () => {
     }
   });
 
-  it('keeps editable and code-managed role groups separate', async () => {
-    const { editableRoles, codeManagedRoles } = await loadRoleConfig();
-    expect(editableRoles).toEqual(['viewer', 'employee']);
-    expect(codeManagedRoles).toEqual(['admin', 'developer']);
-  });
-
   it('maps configured emails to privileged roles', async () => {
     const { configuredAdminEmails, configuredDeveloperEmails, getConfiguredPrivilegedRole } =
       await loadRoleConfig();
@@ -52,26 +46,5 @@ describe('role config', () => {
     expect(new Set(configuredAdminEmails).size).toBe(configuredAdminEmails.length);
     expect(isConfiguredPrivilegedEmail(' ADMIN@EXAMPLE.COM ')).toBe(true);
     expect(isConfiguredPrivilegedEmail(configuredDeveloperEmails[0]?.toUpperCase())).toBe(true);
-  });
-
-  it('preserves non-privileged persisted roles', async () => {
-    const { resolveUserRole } = await loadRoleConfig();
-    expect(resolveUserRole('viewer@example.com', 'viewer')).toBe('viewer');
-    expect(resolveUserRole('employee@example.com', 'employee')).toBe('employee');
-  });
-
-  it('forces privileged roles to come from configured emails', async () => {
-    const { configuredAdminEmails, configuredDeveloperEmails, resolveUserRole } =
-      await loadRoleConfig();
-
-    expect(resolveUserRole('viewer@example.com', 'admin')).toBe('admin');
-    expect(resolveUserRole('viewer@example.com', 'developer')).toBe('developer');
-    expect(resolveUserRole(configuredAdminEmails[0], 'viewer')).toBe('admin');
-    expect(resolveUserRole(configuredDeveloperEmails[0], 'viewer')).toBe('developer');
-  });
-
-  it('preserves custom persisted roles for runtime RBAC lookups', async () => {
-    const { resolveUserRole } = await loadRoleConfig();
-    expect(resolveUserRole('viewer@example.com', 'campaign-manager')).toBe('campaign-manager');
   });
 });

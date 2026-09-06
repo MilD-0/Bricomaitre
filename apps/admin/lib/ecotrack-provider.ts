@@ -37,7 +37,11 @@ export function chunkArray<T>(items: T[], size: number) {
   return chunks;
 }
 
-export { cleanEcotrackEnvValue, getEcotrackConfig } from '@bric/storefront-core/ecotrack-client';
+export {
+  buildEcotrackResultMessage,
+  readEcotrackMessage,
+  readEcotrackSuccess,
+} from '@bric/storefront-core/ecotrack-client';
 
 export function normalizeEcotrackText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -51,48 +55,6 @@ export function normalizeEcotrackPhone(value: string | null | undefined) {
   return digits;
 }
 
-export function readEcotrackSuccess(payload: unknown) {
-  if (typeof payload !== 'object' || payload === null) {
-    return false;
-  }
-
-  const value = (payload as Record<string, unknown>).success;
-  return value === true || value === 1 || value === '1';
-}
-
-export function readEcotrackMessage(payload: unknown) {
-  if (typeof payload !== 'object' || payload === null) {
-    return null;
-  }
-
-  const value = (payload as Record<string, unknown>).message;
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function readEcotrackErrors(payload: unknown) {
-  if (typeof payload !== 'object' || payload === null) {
-    return [];
-  }
-
-  const value = (payload as Record<string, unknown>).errors;
-  if (!value) {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean);
-  }
-
-  if (typeof value === 'object') {
-    return Object.values(value)
-      .flatMap((entry) => (Array.isArray(entry) ? entry : [entry]))
-      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-      .filter(Boolean);
-  }
-
-  return [];
-}
-
 export function readEcotrackTracking(payload: unknown) {
   if (typeof payload !== 'object' || payload === null) {
     return null;
@@ -100,27 +62,6 @@ export function readEcotrackTracking(payload: unknown) {
 
   const value = (payload as Record<string, unknown>).tracking;
   return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-export function buildEcotrackResultMessage(payload: unknown, fallback: string) {
-  const explicitMessage = readEcotrackMessage(payload);
-  if (explicitMessage) {
-    return explicitMessage;
-  }
-
-  const errors = readEcotrackErrors(payload);
-  if (errors.length > 0) {
-    return errors.join('; ');
-  }
-
-  if (typeof payload === 'string') {
-    const text = payload.trim();
-    if (text) {
-      return text;
-    }
-  }
-
-  return fallback;
 }
 
 async function applyEcotrackRateLimitBackoff(rateLimit: EcotrackExtendedRateLimitSnapshot) {

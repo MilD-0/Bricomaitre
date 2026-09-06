@@ -62,3 +62,31 @@ test('serves crawl policy, merchant identity, and API-backed localized product d
     },
   });
 });
+
+for (const path of ['/fr/products/desk-lamp', '/ar/landing/lampe-atelier']) {
+  test(`renders fresh script nonces for each request to ${path}`, async ({ request }) => {
+    const nonces: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const response = await request.get(path);
+      expect(response.status()).toBe(200);
+      const policy = response.headers()['content-security-policy'] ?? '';
+      const nonce = policy.match(/'nonce-([^']+)'/)?.[1];
+      expect(nonce).toBeTruthy();
+      const html = await response.text();
+      const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map(([tag]) => tag);
+      expect(scripts.length).toBeGreaterThan(0);
+      for (const script of scripts) expect(script).toContain(`nonce="${nonce}"`);
+      nonces.push(nonce!);
+    }
+    expect(nonces[0]).not.toBe(nonces[1]);
+  });
+}
+
+test('excludes missing product and landing pages from search', async ({ request }) => {
+  for (const path of ['/fr/products/not-a-real-product', '/ar/landing/not-a-real-landing']) {
+    const response = await request.get(path);
+    // Next can stream a landing fallback before resolving its missing content.
+    expect([200, 404], path).toContain(response.status());
+    expect(await response.text(), path).toMatch(/<meta name="robots" content="[^"]*noindex/);
+  }
+});

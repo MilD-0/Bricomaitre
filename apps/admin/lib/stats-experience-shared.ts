@@ -1,4 +1,6 @@
 import { and, sql, type SQLWrapper } from 'drizzle-orm';
+import { dayInTimezone } from './analytics/date-range';
+export { numberOrZero as numberValue } from './stats-values';
 
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
@@ -170,11 +172,6 @@ export type ExperienceStats = {
   metaPaidAttribution: MetaPaidAttributionStats;
 };
 
-export function numberValue(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 export function isoValue(value: unknown) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(String(value));
@@ -200,20 +197,11 @@ function addIsoDays(value: string, amount: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function reportingDay(now: Date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: ADMIN_REPORTING_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
-
 export function resolveRawWebsiteFilters(
   filters: ExperienceStatsFilters,
   now = new Date(),
 ): ExperienceStatsFilters {
-  const effectiveEndDate = filters.endDate || reportingDay(now);
+  const effectiveEndDate = filters.endDate || dayInTimezone(now);
   const recentStartDate = addIsoDays(effectiveEndDate, -6);
 
   return {

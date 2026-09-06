@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  loadOrdersPageData: vi.fn(),
+  loadConfirmedOrderIds: vi.fn(),
   buildPostingPreview: vi.fn(),
   readCatalog: vi.fn(),
   inspectOrders: vi.fn(),
@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
-vi.mock('./admin-orders-data', () => ({ loadOrdersPageData: mocks.loadOrdersPageData }));
+vi.mock('./admin-orders-data', () => ({ loadConfirmedOrderIds: mocks.loadConfirmedOrderIds }));
 vi.mock('./admin-ai-domain', () => ({ inspectAdminOrders: mocks.inspectOrders }));
 vi.mock('./ecotrack', () => ({
   buildEcotrackPostingPreview: mocks.buildPostingPreview,
@@ -23,21 +23,6 @@ import {
   resolveAdminAiEcotrackPostingScope,
   startAdminAiEcotrackPosting,
 } from './admin-ai-ecotrack';
-
-function ordersPage(items: Array<{ id: number; createdAt: string }>, page = 1, totalPages = 1) {
-  return {
-    items,
-    writable: false,
-    pagination: {
-      page,
-      limit: 100,
-      totalItems: items.length,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
-    },
-  };
-}
 
 describe('admin AI ECOTRACK posting', () => {
   beforeEach(() => {
@@ -65,19 +50,8 @@ describe('admin AI ECOTRACK posting', () => {
     });
   });
 
-  it('resolves today against Africa/Algiers and keeps every matching confirmed order', async () => {
-    mocks.loadOrdersPageData
-      .mockResolvedValueOnce(
-        ordersPage(
-          [
-            { id: 11, createdAt: '2026-08-23T23:30:00.000Z' },
-            { id: 12, createdAt: '2026-08-24T23:30:00.000Z' },
-          ],
-          1,
-          2,
-        ),
-      )
-      .mockResolvedValueOnce(ordersPage([{ id: 13, createdAt: '2026-08-24T08:00:00.000Z' }], 2, 2));
+  it('passes the Algiers business day to cohort selection and retains its exact IDs', async () => {
+    mocks.loadConfirmedOrderIds.mockResolvedValue([11, 13]);
 
     await expect(
       resolveAdminAiEcotrackPostingScope(
@@ -91,7 +65,7 @@ describe('admin AI ECOTRACK posting', () => {
       businessDate: '2026-08-24',
       dateBasis: 'order_created_africa_algiers',
     });
-    expect(mocks.loadOrdersPageData).toHaveBeenCalledTimes(2);
+    expect(mocks.loadConfirmedOrderIds).toHaveBeenCalledWith({ businessDate: '2026-08-24' });
   });
 
   it('previews exact selected IDs without leaking complete provider payloads into chat context', async () => {
@@ -140,7 +114,7 @@ describe('admin AI ECOTRACK posting', () => {
       resolvedOrderCount: 1,
       job: { status: 'queued' },
     });
-    expect(mocks.loadOrdersPageData).not.toHaveBeenCalled();
+    expect(mocks.loadConfirmedOrderIds).not.toHaveBeenCalled();
     expect(mocks.startPostingJob).toHaveBeenCalledWith(
       'admin@example.com',
       {
@@ -155,7 +129,7 @@ describe('admin AI ECOTRACK posting', () => {
   });
 
   it('returns a non-success receipt when no confirmed orders match', async () => {
-    mocks.loadOrdersPageData.mockResolvedValue(ordersPage([]));
+    mocks.loadConfirmedOrderIds.mockResolvedValue([]);
 
     await expect(
       startAdminAiEcotrackPosting(

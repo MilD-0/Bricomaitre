@@ -148,10 +148,6 @@ async function releaseOwnedKey(redis: IORedis, key: string, expectedValue: strin
   return Number(await redis.eval(RELEASE_OWNED_KEY_SCRIPT, 1, key, expectedValue)) === 1;
 }
 
-function serializeSnapshot(snapshot: JobSnapshot) {
-  return JSON.stringify(snapshot);
-}
-
 function parseSnapshot(value: string | null): JobSnapshot | null {
   if (!value) {
     return null;
@@ -173,11 +169,11 @@ async function writeSnapshot(redis: IORedis, snapshot: JobSnapshot, ttlSeconds =
     getOwnerKey(snapshot.queue, snapshot.ownerKey),
     indexKey,
     originIndexKey,
-    serializeSnapshot(snapshot),
+    JSON.stringify(snapshot),
     ttlSeconds,
     Date.parse(snapshot.createdAt),
     snapshot.origin ? '1' : '0',
-    serializeSnapshot({ ...snapshot, cancelRequested: true }),
+    JSON.stringify({ ...snapshot, cancelRequested: true }),
   );
 }
 

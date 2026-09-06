@@ -3,22 +3,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unstable_cache } from 'next/cache';
 
 import {
+  buildStorefrontLandingPagePath,
+  fetchStorefrontAssets,
   fetchStorefrontCatalog,
   fetchStorefrontCatalogMeta,
-  fetchStorefrontAssets,
   fetchStorefrontHomepage,
   fetchStorefrontHomepageFeaturedGroupProducts,
-  fetchStorefrontProductPromo,
-  fetchStorefrontOrder,
   fetchStorefrontOrderByToken,
-  fetchStorefrontSitemapProducts,
-  fetchStorefrontSettings,
-  getStorefrontSettings,
-  getStorefrontEcotrackCatalog,
   fetchStorefrontProductDetail,
-  getStorefrontProductDetail,
+  fetchStorefrontProductPromo,
+  fetchStorefrontSettings,
+  fetchStorefrontSitemapProducts,
+  getStorefrontEcotrackCatalog,
   getStorefrontLandingPage,
-  buildStorefrontLandingPagePath,
+  getStorefrontProductDetail,
+  getStorefrontSettings,
   recordStorefrontAssistantRun,
 } from './storefront-api';
 import {
@@ -471,26 +470,6 @@ describe('storefront API client', () => {
     expect(JSON.stringify(payload)).not.toContain('These drills');
   });
 
-  it('server-renders a token-verified order without caching the customer response', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ item: validOrder }), { status: 200 }),
-    );
-
-    await expect(fetchStorefrontOrder(42, 'public-order-token-1234567890')).resolves.toEqual(
-      validOrder,
-    );
-    expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/storefront/orders/42',
-      expect.objectContaining({
-        cache: 'no-store',
-        headers: expect.objectContaining({
-          'x-order-token': 'public-order-token-1234567890',
-        }),
-        signal: expect.any(AbortSignal),
-      }),
-    );
-  });
-
   it('server-renders an order from an opaque tracking token without exposing its ID in the request', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ item: validOrder }), { status: 200 }),
@@ -511,7 +490,7 @@ describe('storefront API client', () => {
   });
 
   it('does not request malformed public order lookups', async () => {
-    await expect(fetchStorefrontOrder(0, 'short')).resolves.toBeNull();
+    await expect(fetchStorefrontOrderByToken('short')).resolves.toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
 

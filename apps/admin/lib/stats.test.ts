@@ -1,28 +1,32 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 
+import { manualOrderListQuerySchema } from './manual-orders';
+import {
+  buildCartProductLookup,
+  collectCartProductReferenceBuckets,
+  getCartProductLookupKey,
+} from './order-product-references';
+import { statsQuerySchema } from './stats';
+import {
+  normalizeStatsDashboardData,
+  optionalAnalyticsDiagnostic,
+} from './stats-dashboard-foundation';
+import { CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience';
 import {
   buildAnalyticsWhere,
   buildCanonicalStorefrontSessionsQuery,
   buildLiveOrderSummaryQuery,
   buildLiveOrderTrendQuery,
   buildWebsiteProductMetricsQuery,
+  mergeCanonicalWebsitePurchases,
+  mergeLiveOrderTrend,
+} from './stats-live-commerce';
+import {
   getReportThroughDate,
   isFinancialDataLagging,
   isStatsSnapshotUsable,
-  mergeCanonicalWebsitePurchases,
-  mergeLiveOrderTrend,
-  normalizeStatsDashboardData,
-  optionalAnalyticsDiagnostic,
-  statsQuerySchema,
-} from './stats';
-import { CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience';
-import {
-  buildCartProductLookup,
-  collectCartProductReferenceBuckets,
-  getCartProductLookupKey,
-} from './order-product-references';
-import { manualOrderListQuerySchema } from './manual-orders';
+} from './stats-snapshots';
 
 describe('normalizeStatsDashboardData', () => {
   it('upgrades legacy snapshots with safe defaults for newer stats sections', () => {

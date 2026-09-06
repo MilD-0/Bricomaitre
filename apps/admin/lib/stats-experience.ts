@@ -1,7 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
-import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
 import {
   analyticsAcquisitionDailyRollups,
   analyticsDailyRollups,
@@ -14,6 +13,7 @@ import {
   orders,
   products,
 } from '@bric/db/schema';
+import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
 import { getLiveAdminAiStats, getLiveStorefrontAiStats } from './stats-experience-ai';
 import {
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
@@ -34,13 +34,11 @@ export {
   getAiUsagePricing,
   getLiveAdminAiStats,
   getLiveStorefrontAiStats,
-  mapLiveAdminAiStats,
 } from './stats-experience-ai';
 export {
   ADMIN_REPORTING_TIMEZONE,
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   emptyExperienceStats,
-  resolveRawWebsiteFilters,
 } from './stats-experience-shared';
 export type {
   AiAssistantStats,

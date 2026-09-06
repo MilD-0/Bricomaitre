@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { isWorkerHeartbeatFresh, writeWorkerHeartbeat } from './worker-heartbeat';
+import { writeWorkerHeartbeat } from './worker-heartbeat';
 
 const temporaryDirectories: string[] = [];
 
@@ -22,12 +22,6 @@ describe('worker heartbeat', () => {
     await writeWorkerHeartbeat(path, 1_000);
 
     expect(readFileSync(path, 'utf8')).toBe('1000\n');
-    expect(isWorkerHeartbeatFresh(readFileSync(path, 'utf8'), 20_000)).toBe(true);
-  });
-
-  it('rejects stale, future, and malformed heartbeat values', () => {
-    expect(isWorkerHeartbeatFresh('1000', 50_001)).toBe(false);
-    expect(isWorkerHeartbeatFresh('50001', 50_000)).toBe(false);
-    expect(isWorkerHeartbeatFresh('not-a-timestamp', 50_000)).toBe(false);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });

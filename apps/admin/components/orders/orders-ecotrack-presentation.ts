@@ -57,10 +57,6 @@ export function formatEcotrackAmountInput(value: number | null | undefined) {
   return Number(value).toFixed(2);
 }
 
-export function getEcotrackDeliveryLabelKey(value: 0 | 1) {
-  return value === 1 ? 'ordersManager.delivery.office' : 'ordersManager.delivery.home';
-}
-
 export function getTrackingHistoryStatusKey(status: string) {
   const normalized = status.trim().toLowerCase();
   return TRACKING_HISTORY_STATUSES.has(normalized)

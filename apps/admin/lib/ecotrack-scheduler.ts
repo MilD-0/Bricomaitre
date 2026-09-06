@@ -147,7 +147,3 @@ export function stopEcotrackScheduler() {
   state.shipmentRunning = false;
   state.shipmentTask = null;
 }
-
-export function resetEcotrackSchedulerForTests() {
-  stopEcotrackScheduler();
-}

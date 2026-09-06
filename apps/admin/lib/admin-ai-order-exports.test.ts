@@ -2,16 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   db: { marker: 'db' },
-  loadOrderDetail: vi.fn(),
-  loadOrdersPageData: vi.fn(),
+  loadOrderRecordsByIds: vi.fn(),
+  loadConfirmedOrderIds: vi.fn(),
   readCatalog: vi.fn(),
   startExport: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => mocks.db }));
 vi.mock('./admin-orders-data', () => ({
-  loadOrderDetail: mocks.loadOrderDetail,
-  loadOrdersPageData: mocks.loadOrdersPageData,
+  loadOrderRecordsByIds: mocks.loadOrderRecordsByIds,
+  loadConfirmedOrderIds: mocks.loadConfirmedOrderIds,
 }));
 vi.mock('./ecotrack', () => ({ readEcotrackCatalog: mocks.readCatalog }));
 vi.mock('./background-jobs', () => ({ startOrderExportJob: mocks.startExport }));
@@ -85,20 +85,17 @@ describe('admin AI order exports', () => {
   });
 
   it('previews the complete recent-confirmed cohort and exposes stale exclusions', async () => {
-    mocks.loadOrdersPageData.mockImplementation(async ({ page }) => ({
-      items:
-        page === 1
-          ? [order(31, '2026-08-23T10:00:00.000Z')]
-          : [order(30, '2026-08-10T10:00:00.000Z')],
-      pagination: { page, totalPages: 2 },
-    }));
+    mocks.loadConfirmedOrderIds.mockImplementation(async ({ createdBefore }) =>
+      createdBefore ? [30] : [31],
+    );
+    mocks.loadOrderRecordsByIds.mockResolvedValue([order(31, '2026-08-23T10:00:00.000Z')]);
 
     const result = await previewAdminAiOrderExport(
       { mode: 'confirmed', orderIds: [] },
       new Date('2026-08-24T12:00:00.000Z'),
     );
 
-    expect(mocks.loadOrdersPageData).toHaveBeenCalledTimes(2);
+    expect(mocks.loadConfirmedOrderIds).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({
       mode: 'confirmed',
       orderIds: [31],
@@ -116,9 +113,7 @@ describe('admin AI order exports', () => {
   });
 
   it('reloads the canonical selected scope before starting the background export', async () => {
-    mocks.loadOrderDetail.mockImplementation(async (orderId: number) =>
-      orderId === 31 ? order(31, '2026-08-23T10:00:00.000Z') : null,
-    );
+    mocks.loadOrderRecordsByIds.mockResolvedValue([order(31, '2026-08-23T10:00:00.000Z')]);
 
     const result = await startAdminAiOrderExport(
       { mode: 'selected', orderIds: [31, 404] },
@@ -143,7 +138,7 @@ describe('admin AI order exports', () => {
   });
 
   it('returns a truthful non-success receipt when the export queue is already busy', async () => {
-    mocks.loadOrderDetail.mockResolvedValue(order(31, '2026-08-23T10:00:00.000Z'));
+    mocks.loadOrderRecordsByIds.mockResolvedValue([order(31, '2026-08-23T10:00:00.000Z')]);
     mocks.startExport.mockResolvedValue({
       kind: 'busy',
       job: { id: 'job-1', status: 'running', downloadPath: null },

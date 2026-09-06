@@ -296,9 +296,4 @@ export function adminAiToolActivityKey(toolName: string): AdminAiToolActivityKey
   return activityKeysByLabel[labelKeys[toolName] ?? 'result'];
 }
 
-export const ADMIN_AI_PRESENTED_TOOL_NAMES = Object.freeze(Object.keys(labelKeys));
-
-export {
-  ADMIN_AI_MUTATING_TOOL_NAMES,
-  adminAiToolMutatesApplication,
-} from './admin-ai-execution-capabilities';
+export { adminAiToolMutatesApplication } from './admin-ai-execution-capabilities';

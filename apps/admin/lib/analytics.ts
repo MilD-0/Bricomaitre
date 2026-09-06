@@ -36,28 +36,10 @@ export type {
   AnalyticsSource,
   AnalyticsView,
 } from './analytics/contract';
-export {
-  clipAnalyticsFilters,
-  resolveAnalyticsFilters,
-  resolveAnalyticsReferenceNow,
-} from './analytics/date-range';
-export {
-  aggregateAutomaticPaidSeries,
-  aggregateEconomicsSeries,
-} from './analytics/economics-series';
-export { economicsSummaryMetrics, materializedFactsAreUsable } from './analytics/economics-data';
-export {
-  appendEconomicsForecastSeries,
-  buildEconomicsForecast,
-  buildLeadingOrderForecast,
-  projectOpenEconomicsSeries,
-} from './analytics/forecast';
-export { projectCohortCompletion } from './analytics/cohort-completion';
+export { resolveAnalyticsFilters, resolveAnalyticsReferenceNow } from './analytics/date-range';
+
 export { loadAutomaticPaidEconomics } from './analytics/fulfillment-data';
-export { metricChange } from './analytics/metrics';
-export { freshnessState } from './analytics/source-health';
-export { storefrontPathCoverage } from './analytics/commerce-data';
-export { finalizeSearchFilters } from './analytics/assumptions-search-views';
+
 export { getAnalyticsStorefrontDetails } from './analytics/storefront-view';
 
 type LoadedAnalyticsSection =

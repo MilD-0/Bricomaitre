@@ -1,16 +1,16 @@
 import type {
-  EcotrackMajEntry as UpstreamEcotrackMajEntry,
   EcotrackOrderInfo,
   EcotrackOrderSummary,
   EcotrackStatusItem,
   EcotrackTrackingInfo,
+  EcotrackMajEntry as UpstreamEcotrackMajEntry,
 } from '@bric/storefront-core/ecotrack-client';
 import { readEcotrackActivityTimestamp } from '@bric/storefront-core/ecotrack-tracking';
 
-import { ECOTRACK_FAILED_STATUS_MAX_AGE_MS } from './ecotrack-status-policy';
 import { normalizeEcotrackMonetaryValue } from './ecotrack-monetary';
 import { findLatestDate } from './ecotrack-shipment-errors';
 import type { EcotrackShipmentRow } from './ecotrack-shipment-types';
+import { ECOTRACK_FAILED_STATUS_MAX_AGE_MS } from './ecotrack-status-policy';
 import type { OrderStatus } from './orders';
 
 const ECOTRACK_DISPATCHED_STATUSES = new Set([
@@ -54,10 +54,6 @@ export function getUpstreamTrackingValues(item: EcotrackStatusItem) {
   };
 }
 
-function nullableProviderAmount(value: string | number | null | undefined) {
-  return normalizeEcotrackMonetaryValue(value);
-}
-
 export function parseEcotrackProviderTimestamp(value: string | null | undefined) {
   if (!value?.trim()) return null;
   const isoLike = value.includes('T') ? value.trim() : value.trim().replace(' ', 'T');
@@ -78,12 +74,12 @@ function providerBoolean(value: boolean | string | number | null | undefined) {
 }
 
 export function mapEcotrackOrderSnapshot(item: EcotrackOrderInfo | EcotrackOrderSummary) {
-  const currentAmount = nullableProviderAmount(item.montant);
+  const currentAmount = normalizeEcotrackMonetaryValue(item.montant);
   return {
     currentAmount,
     currentAmountSource: currentAmount === null ? null : 'ecotrack_orders',
-    deliveryTariff: nullableProviderAmount(item.tarif_prestation),
-    returnTariff: nullableProviderAmount(item.tarif_retour),
+    deliveryTariff: normalizeEcotrackMonetaryValue(item.tarif_prestation),
+    returnTariff: normalizeEcotrackMonetaryValue(item.tarif_retour),
     stopDesk: providerBoolean(item.stop_desk),
     paymentId:
       item.payment_id === null || item.payment_id === undefined

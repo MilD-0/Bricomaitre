@@ -1,12 +1,12 @@
 import { requestJson as request } from '../../lib/admin-api';
 import { parseNumericAmount, type OrderRecord } from '../../lib/orders';
 import {
-  buildShoppingListScopeKey,
   buildGeneratedShoppingListDraft,
   buildShoppingListInventoryPreview,
+  buildShoppingListScopeKey,
   mergeShoppingListDraft,
-  reconcileShoppingListInventory,
   normalizeShoppingListOrderIds,
+  reconcileShoppingListInventory,
   type ShoppingListDraftItem,
   type ShoppingListDraftRecord,
   type ShoppingListDraftResponse,
@@ -116,10 +116,6 @@ export function buildShoppingListStateFromDraft(
     updatedAt: draft.updatedAt,
     updatedByName: draft.updatedByName,
   };
-}
-
-export function buildInventoryPreview(quantity: number, inventoryQuantity: number | null) {
-  return buildShoppingListInventoryPreview(quantity, inventoryQuantity);
 }
 
 export function recalculateShoppingListInventory(

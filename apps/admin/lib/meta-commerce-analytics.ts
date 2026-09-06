@@ -1,4 +1,5 @@
 import { desc, inArray, sql } from 'drizzle-orm';
+import { numberOrZero as numberValue } from './stats-values';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -324,11 +325,6 @@ export function buildMetaCommerceSummaryQuery(filters: MetaCommerceFilters) {
     )
     select spend.*, outcomes.* from spend cross join outcomes
   `;
-}
-
-function numberValue(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function stringValue(value: unknown) {

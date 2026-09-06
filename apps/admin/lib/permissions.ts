@@ -72,13 +72,6 @@ const builtInRolePermissions: Record<BuiltInRole, readonly PermissionKey[]> = {
   developer: permissionCatalog,
 };
 
-const editorPermissionKeys: readonly PermissionKey[] = [
-  'products_write',
-  'orders_write',
-  'assets_write',
-  'brands_categories_write',
-] as const;
-
 export function isBuiltInRole(role: unknown): role is BuiltInRole {
   return builtInRoleSchema.safeParse(role).success;
 }
@@ -123,12 +116,6 @@ function resolvePermissionSet(access: Role | readonly PermissionKey[]) {
 export function hasPermission(access: Role | readonly PermissionKey[], permission: PermissionKey) {
   return resolvePermissionSet(access).includes(permission);
 }
-
-export const canEdit = (access: Role | readonly PermissionKey[]) =>
-  editorPermissionKeys.some((permission) => hasPermission(access, permission));
-
-export const canViewOps = (access: Role | readonly PermissionKey[]) =>
-  hasPermission(access, 'ops_view');
 
 export const canManageAnalytics = (access: Role | readonly PermissionKey[]) =>
   hasPermission(access, 'analytics_manage');

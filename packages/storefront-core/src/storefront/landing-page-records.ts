@@ -1,5 +1,5 @@
 import type { getDb } from '@bric/db/client';
-import { landingPageRevisions, landingPages, products } from '@bric/db/schema';
+import { landingPageRevisions, landingPages } from '@bric/db/schema';
 import { and, eq } from 'drizzle-orm';
 
 import { readStorefrontProductByToken } from './catalog';
@@ -22,10 +22,6 @@ type LandingPageRevisionPointer = {
   revision: number | null;
   publishedAt: Date | null;
 };
-
-export function buildIndexableLandingPageProductJoin() {
-  return and(eq(products.id, landingPages.productId), eq(products.active, true));
-}
 
 export async function readPublishedStorefrontLandingPage(
   db: Database,

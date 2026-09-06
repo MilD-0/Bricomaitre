@@ -1,5 +1,7 @@
 import { sql, type SQLWrapper } from 'drizzle-orm';
 import { z } from 'zod';
+import { numberOrZero as numberValue } from './stats-values';
+export { numberOrZero as numberValue } from './stats-values';
 
 import { getDb } from '@bric/db/client';
 import { type AnalyticsGrain, type AnalyticsRange, type AnalyticsResolvedGrain } from './analytics';
@@ -202,19 +204,6 @@ export function classifyAiWorkload(task: string, model: string): AiWorkloadMode 
 
 export function aiRate(numerator: number, denominator: number) {
   return denominator > 0 ? Math.round((numerator / denominator) * 10_000) / 100 : null;
-}
-
-export function isAssistedInfluenceLevel(level: string | null | undefined) {
-  return (
-    level === 'engaged' ||
-    level === 'recommendation_clicked' ||
-    level === 'recommended_product_ordered'
-  );
-}
-
-export function numberValue(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function nullableNumber(value: unknown) {

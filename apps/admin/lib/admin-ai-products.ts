@@ -11,7 +11,6 @@ import {
   restoreProductThroughCanonicalWorkflow,
   type ProductMutationActor,
 } from './product-update-workflow';
-import { loadArchivedProductsByIds, loadArchivedProductsPage } from './product-archive';
 import { productPayloadSchema, productPromoCodePayloadSchema } from './products';
 import { captureAdminException, getRequestId } from './sentry';
 import { CACHE_TAGS, revalidateServerTags } from './server-cache';
@@ -69,23 +68,6 @@ export const adminAiProductCreateSchema = z.object({ product: productPayloadSche
 export const adminAiProductArchiveSchema = z
   .object({ productIds: z.array(z.number().int().positive()).min(1).max(20) })
   .strict();
-
-export const adminAiArchivedProductInspectionSchema = z.discriminatedUnion('scope', [
-  z
-    .object({
-      scope: z.literal('exact'),
-      productIds: z.array(z.number().int().positive()).min(1).max(100),
-    })
-    .strict(),
-  z
-    .object({
-      scope: z.literal('filtered'),
-      query: z.string().trim().max(200).default(''),
-      page: z.number().int().positive().default(1),
-      limit: z.number().int().min(1).max(100).default(50),
-    })
-    .strict(),
-]);
 
 export const adminAiProductRestoreSchema = z
   .object({ productIds: z.array(z.number().int().positive()).min(1).max(20) })
@@ -194,39 +176,6 @@ export async function archiveAdminAiProducts(
     catalogFeedRefresh,
     archived,
     failed,
-  };
-}
-
-export async function inspectAdminAiArchivedProducts(
-  rawInput: z.input<typeof adminAiArchivedProductInspectionSchema>,
-) {
-  const input = adminAiArchivedProductInspectionSchema.parse(rawInput);
-  if (input.scope === 'exact') {
-    const requestedIds = [...new Set(input.productIds)];
-    const items = await loadArchivedProductsByIds(getDb(), requestedIds);
-    const byId = new Map(items.map((item) => [item.id, item]));
-    return {
-      kind: 'archived_products' as const,
-      scope: input.scope,
-      requestedCount: requestedIds.length,
-      items: requestedIds.flatMap((productId) => {
-        const product = byId.get(productId);
-        return product ? [product] : [];
-      }),
-      missingProductIds: requestedIds.filter((productId) => !byId.has(productId)),
-    };
-  }
-
-  const result = await loadArchivedProductsPage(getDb(), {
-    page: input.page,
-    limit: input.limit,
-    search: input.query,
-  });
-  return {
-    kind: 'archived_products' as const,
-    scope: input.scope,
-    query: input.query,
-    ...result,
   };
 }
 

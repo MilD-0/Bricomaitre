@@ -246,7 +246,7 @@ function parseRateLimit(headers: Headers, path: string): EcotrackExtendedRateLim
   };
 }
 
-function readEcotrackSuccess(payload: unknown) {
+export function readEcotrackSuccess(payload: unknown) {
   if (typeof payload !== 'object' || payload === null) {
     return false;
   }
@@ -255,7 +255,7 @@ function readEcotrackSuccess(payload: unknown) {
   return value === true || value === 1 || value === '1';
 }
 
-function readEcotrackMessage(payload: unknown) {
+export function readEcotrackMessage(payload: unknown) {
   if (typeof payload !== 'object' || payload === null) {
     return null;
   }
@@ -288,7 +288,7 @@ function readEcotrackErrors(payload: unknown) {
   return [];
 }
 
-function buildEcotrackResultMessage(payload: unknown, fallback: string) {
+export function buildEcotrackResultMessage(payload: unknown, fallback: string) {
   const explicitMessage = readEcotrackMessage(payload);
   if (explicitMessage) {
     return explicitMessage;

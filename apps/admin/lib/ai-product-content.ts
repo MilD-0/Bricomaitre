@@ -20,19 +20,6 @@ const CONTENT_FIELDS = ['title', 'titleAr', 'description', 'descriptionAr'] as c
 export class AiContentNotFoundError extends Error {}
 export class AiProposalConflictError extends AiProposalReviewConflictError {}
 
-export function isContentProposalFresh(input: {
-  sourceUpdatedAt: Date | null;
-  productUpdatedAt: Date;
-  expiresAt: Date;
-  now?: Date;
-}) {
-  return Boolean(
-    input.sourceUpdatedAt &&
-    input.sourceUpdatedAt.getTime() === input.productUpdatedAt.getTime() &&
-    input.expiresAt > (input.now ?? new Date()),
-  );
-}
-
 function contentSnapshot(product: {
   title: string;
   titleAr: string | null;

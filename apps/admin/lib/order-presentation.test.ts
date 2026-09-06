@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { EcotrackCatalogResponse } from './ecotrack-admin-contracts';
 import {
-  buildOrderPhoneTelHref,
-  formatOrderProductLabel,
-  formatOrderRegionLabel,
   formatOrderPhoneForDisplay,
+  formatOrderRegionLabel,
   formatOrderStateValue,
-  getOrderProductHoverKey,
   normalizeOrderCommuneValue,
   normalizeOrderPhoneForStorage,
   parseOrderStateDraftValue,
@@ -69,11 +66,6 @@ describe('order presentation helpers', () => {
     expect(normalizeOrderPhoneForStorage('0extension')).toBe('0extension');
   });
 
-  it('builds a whitespace-free telephone link from the display value', () => {
-    expect(buildOrderPhoneTelHref('555 12 34 56')).toBe('tel:0555123456');
-    expect(buildOrderPhoneTelHref(' ')).toBeNull();
-  });
-
   it('splits normalized order names without inventing a surname', () => {
     expect(splitOrderFullNameDraft('  Amina   Ben Salah ')).toEqual({
       firstName: 'Amina',
@@ -81,56 +73,6 @@ describe('order presentation helpers', () => {
     });
     expect(splitOrderFullNameDraft('Amina')).toEqual({ firstName: 'Amina', lastName: null });
     expect(splitOrderFullNameDraft('  ')).toEqual({ firstName: null, lastName: null });
-  });
-
-  it('builds stable hover keys for canonical and legacy product references', () => {
-    expect(
-      getOrderProductHoverKey(42, {
-        rawValue: 'legacy-product',
-        productId: 7,
-        slug: 'hammer',
-        title: 'Hammer',
-        thumbnailUrl: null,
-        quantity: 1,
-        unitPrice: 100,
-        lineTotal: 100,
-        missing: false,
-      }),
-    ).toBe('42:7');
-    expect(
-      getOrderProductHoverKey(42, {
-        rawValue: 'legacy-product',
-        productId: null,
-        slug: null,
-        title: 'Legacy product',
-        thumbnailUrl: null,
-        quantity: 1,
-        unitPrice: 0,
-        lineTotal: 0,
-        missing: true,
-      }),
-    ).toBe('42:legacy-product');
-  });
-
-  it('formats order product summaries without presenting prices for missing products', () => {
-    const formatMoney = (value: number) => `${value} DZD`;
-    const product = {
-      rawValue: '7',
-      productId: 7,
-      slug: 'hammer',
-      title: 'Hammer',
-      thumbnailUrl: null,
-      quantity: 2,
-      unitPrice: 100,
-      lineTotal: 200,
-      missing: false,
-    };
-
-    expect(formatOrderProductLabel(product, formatMoney)).toBe('Hammer x2 · 200 DZD');
-    expect(formatOrderProductLabel({ ...product, quantity: 1, lineTotal: 100 }, formatMoney)).toBe(
-      'Hammer · 100 DZD',
-    );
-    expect(formatOrderProductLabel({ ...product, missing: true }, formatMoney)).toBe('Hammer x2');
   });
 
   it('round-trips valid order state draft values and rejects empty or invalid values', () => {

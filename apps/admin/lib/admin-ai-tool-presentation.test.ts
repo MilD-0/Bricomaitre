@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { ADMIN_AI_MUTATING_TOOL_NAMES } from './admin-ai-execution-capabilities';
 import {
-  ADMIN_AI_MUTATING_TOOL_NAMES,
-  ADMIN_AI_PRESENTED_TOOL_NAMES,
   adminAiToolActivityKey,
   adminAiToolMutatesApplication,
   adminAiToolPresentation,
@@ -65,7 +64,6 @@ describe('admin assistant tool presentation', () => {
       'get_catalog_categorization_status',
     ];
 
-    expect([...ADMIN_AI_PRESENTED_TOOL_NAMES].sort()).toEqual(toolNames.sort());
     for (const toolName of toolNames) {
       expect(adminAiToolPresentation(toolName, {}, 'fr').labelKey).not.toBe('result');
       expect(adminAiToolActivityKey(toolName)).not.toBe('result');

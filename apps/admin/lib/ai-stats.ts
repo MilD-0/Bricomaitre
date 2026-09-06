@@ -8,7 +8,6 @@ import {
   orderAiInfluence,
 } from '@bric/db/schema';
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
-import { resolveAnalyticsFilters, resolveAnalyticsReferenceNow } from './analytics';
 import {
   ISO_DATE_PATTERN,
   aiStatsQuerySchema,
@@ -24,13 +23,9 @@ import {
 } from './ai-stats-contract';
 import { loadOperations } from './ai-stats-operations';
 import { loadShopping } from './ai-stats-shopping';
+import { resolveAnalyticsFilters, resolveAnalyticsReferenceNow } from './analytics';
 
-export {
-  aiRate,
-  aiStatsQuerySchema,
-  classifyAiWorkload,
-  isAssistedInfluenceLevel,
-} from './ai-stats-contract';
+export { aiStatsQuerySchema } from './ai-stats-contract';
 export type {
   AiOperationsStats,
   AiShoppingStats,

@@ -1,16 +1,12 @@
-import { act, cleanup, render as testingRender, screen } from '@testing-library/react';
+import { act, cleanup, screen, render as testingRender } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BulletinAttachment } from '../lib/bulletin';
+import { MAX_BULLETIN_UPLOAD_BYTES, MAX_BULLETIN_UPLOAD_TOTAL_BYTES } from '../lib/upload-limits';
 import messages from '../messages/en.json';
-import {
-  MAX_BULLETIN_UPLOAD_BYTES,
-  MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
-  SPREADSHEET_UPLOAD_EXTENSIONS,
-} from '../lib/upload-limits';
 import { FileUploadField } from './file-upload-field';
 
 function render(ui: ReactNode) {
@@ -258,7 +254,7 @@ describe('FileUploadField', () => {
         bundleUploads
         maxNumberOfFiles={100}
         maxFileSize={5 * 1024 * 1024}
-        allowedFileTypes={SPREADSHEET_UPLOAD_EXTENSIONS}
+        allowedFileTypes={['.xlsx', '.xls']}
       />,
     );
 
@@ -267,7 +263,7 @@ describe('FileUploadField', () => {
         restrictions: expect.objectContaining({
           maxFileSize: 5 * 1024 * 1024,
           maxNumberOfFiles: 100,
-          allowedFileTypes: SPREADSHEET_UPLOAD_EXTENSIONS,
+          allowedFileTypes: ['.xlsx', '.xls'],
         }),
       }),
     );

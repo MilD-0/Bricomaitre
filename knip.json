@@ -3,35 +3,70 @@
   "ignoreUnresolved": ["next"],
   "workspaces": {
     "ops": {
-      "ignoreBinaries": ["psql"],
       "entry": [
-        "scripts/*.mjs",
-        "demo/mock-services.mjs",
-        "demo/release/*.mjs",
-        "dev/cli.mjs",
-        "dev/qa.mjs",
-        "dev/supervisor.mjs"
-      ]
+        "scripts/*.mjs!",
+        "demo/mock-services.mjs!",
+        "demo/release/*.mjs!",
+        "dev/cli.mjs!",
+        "dev/qa.mjs!",
+        "dev/supervisor.mjs!",
+        "demo/scripts/*.mjs!"
+      ],
+      "project": ["**/*.{ts,mjs}!", "!tests/**!"]
     },
     "apps/admin": {
       "entry": [
-        "app/**/*.{ts,tsx}",
-        "instrumentation*.ts",
-        "scripts/**/*.ts",
-        "tools/legacy-data/**/*.ts"
-      ]
+        "instrumentation*.ts!",
+        "scripts/**/*.ts!",
+        "tools/legacy-data/**/*.ts!",
+        "app/**/{page,layout,route,loading,error,global-error,not-found,default,robots,sitemap,manifest}.{ts,tsx}!",
+        "drizzle.schemas.ts!",
+        "next.config.ts!"
+      ],
+      "project": [
+        "**/*.{ts,tsx,mjs,css}!",
+        "!**/*.{test,spec}.{ts,tsx}!",
+        "!test/**!",
+        "!tests/**!"
+      ],
+      "next": {
+        "config": []
+      }
     },
     "apps/storefront-api": {
-      "entry": ["app/**/*.{ts,tsx}", "instrumentation*.ts", "scripts/**/*.ts"]
+      "entry": [
+        "instrumentation*.ts!",
+        "scripts/**/*.ts!",
+        "app/**/{page,layout,route,loading,error,global-error,not-found,default,robots,sitemap,manifest}.{ts,tsx}!",
+        "next.config.ts!"
+      ],
+      "project": ["**/*.{ts,tsx,mjs}!", "!**/*.{test,spec}.{ts,tsx}!", "!test/**!", "!tests/**!"],
+      "next": {
+        "config": []
+      }
     },
     "apps/storefront": {
       "entry": [
-        "app/**/*.{ts,tsx}",
-        "instrumentation*.ts",
-        "test/fixture-storefront-api.mjs",
-        "tests/browser/**/*.ts"
+        "instrumentation*.ts!",
+        "app/**/{page,layout,route,loading,error,global-error,not-found,default,robots,sitemap,manifest}.{ts,tsx}!",
+        "scripts/**/*.ts!",
+        "next.config.ts!",
+        "test/fixture-storefront-api.mjs"
       ],
-      "ignoreDependencies": ["@fontsource-variable/inter", "@fontsource/ibm-plex-sans-arabic"]
+      "ignoreDependencies": ["@fontsource-variable/inter", "@fontsource/ibm-plex-sans-arabic"],
+      "project": [
+        "**/*.{ts,tsx,mjs,css}!",
+        "!**/*.{test,spec}.{ts,tsx}!",
+        "!test/**!",
+        "!tests/**!"
+      ],
+      "next": {
+        "config": []
+      }
+    },
+    ".": {
+      "entry": ["eslint.base.mjs!"]
     }
-  }
+  },
+  "ignoreExportsUsedInFile": true
 }

@@ -63,10 +63,6 @@ export async function requireOpsAccess() {
   return requirePermissionAccess('ops_view');
 }
 
-export async function requireAdministrationAccess() {
-  return requireSettingsAccess();
-}
-
 export async function requireMutationAccess(resource: MutationResource) {
   const session = await auth();
 
@@ -85,16 +81,6 @@ export async function requireMutationAccess(resource: MutationResource) {
   }
 
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-export async function requireAnyMutationAccess(resources: readonly MutationResource[]) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!session.user.isAllowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const permissions = normalizePermissions(session.user.permissions);
-  return resources.some((resource) => canMutateResource(permissions, resource))
-    ? null
-    : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
 export async function requireAppAccess() {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeSentryDsn, readSampleRate, sanitizeSentryEvent } from './sentry-config';
 import { shouldCaptureServerException } from './sentry';
+import { normalizeSentryDsn, readSampleRate, sanitizeSentryEvent } from './sentry-config';
 
 describe('storefront Sentry privacy boundary', () => {
   it('does not generate exception event identifiers during production prerendering', () => {
@@ -30,7 +30,7 @@ describe('storefront Sentry privacy boundary', () => {
         product: { requestedToken: 'desk-lamp' },
         checkout: { phone: '0550000000', orderAccessToken: 'secret-value' },
       },
-    } as never);
+    });
 
     expect(sanitized.request?.data).toBeUndefined();
     expect(sanitized.request?.url).toBe('https://bricomaitre.com/fr/order-tracking');

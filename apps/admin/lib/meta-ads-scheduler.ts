@@ -77,7 +77,3 @@ export function stopMetaAdsScheduler() {
   current.running = false;
   current.task = null;
 }
-
-export function resetMetaAdsSchedulerForTests() {
-  stopMetaAdsScheduler();
-}

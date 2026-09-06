@@ -1,9 +1,5 @@
 import { sql, type SQLWrapper } from 'drizzle-orm';
-
-export function numeric(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
+export { numberOrZero as numeric } from '../stats-values';
 
 export function nullableNumeric(value: unknown) {
   if (value == null) return null;

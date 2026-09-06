@@ -54,6 +54,7 @@ export default defineConfig({
           include: ['**/*.test.ts'],
           exclude: [
             'test/services.test.ts',
+            'test/*.services.test.ts',
             '**/*.integration.test.ts',
             '**/*.integration.test.tsx',
             '**/*.redis.test.ts',
@@ -101,7 +102,7 @@ export default defineConfig({
           name: 'service-integration-node',
           environment: 'node',
           setupFiles: ['./test/setup/node.ts'],
-          include: ['test/services.test.ts'],
+          include: ['test/services.test.ts', 'test/*.services.test.ts'],
         },
       },
     ],

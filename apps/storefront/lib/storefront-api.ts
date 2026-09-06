@@ -1,34 +1,34 @@
 import {
   defaultStorefrontSettingsResponse,
-  storefrontBrandsResponseSchema,
+  STOREFRONT_ANALYTICS_PROJECT,
   storefrontAssetsResponseSchema,
+  storefrontBrandsResponseSchema,
+  storefrontCartValidationResponseSchema,
   storefrontCategoriesResponseSchema,
+  storefrontContentResponseSchema,
   storefrontEcotrackCatalogResponseSchema,
-  storefrontHomepageResponseSchema,
   storefrontHomepageFeaturedGroupProductsQuerySchema,
   storefrontHomepageFeaturedGroupProductsResponseSchema,
+  storefrontHomepageResponseSchema,
   storefrontProductDetailResponseSchema,
-  storefrontProductPromoResponseSchema,
-  storefrontReadOrderResponseSchema,
   storefrontProductListQuerySchema,
+  storefrontProductPromoResponseSchema,
   storefrontProductsResponseSchema,
-  storefrontSettingsResponseSchema,
-  storefrontCartValidationResponseSchema,
-  storefrontContentResponseSchema,
   storefrontProductTokenSchema,
-  type StorefrontBrandsResponse,
+  storefrontReadOrderResponseSchema,
+  storefrontSettingsResponseSchema,
   type StorefrontAssetsResponse,
+  type StorefrontBrandsResponse,
   type StorefrontCategoriesResponse,
+  type StorefrontContentResponse,
   type StorefrontEcotrackCatalogResponse,
-  type StorefrontHomepageResponse,
   type StorefrontHomepageFeaturedGroupProductsResponse,
+  type StorefrontHomepageResponse,
+  type StorefrontOrderResponseItem,
   type StorefrontProductDetailResponse,
   type StorefrontProductListQueryInput,
   type StorefrontProductsResponse,
-  type StorefrontOrderResponseItem,
   type StorefrontSettingsResponse,
-  type StorefrontContentResponse,
-  STOREFRONT_ANALYTICS_PROJECT,
 } from '@bric/storefront-core/contracts';
 import {
   landingPageLocaleSchema,
@@ -36,14 +36,14 @@ import {
   landingPageSlugSchema,
   storefrontLandingPageResponseSchema,
   storefrontLandingPageSitemapResponseSchema,
-  type StorefrontLandingPageResponse,
   type LandingPagePreview,
+  type StorefrontLandingPageResponse,
 } from '@bric/storefront-core/landing-pages';
 import { unstable_cache } from 'next/cache';
 
 import {
-  getStorefrontProductCacheTag,
   getStorefrontLandingPageCacheTag,
+  getStorefrontProductCacheTag,
   STOREFRONT_CACHE_TAGS,
 } from './cache-tags';
 import {
@@ -366,30 +366,6 @@ async function fetchStorefrontContent(locale: 'fr' | 'ar'): Promise<StorefrontCo
   const response = await fetchStorefrontUpstream(pathname);
   if (response.status === 404) return { announcement: null };
   return parseUpstreamJson(response, pathname, storefrontContentResponseSchema);
-}
-
-export async function fetchStorefrontOrder(
-  orderId: number,
-  publicToken: string,
-): Promise<StorefrontOrderResponseItem | null> {
-  if (
-    !Number.isInteger(orderId) ||
-    orderId <= 0 ||
-    publicToken.trim().length < 20 ||
-    publicToken.trim().length > 200
-  ) {
-    return null;
-  }
-
-  const pathname = `/storefront/orders/${orderId}`;
-  const response = await fetchStorefrontUpstream(pathname, {
-    headers: { 'x-order-token': publicToken.trim() },
-    cache: 'no-store',
-    timeoutMs: 6_000,
-  });
-  if (response.status === 404) return null;
-  const result = await parseUpstreamJson(response, pathname, storefrontReadOrderResponseSchema);
-  return result.item;
 }
 
 export async function fetchStorefrontOrderByToken(

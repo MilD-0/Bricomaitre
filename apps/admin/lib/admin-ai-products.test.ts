@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   archive: vi.fn(),
   restore: vi.fn(),
-  loadArchivedByIds: vi.fn(),
   loadArchivedPage: vi.fn(),
   revalidateTags: vi.fn(),
   revalidateProducts: vi.fn(),
@@ -25,7 +24,6 @@ vi.mock('./product-update-workflow', async (importOriginal) => ({
   restoreProductThroughCanonicalWorkflow: mocks.restore,
 }));
 vi.mock('./product-archive', () => ({
-  loadArchivedProductsByIds: mocks.loadArchivedByIds,
   loadArchivedProductsPage: mocks.loadArchivedPage,
 }));
 vi.mock('./server-cache', () => ({
@@ -47,7 +45,6 @@ vi.mock('./sentry', () => ({
 import {
   archiveAdminAiProducts,
   createAdminAiProduct,
-  inspectAdminAiArchivedProducts,
   restoreAdminAiProducts,
   updateAdminAiProducts,
 } from './admin-ai-products';
@@ -120,7 +117,6 @@ describe('admin AI direct product updates', () => {
       availabilityStatus: 'out_of_stock',
       archived: false,
     }));
-    mocks.loadArchivedByIds.mockResolvedValue([]);
     mocks.loadArchivedPage.mockResolvedValue({
       items: [],
       pagination: {
@@ -283,61 +279,6 @@ describe('admin AI direct product updates', () => {
     expect(mocks.revalidateProducts).toHaveBeenCalledOnce();
     expect(mocks.revalidateLandingPages).toHaveBeenCalledOnce();
     expect(mocks.startFeed).toHaveBeenCalledWith('product:ai-archive', 'request-1');
-  });
-
-  it('inspects exact archived IDs with explicit missing records', async () => {
-    mocks.loadArchivedByIds.mockResolvedValue([
-      {
-        id: 12,
-        title: 'Perceuse archivée',
-        sku: 'PB-1',
-        barcode: null,
-        archivedAt: '2026-08-20T10:00:00.000Z',
-      },
-    ]);
-
-    await expect(
-      inspectAdminAiArchivedProducts({ scope: 'exact', productIds: [12, 99, 12] }),
-    ).resolves.toMatchObject({
-      requestedCount: 2,
-      items: [{ id: 12, sku: 'PB-1' }],
-      missingProductIds: [99],
-    });
-  });
-
-  it('searches and paginates the complete archive instead of truncating it to a tiny sample', async () => {
-    mocks.loadArchivedPage.mockResolvedValue({
-      items: Array.from({ length: 50 }, (_, index) => ({
-        id: index + 51,
-        title: `Perceuse ${index + 51}`,
-        sku: `PB-${index + 51}`,
-        barcode: null,
-        archivedAt: '2026-08-20T10:00:00.000Z',
-      })),
-      pagination: {
-        page: 2,
-        limit: 50,
-        totalItems: 125,
-        totalPages: 3,
-        hasNextPage: true,
-        hasPreviousPage: true,
-      },
-    });
-
-    await expect(
-      inspectAdminAiArchivedProducts({
-        scope: 'filtered',
-        query: 'perceuse',
-        page: 2,
-        limit: 50,
-      }),
-    ).resolves.toMatchObject({
-      items: expect.arrayContaining([
-        expect.objectContaining({ id: 51 }),
-        expect.objectContaining({ id: 100 }),
-      ]),
-      pagination: { page: 2, limit: 50, totalItems: 125, totalPages: 3 },
-    });
   });
 
   it('restores exact archived products with partial results and one catalog refresh', async () => {

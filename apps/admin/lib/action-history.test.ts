@@ -4,7 +4,6 @@ import {
   applyHistoryAction,
   getActionEntityConfig,
   getActionHistoryChanges,
-  getActionHistoryPreview,
   mutateEntityWithHistory,
   recordExplicitActionLog,
   resolveActionHistoryRecovery,
@@ -509,27 +508,6 @@ describe('action-history helpers', () => {
         afterState: null,
       } as never),
     ).toEqual([{ key: 'title', field: 'Title', before: 'Widget', after: null }]);
-  });
-
-  it('collapses confirmation and shipment metadata into semantic preview groups', () => {
-    expect(
-      getActionHistoryPreview({
-        operation: 'update',
-        beforeState: { inHouseStatus: 0, confirmedBy: null, ecotrackStatus: null, note: null },
-        afterState: {
-          inHouseStatus: 2,
-          confirmedBy: 'admin@example.com',
-          ecotrackStatus: 'posted',
-          note: 'Call first',
-        },
-      } as never),
-    ).toEqual({
-      items: [
-        { key: 'confirmation', kind: 'group', field: 'Confirmation' },
-        { key: 'shipment', kind: 'group', field: 'Shipment' },
-      ],
-      total: 3,
-    });
   });
 
   it('resolves the exact next recovery action', () => {

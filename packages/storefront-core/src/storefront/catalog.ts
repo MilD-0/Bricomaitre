@@ -431,21 +431,6 @@ export async function readStorefrontProductsForSelectionPage(
   };
 }
 
-export function mergeStorefrontProductSelections<T extends { id: number }>(
-  direct: T[],
-  dynamic: T[],
-  limit: number,
-) {
-  const seen = new Set<number>();
-  return [...direct, ...dynamic]
-    .filter((product) => {
-      if (seen.has(product.id)) return false;
-      seen.add(product.id);
-      return true;
-    })
-    .slice(0, Math.max(0, limit));
-}
-
 export function buildRecommendedProductOrderBy(search = '') {
   const featuredGroupRank = sql<number>`coalesce((
     select min(${featuredProductGroups.sortOrder})

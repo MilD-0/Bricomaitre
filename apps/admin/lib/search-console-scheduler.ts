@@ -77,7 +77,3 @@ export function stopSearchConsoleScheduler() {
   current.running = false;
   current.task = null;
 }
-
-export function resetSearchConsoleSchedulerForTests() {
-  stopSearchConsoleScheduler();
-}

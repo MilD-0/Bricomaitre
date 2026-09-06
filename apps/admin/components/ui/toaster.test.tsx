@@ -1,34 +1,32 @@
-import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { toast } from '../../lib/toast';
 import { Toaster } from './toaster';
 
 describe('Toaster', () => {
   afterEach(() => {
-    toast.clear();
+    act(() => toast.clear());
+    vi.useRealTimers();
   });
 
-  it('renders styled toast content for active notifications', async () => {
-    toast.success('Styled notification');
-
+  it('renders a notification that the operator can dismiss', () => {
+    toast.success('Saved');
     render(<Toaster />);
-
-    expect(await screen.findByText('Styled notification')).toBeInTheDocument();
-    expect(screen.getByText('Success')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Dismiss notification' })).toBeInTheDocument();
-    expect(document.body.querySelector('.bg-card\\/95')).toBeTruthy();
-    expect(
-      document.body.querySelector('.shadow-\\[var\\(--shadow-vapor-strong\\)\\]'),
-    ).toBeTruthy();
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }));
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
   });
 
-  it('keeps critical Ecotrack errors visible above modal-safe flows without auto-dismiss', async () => {
-    toast.criticalError('Critical Ecotrack failure');
-
+  it('keeps critical errors until dismissal while ordinary notifications expire', () => {
+    vi.useFakeTimers();
+    toast.success('Saved');
+    toast.criticalError('Carrier rejected the shipment');
     render(<Toaster />);
-
-    expect((await screen.findAllByText('Critical Ecotrack failure')).length).toBeGreaterThan(0);
-    expect(document.body.querySelector('.z-\\[120\\]')).toBeTruthy();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Carrier rejected the shipment');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

@@ -1,14 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { NextIntlClientProvider } from 'next-intl';
 import { delay, http, HttpResponse } from 'msw';
+import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import messages from '../messages/en.json';
-import { applyClientMultiSort, parseSortRuleStrings } from '../lib/multi-sort';
 import { inventorySortKeys } from '../lib/inventory';
+import { parseSortRuleStrings } from '../lib/multi-sort';
 import { toast } from '../lib/toast';
+import messages from '../messages/en.json';
+import { applyClientMultiSort } from '../test/mocks/multi-sort';
 import { server } from '../test/mocks/server';
 import { InventoryManager } from './inventory-manager';
 import { Toaster } from './ui/toaster';

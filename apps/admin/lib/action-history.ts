@@ -15,16 +15,31 @@ import {
 import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
+import {
+  actionLogs,
+  adCosts,
+  assetBanners,
+  brands,
+  bulletinPostAttachments,
+  bulletinPostReactions,
+  bulletinPosts,
+  bulletinPostTags,
+  bulletinReplies,
+  bulletinReplyReactions,
+  categories,
+  featuredProductGroups,
+  importBatches,
+  orders,
+  processedOrderProducts,
+  processedOrders,
+  productCards,
+  products,
+  roleDefinitionPermissions,
+  roleDefinitions,
+  userAccessGrants,
+} from '@bric/db/schema';
 import { parseSortRuleStrings } from './multi-sort';
 import { normalizePermissions } from './permissions';
-import {
-  assertTaxonomyRelationsUnchanged,
-  isTaxonomyEntity,
-  lockTaxonomyHistory,
-  readTaxonomyRelations,
-  restoreTaxonomyRelations,
-  TaxonomyHistoryConflictError,
-} from './taxonomy-history';
 import {
   assertProductAllocationsCanBeDeleted,
   lockStockAllocationHistory,
@@ -33,28 +48,13 @@ import {
   StockAllocationHistoryConflictError,
 } from './stock-allocation-history';
 import {
-  actionLogs,
-  adCosts,
-  assetBanners,
-  brands,
-  bulletinPostAttachments,
-  bulletinPostTags,
-  bulletinPostReactions,
-  bulletinPosts,
-  bulletinReplies,
-  bulletinReplyReactions,
-  categories,
-  featuredProductGroups,
-  importBatches,
-  orders,
-  productCards,
-  products,
-  processedOrderProducts,
-  processedOrders,
-  roleDefinitionPermissions,
-  roleDefinitions,
-  userAccessGrants,
-} from '@bric/db/schema';
+  assertTaxonomyRelationsUnchanged,
+  isTaxonomyEntity,
+  lockTaxonomyHistory,
+  readTaxonomyRelations,
+  restoreTaxonomyRelations,
+  TaxonomyHistoryConflictError,
+} from './taxonomy-history';
 
 export type ActionOperation = 'create' | 'update' | 'delete';
 type ActionHistorySortKey = 'operation' | 'resource' | 'createdBy' | 'createdAt' | 'isUndone';
@@ -792,14 +792,6 @@ function buildActionHistoryPreview(changes: ActionHistoryChange[]): {
   }
 
   return { items: items.slice(0, 2), total: items.length };
-}
-
-export function getActionHistoryPreview(
-  entry: Pick<ActionLogEntry, 'operation' | 'beforeState' | 'afterState'>,
-): { items: ActionHistoryPreview[]; total: number } {
-  return entry.operation === 'update'
-    ? buildActionHistoryPreview(getActionHistoryChanges(entry))
-    : { items: [], total: 0 };
 }
 
 export function resolveActionHistoryRecovery(
