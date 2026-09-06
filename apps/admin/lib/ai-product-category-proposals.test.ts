@@ -23,17 +23,17 @@ describe('product category proposals', () => {
     expect(() => PRODUCT_CATEGORY_CHANGE_SCHEMA.parse({ categoryId: null })).toThrow();
   });
 
-  it('creates the run and proposal in one transaction', async () => {
+  it('records the inference versions and confidence on its proposal', async () => {
     const rows = [
       [{ id: 4, categoryId: null, updatedAt: sourceUpdatedAt }],
-      [{ id: 10, updatedAt: categoryUpdatedAt }],
+      [{ id: 10, isActive: true, updatedAt: categoryUpdatedAt }],
     ];
     const inserted: unknown[] = [];
     const tx = {
       insert: vi.fn(() => ({
         values: vi.fn((value: unknown) => {
           inserted.push(value);
-          return { returning: vi.fn(async () => [{ id: inserted.length === 1 ? 70 : 90 }]) };
+          return { returning: vi.fn(async () => [{ id: 90 }]) };
         }),
       })),
     };
@@ -53,13 +53,15 @@ describe('product category proposals', () => {
         categoryId: 10,
         actorId: 'admin@example.com',
         reasoning: 'Clear category match.',
-        model: 'test-model',
-        promptVersion: 'test-v1',
+        runId: 70,
+        sourceUpdatedAt,
+        categoryUpdatedAt,
+        confidence: 0.95,
       }),
     ).resolves.toMatchObject({ id: 90, status: 'proposed' });
     expect(db.transaction).toHaveBeenCalledOnce();
-    expect(inserted).toHaveLength(2);
-    expect(inserted[1]).toMatchObject({
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({
       runId: 70,
       entityId: 4,
       payload: {
@@ -97,7 +99,15 @@ describe('product category proposals', () => {
         },
       ],
       [{ id: 4, title: 'Drill', categoryId: null, updatedAt: sourceUpdatedAt, ...options.product }],
-      [{ id: 10, name: 'Drills', updatedAt: categoryUpdatedAt, ...options.category }],
+      [
+        {
+          id: 10,
+          isActive: true,
+          name: 'Drills',
+          updatedAt: categoryUpdatedAt,
+          ...options.category,
+        },
+      ],
     ];
     const updateResults = options.updateResults ?? [
       [{ id: 4, title: 'Drill', categoryId: 10, updatedAt: new Date() }],

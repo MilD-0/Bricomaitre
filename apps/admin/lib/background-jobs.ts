@@ -1,13 +1,15 @@
 import {
   createProductCategorizationClassifier,
+  getAiConfig,
+  resolveAiModel,
   PRODUCT_CATEGORIZATION_PROMPT_VERSION,
   type ProductCategorizationClassifier,
 } from '@bric/ai-core';
-import { and, asc, count, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { startOwnedJob } from '@bric/runtime/jobs';
 
 import { getDb } from '@bric/db/client';
-import { aiProposals, brands, categories, products } from '@bric/db/schema';
+import { aiProposals, aiRuns, brands, categories, products } from '@bric/db/schema';
 import { createAdminAiLandingPage, editAdminAiLandingPage } from './admin-ai-landing-pages';
 import { proposeProductContent, reviewProductContentProposal } from './ai-product-content';
 import {
@@ -72,7 +74,7 @@ type AiContentProduct = {
 
 export type AiContentJobDependencies = {
   listProducts: (payload: AiContentPayload) => Promise<AiContentProduct[]>;
-  listPendingProductIds: () => Promise<Set<number>>;
+  listPendingProductIds: (fields: AiContentPayload['fields']) => Promise<Set<number>>;
   propose: (input: {
     productId: number;
     fields: AiContentPayload['fields'];
@@ -105,15 +107,18 @@ function createAiContentJobDependencies(): AiContentJobDependencies {
           ),
         )
         .orderBy(asc(products.id)),
-    listPendingProductIds: async () =>
+    listPendingProductIds: async (fields) =>
       new Set(
         (
           await getDb()
             .select({ id: aiProposals.entityId })
             .from(aiProposals)
+            .innerJoin(products, eq(products.id, aiProposals.entityId))
             .where(
               and(
                 eq(aiProposals.proposalType, 'product_content'),
+                eq(aiProposals.sourceUpdatedAt, products.updatedAt),
+                ...fields.map((field) => sql`${aiProposals.payload}->'changes' ? ${field}`),
                 eq(aiProposals.entityType, 'products'),
                 eq(aiProposals.status, 'proposed'),
                 gt(aiProposals.expiresAt, new Date()),
@@ -153,7 +158,7 @@ export async function runAiContentJob(
   dependencies: AiContentJobDependencies = createAiContentJobDependencies(),
 ) {
   const rows = await dependencies.listProducts(payload);
-  const pendingProductIds = await dependencies.listPendingProductIds();
+  const pendingProductIds = await dependencies.listPendingProductIds(payload.fields);
   const counters = {
     processed: 0,
     proposed: 0,
@@ -164,48 +169,52 @@ export async function runAiContentJob(
     failed: 0,
   };
   const failures: number[] = [];
-  for (let index = 0; index < rows.length; index += 1) {
-    await helpers.throwIfCancelled();
-    const product = rows[index];
-    const fields = payload.onlyMissing
-      ? payload.fields.filter((field) => !product[field]?.trim())
-      : payload.fields;
-    if (pendingProductIds.has(product.id)) {
-      counters.alreadyProposed += 1;
-    } else if (fields.length === 0) {
-      counters.skipped += 1;
-    } else {
-      try {
-        const proposal = await dependencies.propose({
-          productId: product.id,
-          fields,
-          context: payload.context,
-          actorId: payload.actor.email,
-        });
-        pendingProductIds.add(product.id);
-        if (payload.autoApply) {
-          try {
-            await dependencies.applyProposal(proposal.id, payload.actor);
-            counters.applied += 1;
-          } catch {
+  try {
+    for (let index = 0; index < rows.length; index += 1) {
+      await helpers.throwIfCancelled();
+      const product = rows[index];
+      const fields = payload.onlyMissing
+        ? payload.fields.filter((field) => !product[field]?.trim())
+        : payload.fields;
+      if (pendingProductIds.has(product.id)) {
+        counters.alreadyProposed += 1;
+      } else if (fields.length === 0) {
+        counters.skipped += 1;
+      } else {
+        try {
+          const proposal = await dependencies.propose({
+            productId: product.id,
+            fields,
+            context: payload.context,
+            actorId: payload.actor.email,
+          });
+          pendingProductIds.add(product.id);
+          if (payload.autoApply) {
+            try {
+              await dependencies.applyProposal(proposal.id, payload.actor);
+              counters.applied += 1;
+            } catch {
+              counters.proposed += 1;
+              counters.autoApplyFailed += 1;
+            }
+          } else {
             counters.proposed += 1;
-            counters.autoApplyFailed += 1;
           }
-        } else {
-          counters.proposed += 1;
+        } catch {
+          counters.failed += 1;
+          failures.push(product.id);
         }
-      } catch {
-        counters.failed += 1;
-        failures.push(product.id);
       }
+      counters.processed += 1;
+      await helpers.updateProgress({
+        phase: 'generating-proposals',
+        current: counters.processed,
+        total: rows.length,
+      });
+      await helpers.updateSummary({ ...counters, total: rows.length });
     }
-    counters.processed += 1;
-    await helpers.updateProgress({
-      phase: 'generating-proposals',
-      current: counters.processed,
-      total: rows.length,
-    });
-    await helpers.updateSummary({ ...counters, total: rows.length });
+  } finally {
+    if (counters.applied > 0) await dependencies.refreshConsumers('ai-product-content:auto-apply');
   }
   const accounted =
     counters.proposed +
@@ -220,9 +229,6 @@ export async function runAiContentJob(
     complete: counters.processed === rows.length && accounted === rows.length,
     failedProductIds: failures.slice(0, 100),
   };
-  if (counters.applied > 0) {
-    await dependencies.refreshConsumers('ai-product-content:auto-apply');
-  }
   await helpers.updateSummary(summary);
   if (!summary.complete) {
     throw new Error(
@@ -252,6 +258,7 @@ export async function startAiCategorizationJob(
 
 type CategorizationProduct = {
   id: number;
+  updatedAt: Date;
   title: string;
   description: string | null;
   sku: string | null;
@@ -261,6 +268,7 @@ type CategorizationProduct = {
 };
 type CategorizationCategory = {
   id: number;
+  updatedAt: Date;
   name: string;
   nameAr: string | null;
   parentId: number | null;
@@ -268,7 +276,13 @@ type CategorizationCategory = {
 };
 
 export type AiCategorizationDependencies = {
-  classifier: ProductCategorizationClassifier;
+  classifier: {
+    classify(
+      input: Parameters<ProductCategorizationClassifier['classify']>[0],
+    ): Promise<
+      Awaited<ReturnType<ProductCategorizationClassifier['classify']>> & { runId: number }
+    >;
+  };
   listCategories: () => Promise<CategorizationCategory[]>;
   countProducts: (scope: AiCategorizationPayload['scope']) => Promise<number>;
   listProductsAfter: (
@@ -281,22 +295,63 @@ export type AiCategorizationDependencies = {
     productId: number;
     categoryId: number;
     reasoning: string;
-    model: string;
-    usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    confidence: number;
+    runId: number;
+    sourceUpdatedAt: Date;
+    categoryUpdatedAt: Date;
     actorId?: string | null;
   }) => Promise<{ id: number }>;
   applyProposal: (proposalId: number, actor: AiCategorizationPayload['actor']) => Promise<unknown>;
   refreshConsumers: (trigger: string) => Promise<void>;
 };
 
-function createAiCategorizationDependencies(): AiCategorizationDependencies {
+function createAiCategorizationDependencies(actorId?: string | null): AiCategorizationDependencies {
   const db = getDb();
   return {
-    classifier: createProductCategorizationClassifier(),
+    classifier: {
+      async classify(input) {
+        const config = getAiConfig();
+        const [run] = await db
+          .insert(aiRuns)
+          .values({
+            surface: 'admin',
+            task: 'product_categorization',
+            status: 'running',
+            actorId,
+            model: resolveAiModel(config, 'admin'),
+            promptVersion: PRODUCT_CATEGORIZATION_PROMPT_VERSION,
+          })
+          .returning({ id: aiRuns.id });
+        try {
+          const result = await createProductCategorizationClassifier(config).classify(input);
+          await db
+            .update(aiRuns)
+            .set({
+              status: 'completed',
+              model: result.model,
+              ...result.usage,
+              completedAt: new Date(),
+            })
+            .where(eq(aiRuns.id, run.id));
+          return { ...result, runId: run.id };
+        } catch (error) {
+          await db
+            .update(aiRuns)
+            .set({
+              status: 'failed',
+              errorCode: error instanceof Error ? error.name : 'UnknownError',
+              completedAt: new Date(),
+            })
+            .where(eq(aiRuns.id, run.id));
+          throw error;
+        }
+      },
+    },
     async listCategories() {
       const rows = await db
         .select({
           id: categories.id,
+          updatedAt: categories.updatedAt,
           name: categories.name,
           nameAr: categories.nameAr,
           parentId: categories.parentId,
@@ -326,6 +381,7 @@ function createAiCategorizationDependencies(): AiCategorizationDependencies {
       db
         .select({
           id: products.id,
+          updatedAt: products.updatedAt,
           title: products.title,
           description: products.description,
           sku: products.sku,
@@ -349,26 +405,25 @@ function createAiCategorizationDependencies(): AiCategorizationDependencies {
       const rows = await db
         .select({ entityId: aiProposals.entityId })
         .from(aiProposals)
+        .innerJoin(products, eq(products.id, aiProposals.entityId))
+        .innerJoin(
+          categories,
+          sql`${categories.id}::text = ${aiProposals.payload}->'changes'->>'categoryId'`,
+        )
         .where(
           and(
             eq(aiProposals.entityType, 'products'),
             eq(aiProposals.proposalType, 'product_category'),
             eq(aiProposals.status, 'proposed'),
             gt(aiProposals.expiresAt, new Date()),
+            eq(aiProposals.sourceUpdatedAt, products.updatedAt),
+            eq(categories.isActive, true),
+            sql`(${aiProposals.payload}->'dependencies'->'category'->>'updatedAt')::timestamptz = ${categories.updatedAt}`,
           ),
         );
       return new Set(rows.map((row) => row.entityId));
     },
-    proposeCategory: (input) =>
-      proposeProductCategoryAssignment({
-        productId: input.productId,
-        categoryId: input.categoryId,
-        actorId: input.actorId,
-        reasoning: input.reasoning,
-        model: input.model,
-        promptVersion: PRODUCT_CATEGORIZATION_PROMPT_VERSION,
-        usage: input.usage,
-      }),
+    proposeCategory: proposeProductCategoryAssignment,
     applyProposal: async (proposalId, actor) => {
       const result = await reviewProductCategoryProposal({
         proposalId,
@@ -389,7 +444,9 @@ export async function runAiCategorizationJob(
     updateSummary: (summary: Record<string, unknown>) => Promise<void>;
     throwIfCancelled: () => Promise<void>;
   },
-  dependencies: AiCategorizationDependencies = createAiCategorizationDependencies(),
+  dependencies: AiCategorizationDependencies = createAiCategorizationDependencies(
+    payload.actor.email,
+  ),
 ) {
   const categories = await dependencies.listCategories();
   if (categories.length === 0)
@@ -411,78 +468,86 @@ export async function runAiCategorizationJob(
   const failedProductIds: number[] = [];
   let lastId = 0;
 
-  while (counters.processed < total) {
-    await helpers.throwIfCancelled();
-    const page = await dependencies.listProductsAfter(payload.scope, lastId, payload.batchSize);
-    if (page.length === 0) break;
-    for (const product of page) {
+  try {
+    while (counters.processed < total) {
       await helpers.throwIfCancelled();
-      lastId = product.id;
-      if (pendingProductIds.has(product.id)) {
-        counters.alreadyProposed += 1;
-      } else {
-        try {
-          const result = await dependencies.classifier.classify({
-            product: {
-              id: product.id,
-              title: product.title,
-              description: product.description?.slice(0, 12_000) ?? null,
-              brand: product.brand,
-              sku: product.sku,
-              currentCategoryId: product.categoryId,
-              currentCategory: product.category,
-            },
-            categories,
-            adminContext: payload.context,
-          });
-          const decision = result.decision;
-          if (
-            decision.ambiguous ||
-            decision.categoryId === null ||
-            !categoryIds.has(decision.categoryId) ||
-            decision.confidence < payload.confidenceThreshold
-          ) {
-            counters.ambiguous += 1;
-            if (ambiguousProductIds.length < 100) ambiguousProductIds.push(product.id);
-          } else if (decision.categoryId === product.categoryId) {
-            counters.unchanged += 1;
-          } else {
-            const proposal = await dependencies.proposeCategory({
-              productId: product.id,
-              categoryId: decision.categoryId,
-              reasoning: `${decision.reasoning} Confidence: ${(decision.confidence * 100).toFixed(1)}%.`,
-              model: result.model,
-              usage: result.usage,
-              actorId: payload.actor.email,
+      const page = await dependencies.listProductsAfter(payload.scope, lastId, payload.batchSize);
+      if (page.length === 0) break;
+      for (const product of page) {
+        await helpers.throwIfCancelled();
+        lastId = product.id;
+        if (pendingProductIds.has(product.id)) {
+          counters.alreadyProposed += 1;
+        } else {
+          try {
+            const result = await dependencies.classifier.classify({
+              product: {
+                id: product.id,
+                title: product.title,
+                description: product.description?.slice(0, 12_000) ?? null,
+                brand: product.brand,
+                sku: product.sku,
+                currentCategoryId: product.categoryId,
+                currentCategory: product.category,
+              },
+              categories,
+              adminContext: payload.context,
             });
-            pendingProductIds.add(product.id);
-            if (payload.autoApply) {
-              try {
-                await dependencies.applyProposal(proposal.id, payload.actor);
-                counters.applied += 1;
-              } catch {
-                counters.proposed += 1;
-                counters.autoApplyFailed += 1;
-              }
+            const decision = result.decision;
+            if (
+              decision.ambiguous ||
+              decision.categoryId === null ||
+              !categoryIds.has(decision.categoryId) ||
+              decision.confidence < payload.confidenceThreshold
+            ) {
+              counters.ambiguous += 1;
+              if (ambiguousProductIds.length < 100) ambiguousProductIds.push(product.id);
+            } else if (decision.categoryId === product.categoryId) {
+              counters.unchanged += 1;
             } else {
-              counters.proposed += 1;
+              const proposal = await dependencies.proposeCategory({
+                productId: product.id,
+                categoryId: decision.categoryId,
+                reasoning: decision.reasoning,
+                confidence: decision.confidence,
+                runId: result.runId,
+                sourceUpdatedAt: product.updatedAt,
+                categoryUpdatedAt: categories.find(
+                  (category) => category.id === decision.categoryId,
+                )!.updatedAt,
+                actorId: payload.actor.email,
+              });
+              pendingProductIds.add(product.id);
+              if (payload.autoApply) {
+                try {
+                  await dependencies.applyProposal(proposal.id, payload.actor);
+                  counters.applied += 1;
+                } catch {
+                  counters.proposed += 1;
+                  counters.autoApplyFailed += 1;
+                }
+              } else {
+                counters.proposed += 1;
+              }
             }
+          } catch {
+            counters.failed += 1;
+            if (failedProductIds.length < 100) failedProductIds.push(product.id);
           }
-        } catch {
-          counters.failed += 1;
-          if (failedProductIds.length < 100) failedProductIds.push(product.id);
         }
+        counters.processed += 1;
+        await helpers.updateProgress({
+          phase: 'classifying-products',
+          current: counters.processed,
+          total,
+        });
       }
-      counters.processed += 1;
-      await helpers.updateProgress({
-        phase: 'classifying-products',
-        current: counters.processed,
-        total,
-      });
+      await helpers.updateSummary({ ...counters, total, lastProductId: lastId });
     }
-    await helpers.updateSummary({ ...counters, total, lastProductId: lastId });
+  } finally {
+    if (counters.applied > 0)
+      await dependencies.refreshConsumers('ai-product-categorization:auto-apply');
   }
-
   const accounted =
     counters.proposed +
     counters.applied +
@@ -499,9 +564,6 @@ export async function runAiCategorizationJob(
     ambiguousProductIds,
     failedProductIds,
   };
-  if (counters.applied > 0) {
-    await dependencies.refreshConsumers('ai-product-categorization:auto-apply');
-  }
   await helpers.updateSummary(summary);
   if (!summary.complete)
     throw new Error(

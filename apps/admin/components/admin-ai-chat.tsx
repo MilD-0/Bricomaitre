@@ -122,6 +122,7 @@ export function AdminAiChat({
       const data = (await response.json()) as {
         messages: Array<ChatMessage & { toolResults?: unknown }>;
       };
+      if (requestId !== conversationRequestRef.current) return;
       setMessages(data.messages.map(hydrateChatMessage));
       setInput('');
     } finally {
@@ -142,7 +143,23 @@ export function AdminAiChat({
           messages: Array<ChatMessage & { toolResults?: unknown }>;
         };
         const hydrated = data.messages.map(hydrateChatMessage);
-        setMessages(hydrated);
+        if (activeConversationRef.current?.id !== conversation.id) return;
+        // Add durable task outcomes without replacing the current streaming turn.
+        setMessages((current) => {
+          const known = new Set(current.map((message) => message.messageRecordId).filter(Boolean));
+          const knownJobs = new Set(
+            current.filter((message) => message.terminal).map((message) => message.jobId),
+          );
+          return [
+            ...current,
+            ...hydrated.filter(
+              (message) =>
+                message.terminal &&
+                !known.has(message.messageRecordId) &&
+                !knownJobs.has(message.jobId),
+            ),
+          ];
+        });
         const terminalMessages = new Map(
           hydrated.flatMap((message) =>
             message.terminal && message.jobId ? [[message.jobId, message] as const] : [],
@@ -232,7 +249,6 @@ export function AdminAiChat({
 
   useEffect(() => {
     if (!open) return;
-    if (activeConversationRef.current) void selectConversation(activeConversationRef.current);
     void loadConversations(
       activeConversationRef.current === null && deferredConversationSearch.length === 0,
     );

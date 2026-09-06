@@ -52,15 +52,21 @@ describe('admin AI chat response stream', () => {
     expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation, messageId: 91 });
   });
 
-  it('accepts the previous JSON payload during rollout', async () => {
+  it('delivers a long recovery answer without imposing a transport answer cap', async () => {
+    const text = 'réponse '.repeat(1000);
     const onTextDelta = vi.fn();
-    const onResult = vi.fn();
     await consumeAdminAiChatResponse(
-      Response.json({ message: 'Done', toolResults: [], conversation }),
-      { onTextDelta, onResult },
+      new Response(
+        [
+          JSON.stringify({ type: 'text-delta', delta: text }),
+          JSON.stringify({ type: 'result', toolResults: [], conversation }),
+          '',
+        ].join('\n'),
+        { headers: { 'content-type': 'application/x-ndjson' } },
+      ),
+      { onTextDelta, onResult: vi.fn() },
     );
-    expect(onTextDelta).toHaveBeenCalledWith('Done');
-    expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation, messageId: null });
+    expect(onTextDelta).toHaveBeenCalledWith(text);
   });
 
   it('exposes completed tool evidence before rejecting an interrupted stream', async () => {

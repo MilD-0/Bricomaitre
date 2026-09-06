@@ -85,7 +85,7 @@ export function attachAiTaskTerminalFollowups(
   });
 
   worker.on('failed', (job, error) => {
-    if (!job || !isFinalJobAttempt(job)) return;
+    if (!job || !isFinalJobAttempt(job, error)) return;
     const status = isJobCancellationError(error) ? 'cancelled' : 'failed';
     void publishState(job, status, error.message).catch((publishError) =>
       dependencies.onError?.(publishError, 'failed'),

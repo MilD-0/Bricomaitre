@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
-import { aiProposals, aiRuns, categories, products } from '@bric/db/schema';
+import { aiProposals, categories, products } from '@bric/db/schema';
 import { recordExplicitActionLog } from './action-history';
 import { AiProposalReviewConflictError } from './ai-proposal-review';
 import { persistedProposalValuesMatch } from './ai-proposal-verification';
@@ -18,9 +18,10 @@ export async function proposeProductCategoryAssignment(input: {
   categoryId: number;
   actorId?: string | null;
   reasoning: string;
-  model: string;
-  promptVersion: string;
-  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  runId: number;
+  sourceUpdatedAt: Date;
+  categoryUpdatedAt: Date;
+  confidence: number;
 }) {
   const changes = PRODUCT_CATEGORY_CHANGE_SCHEMA.parse({ categoryId: input.categoryId });
   const db = getDb();
@@ -29,44 +30,40 @@ export async function proposeProductCategoryAssignment(input: {
     db.select().from(categories).where(eq(categories.id, changes.categoryId)).limit(1),
   ]);
   if (!product) throw new ProductCategoryProposalError('Product not found.');
-  if (!category) throw new ProductCategoryProposalError('Assigned category not found.');
+  if (!category?.isActive)
+    throw new ProductCategoryProposalError('Active assigned category not found.');
+  if (
+    product.updatedAt.getTime() !== input.sourceUpdatedAt.getTime() ||
+    category.updatedAt.getTime() !== input.categoryUpdatedAt.getTime()
+  ) {
+    throw new ProductCategoryProposalError(
+      'Classification evidence changed during generation.',
+      'proposal_stale',
+    );
+  }
   if (product.categoryId === changes.categoryId) {
     throw new ProductCategoryProposalError('The product is already assigned to this category.');
   }
 
   return db.transaction(async (tx) => {
-    const [run] = await tx
-      .insert(aiRuns)
-      .values({
-        surface: 'admin',
-        task: 'product_categorization',
-        status: 'completed',
-        model: input.model,
-        promptVersion: input.promptVersion,
-        actorId: input.actorId ?? null,
-        inputTokens: input.usage?.inputTokens,
-        outputTokens: input.usage?.outputTokens,
-        totalTokens: input.usage?.totalTokens,
-        completedAt: new Date(),
-      })
-      .returning({ id: aiRuns.id });
     const expiresAt = new Date(Date.now() + 7 * 86_400_000);
     const [proposal] = await tx
       .insert(aiProposals)
       .values({
-        runId: run.id,
+        runId: input.runId,
         proposalType: 'product_category',
         entityType: 'products',
         entityId: product.id,
-        sourceUpdatedAt: product.updatedAt,
+        sourceUpdatedAt: input.sourceUpdatedAt,
         payload: {
           before: { categoryId: product.categoryId },
           changes,
           dependencies: {
-            category: { id: category.id, updatedAt: category.updatedAt.toISOString() },
+            category: { id: category.id, updatedAt: input.categoryUpdatedAt.toISOString() },
           },
         },
         reasoning: input.reasoning,
+        confidence: input.confidence.toFixed(4),
         requestedBy: input.actorId ?? null,
         expiresAt,
       })
@@ -182,7 +179,7 @@ export async function reviewProductCategoryProposal(input: {
       .limit(1)
       .for('update');
     if (
-      !category ||
+      !category?.isActive ||
       category.updatedAt.getTime() !== new Date(dependencies.category.updatedAt).getTime()
     ) {
       throw new ProductCategoryProposalError(

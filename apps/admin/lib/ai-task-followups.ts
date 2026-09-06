@@ -265,52 +265,63 @@ export async function publishAiTaskTerminalMessage(input: {
   attemptsMade?: number;
 }) {
   if (!input.conversationId) return { kind: 'not-linked' as const };
+  const conversationId = input.conversationId;
   const db = getDb();
-  const [existing] = await db
-    .select({ id: aiMessages.id })
-    .from(aiMessages)
-    .where(
-      and(
-        eq(aiMessages.conversationId, input.conversationId),
-        sql`${aiMessages.content} ->> 'jobId' = ${input.jobId}`,
-        sql`${aiMessages.content} ->> 'terminal' = 'true'`,
-      ),
-    )
-    .limit(1);
-  if (existing) return { kind: 'existing' as const, messageId: existing.id };
+  return db.transaction(async (tx) => {
+    // Serialize the worker publisher and history reconciliation for this conversation.
+    const [conversation] = await tx
+      .select({ id: aiConversations.id })
+      .from(aiConversations)
+      .where(eq(aiConversations.id, conversationId))
+      .for('update')
+      .limit(1);
+    if (!conversation) return { kind: 'not-linked' as const };
+    const [existing] = await tx
+      .select({ id: aiMessages.id })
+      .from(aiMessages)
+      .where(
+        and(
+          eq(aiMessages.conversationId, conversationId),
+          sql`${aiMessages.content} ->> 'jobId' = ${input.jobId}`,
+          sql`${aiMessages.content} ->> 'terminal' = 'true'`,
+        ),
+      )
+      .limit(1);
+    if (existing) return { kind: 'existing' as const, messageId: existing.id };
 
-  const text = formatAiTaskTerminalMessage(input);
-  const terminalToolResult = input.kind.startsWith('order-ecotrack:')
-    ? {
-        type: 'tool-result' as const,
-        toolName: 'ecotrack_posting_terminal',
-        output: buildEcotrackTerminalOutput({
+    const text = formatAiTaskTerminalMessage(input);
+    const terminalToolResult = input.kind.startsWith('order-ecotrack:')
+      ? {
+          type: 'tool-result' as const,
+          toolName: 'ecotrack_posting_terminal',
+          output: buildEcotrackTerminalOutput({
+            jobId: input.jobId,
+            status: input.status,
+            summary: input.summary ?? {},
+            attemptsMade: input.attemptsMade,
+          }),
+        }
+      : null;
+    const [message] = await tx
+      .insert(aiMessages)
+      .values({
+        conversationId: conversationId,
+        role: 'assistant',
+        content: {
+          text,
           jobId: input.jobId,
-          status: input.status,
-          summary: input.summary ?? {},
-          attemptsMade: input.attemptsMade,
-        }),
-      }
-    : null;
-  const [message] = await db
-    .insert(aiMessages)
-    .values({
-      conversationId: input.conversationId,
-      role: 'assistant',
-      content: {
-        text,
-        jobId: input.jobId,
-        jobKind: input.kind,
-        jobStatus: input.status,
-        terminal: true,
-        ...(input.downloadPath ? { downloadPath: input.downloadPath } : {}),
-        ...(terminalToolResult ? { toolResults: [terminalToolResult] } : {}),
-      },
-    })
-    .returning({ id: aiMessages.id });
-  await db
-    .update(aiConversations)
-    .set({ updatedAt: new Date() })
-    .where(eq(aiConversations.id, input.conversationId));
-  return { kind: 'published' as const, messageId: message.id };
+          jobKind: input.kind,
+          jobStatus: input.status,
+          terminal: true,
+          ...(input.downloadPath ? { downloadPath: input.downloadPath } : {}),
+          ...(terminalToolResult ? { toolResults: [terminalToolResult] } : {}),
+        },
+      })
+      .returning({ id: aiMessages.id });
+    await tx
+      .update(aiConversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(aiConversations.id, conversationId));
+    return { kind: 'published' as const, messageId: message.id };
+  });
 }

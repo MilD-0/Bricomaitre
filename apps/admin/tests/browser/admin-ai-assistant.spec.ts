@@ -7,6 +7,24 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 const defaultStorageState = resolve(process.cwd(), '../../ops/runtime/admin-playwright-state.json');
 const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defaultStorageState;
 
+function chatStream(input: {
+  message: string;
+  toolResults: unknown;
+  conversation: unknown;
+  messageId?: number | null;
+}) {
+  return [
+    JSON.stringify({ type: 'text-delta', delta: input.message }),
+    JSON.stringify({
+      type: 'result',
+      toolResults: input.toolResults,
+      conversation: input.conversation,
+      messageId: input.messageId ?? null,
+    }),
+    '',
+  ].join('\n');
+}
+
 const landingPagePublicationResult = {
   message: 'Landing page 91 is now unpublished.',
   toolResults: [
@@ -160,8 +178,8 @@ test('renders a live landing-page result without desktop or mobile overflow', as
     requestBodies.push(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(landingPagePublicationResult),
+      contentType: 'application/x-ndjson',
+      body: chatStream(landingPagePublicationResult),
     });
   });
 
@@ -268,8 +286,8 @@ test('keeps a terminal EcoTrack workflow actionable across close and reload', as
     postingQueued = true;
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
+      contentType: 'application/x-ndjson',
+      body: chatStream({
         message: 'The EcoTrack posting job is queued.',
         toolResults: [],
         conversation,

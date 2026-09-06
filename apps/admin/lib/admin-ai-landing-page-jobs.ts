@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import {
+  adminAiLandingPageCreateSchema,
+  adminAiLandingPageEditSchema,
+} from './admin-ai-landing-pages';
+
 import type { ActionActor } from './action-history';
 import {
   ADMIN_AI_LANDING_PAGE_QUEUE,
@@ -12,25 +17,17 @@ export const ADMIN_AI_START_LANDING_PAGE_WORK_TOOL_DESCRIPTION = [
   'Creation targets one exact product and language. Revision targets one exact page revision; exact block IDs can bound narrow edits and deletions.',
 ].join(' ');
 
-const createWorkSchema = z
-  .object({
+const createWorkSchema = adminAiLandingPageCreateSchema
+  .omit({ active: true })
+  .extend({
     operation: z.literal('create'),
-    productId: z.number().int().positive(),
-    locale: z.enum(['fr', 'ar']),
-    creativeBrief: z.string().trim().min(1).max(2_000).optional(),
     publish: z.boolean().default(false),
   })
   .strict();
-
-const reviseWorkSchema = z
-  .object({
+const reviseWorkSchema = adminAiLandingPageEditSchema
+  .omit({ active: true })
+  .extend({
     operation: z.literal('revise'),
-    landingPageId: z.number().int().positive(),
-    expectedRevision: z.number().int().positive(),
-    instruction: z.string().trim().min(1).max(4_000),
-    targetBlockIds: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
-    deleteBlockIds: z.array(z.string().trim().min(1).max(80)).max(18).default([]),
-    allowStructuralChanges: z.boolean().default(false),
     publication: z.enum(['preserve', 'publish', 'draft']).default('preserve'),
   })
   .strict();
@@ -65,7 +62,7 @@ export async function startAdminAiLandingPageWork(
         : ('landing_page_job_started' as const),
     ok: result.kind !== 'busy',
     startDisposition: result.kind,
-    operation: work.operation,
+    ...(result.kind === 'busy' ? {} : { operation: work.operation }),
     job: result.job,
   };
 }

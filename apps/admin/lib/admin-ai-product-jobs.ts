@@ -137,9 +137,13 @@ export async function generateAdminAiProductContent(
         : ('product_content_job_started' as const),
     ok: result.kind !== 'busy',
     startDisposition: result.kind,
-    scope: values.scope,
-    resolvedProductCount: values.scope === 'explicit' ? productIds.length : null,
-    autoApply: context.autoApply,
+    ...(result.kind === 'busy'
+      ? {}
+      : {
+          scope: values.scope,
+          resolvedProductCount: values.scope === 'explicit' ? productIds.length : null,
+          autoApply: context.autoApply,
+        }),
     job: result.job,
   };
 }
@@ -162,8 +166,7 @@ export async function startAdminAiCatalogCategorization(
         : ('catalog_categorization_job_started' as const),
     ok: result.kind !== 'busy',
     startDisposition: result.kind,
-    scope: values.scope,
-    autoApply: context.autoApply,
+    ...(result.kind === 'busy' ? {} : { scope: values.scope, autoApply: context.autoApply }),
     job: result.job,
   };
 }

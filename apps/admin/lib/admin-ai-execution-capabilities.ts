@@ -37,7 +37,6 @@ export const ADMIN_AI_MUTATING_TOOL_NAMES = Object.freeze([
 ] as const);
 
 const backgroundToolNames = new Set<string>([
-  'generate_product_content',
   'categorize_catalog',
   'start_landing_page_work',
   'start_order_export',
@@ -54,6 +53,11 @@ export function adminAiToolConfirmsCompletedMutation(toolName: string, output: u
   if (!output || typeof output !== 'object' || (output as { ok?: unknown }).ok !== true) {
     return false;
   }
+  if (toolName === 'generate_product_content')
+    return (
+      typeof (output as { appliedCount?: unknown }).appliedCount === 'number' &&
+      (output as { appliedCount: number }).appliedCount > 0
+    );
   const job = (output as { job?: unknown }).job;
   if (job && typeof job === 'object') {
     const status = (job as { status?: unknown }).status;

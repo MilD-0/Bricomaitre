@@ -3,7 +3,7 @@ import {
   landingPageDocumentSchema,
   landingPageSlugSchema,
 } from '@bric/storefront-core/landing-pages';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
 
 import { getDb } from '@bric/db/client';
@@ -187,6 +187,81 @@ export async function listLandingPageSummaries() {
     active: status === 'published',
     updatedAt: updatedAt.toISOString(),
   }));
+}
+
+export type LandingPageSummaryQuery = {
+  landingPageIds: number[];
+  productIds: number[];
+  query: string;
+  locale: 'fr' | 'ar' | null;
+  active: boolean | null;
+  page: number;
+  limit: number;
+};
+
+export async function queryLandingPageSummaries(input: LandingPageSummaryQuery) {
+  const db = getDb();
+  const where = and(
+    input.landingPageIds.length ? inArray(landingPages.id, input.landingPageIds) : undefined,
+    input.productIds.length ? inArray(landingPages.productId, input.productIds) : undefined,
+    input.locale ? eq(landingPages.locale, input.locale) : undefined,
+    input.active === null
+      ? undefined
+      : input.active
+        ? eq(landingPages.status, 'published')
+        : sql`${landingPages.status} <> 'published'`,
+    input.query
+      ? sql`position(lower(${input.query.normalize('NFKC')}) in lower(concat_ws(' ', ${landingPages.id}, ${landingPages.productId}, ${products.title}, ${products.slug}, ${landingPages.slug}))) > 0`
+      : undefined,
+  );
+  const [[totalRow], known] = await Promise.all([
+    db
+      .select({ total: count() })
+      .from(landingPages)
+      .innerJoin(products, eq(landingPages.productId, products.id))
+      .where(where),
+    input.landingPageIds.length
+      ? db
+          .select({ id: landingPages.id })
+          .from(landingPages)
+          .where(inArray(landingPages.id, input.landingPageIds))
+      : Promise.resolve([]),
+  ]);
+  const total = totalRow?.total ?? 0;
+  const rows = await db
+    .select({
+      id: landingPages.id,
+      productId: landingPages.productId,
+      productTitle: products.title,
+      productSlug: products.slug,
+      locale: landingPages.locale,
+      slug: landingPages.slug,
+      status: landingPages.status,
+      currentRevision: landingPages.draftRevision,
+      updatedAt: landingPages.updatedAt,
+    })
+    .from(landingPages)
+    .innerJoin(products, eq(landingPages.productId, products.id))
+    .where(where)
+    .orderBy(desc(landingPages.updatedAt), desc(landingPages.id))
+    .limit(input.limit)
+    .offset((input.page - 1) * input.limit);
+  const knownIds = new Set(known.map((row) => row.id));
+  return {
+    items: rows.map(({ status, updatedAt, ...row }) => ({
+      ...row,
+      active: status === 'published',
+      updatedAt: updatedAt.toISOString(),
+    })),
+    missingIds: input.landingPageIds.filter((id) => !knownIds.has(id)),
+    pagination: {
+      page: input.page,
+      limit: input.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / input.limit)),
+      hasNextPage: input.page * input.limit < total,
+    },
+  };
 }
 
 export async function getLandingPageDetail(id: number) {

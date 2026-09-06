@@ -312,13 +312,16 @@ describe('POST /api/ai/chat model-led runtime', () => {
   it('recovers missing narration without replaying the model tool loop', async () => {
     mocks.permissions = ['analytics_manage'];
     mocks.streamParts = [];
+    const recovered = 'Long recovered answer. '.repeat(300);
+    mocks.generateText.mockResolvedValueOnce({
+      text: recovered,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    });
     const response = await POST(request({ message: 'Explain this metric.', conversationKey }));
     const body = events(await response.text());
 
     expect(mocks.generateText).toHaveBeenCalledOnce();
-    expect(body).toEqual(
-      expect.arrayContaining([{ type: 'text-delta', delta: 'Recovered answer.' }]),
-    );
+    expect(body).toEqual(expect.arrayContaining([{ type: 'text-delta', delta: recovered.trim() }]));
   });
 
   it('passes complete analytics evidence to recovery without imposing output-token caps', async () => {

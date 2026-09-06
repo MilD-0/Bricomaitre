@@ -13,7 +13,7 @@ import {
 import {
   createLandingPage,
   getLandingPageDetail,
-  listLandingPageSummaries,
+  queryLandingPageSummaries,
   saveLandingPage,
   setLandingPageActive,
 } from './landing-pages';
@@ -90,21 +90,17 @@ export interface AdminAiLandingPageEditor {
 }
 
 type LandingPageInspectionDependencies = {
-  listSummaries: typeof listLandingPageSummaries;
+  listSummaries: typeof queryLandingPageSummaries;
   getDetail: typeof getLandingPageDetail;
 };
 
 const inspectionDependencies: LandingPageInspectionDependencies = {
-  listSummaries: listLandingPageSummaries,
+  listSummaries: queryLandingPageSummaries,
   getDetail: getLandingPageDetail,
 };
 
 function actorId(actor?: AdminAiActor) {
   return actor?.email?.trim() || null;
-}
-
-function normalizedSearch(value: string) {
-  return value.normalize('NFKC').toLocaleLowerCase();
 }
 
 function blockOutline(
@@ -125,42 +121,21 @@ export async function inspectAdminAiLandingPages(
 ) {
   const input = adminAiLandingPageInspectionSchema.parse(rawInput);
   const requestedIds = [...new Set(input.landingPageIds)];
-  const requestedProductIds = new Set(input.productIds);
-  const query = normalizedSearch(input.query);
-  const summaries = await dependencies.listSummaries();
-  const knownIds = new Set(summaries.map((page) => page.id));
-  const filtered = summaries.filter((page) => {
-    if (requestedIds.length > 0 && !requestedIds.includes(page.id)) return false;
-    if (requestedProductIds.size > 0 && !requestedProductIds.has(page.productId)) return false;
-    if (input.locale && page.locale !== input.locale) return false;
-    if (input.active !== null && page.active !== input.active) return false;
-    if (!query) return true;
-    return normalizedSearch(
-      `${page.id} ${page.productId} ${page.productTitle} ${page.productSlug} ${page.slug}`,
-    ).includes(query);
-  });
-  const offset = (input.page - 1) * input.limit;
-  const selected = filtered.slice(offset, offset + input.limit);
-  const pagination = {
-    page: input.page,
-    limit: input.limit,
-    total: filtered.length,
-    totalPages: Math.max(1, Math.ceil(filtered.length / input.limit)),
-    hasNextPage: offset + input.limit < filtered.length,
-  };
+  const result = await dependencies.listSummaries({ ...input, landingPageIds: requestedIds });
+  const selected = result.items;
   const base = {
     kind: 'admin_landing_pages' as const,
     view: input.view,
     filters: {
       landingPageIds: requestedIds,
-      productIds: [...requestedProductIds],
+      productIds: [...new Set(input.productIds)],
       query: input.query,
       locale: input.locale,
       active: input.active,
     },
     requestedIds,
-    missingIds: requestedIds.filter((id) => !knownIds.has(id)),
-    pagination,
+    missingIds: result.missingIds,
+    pagination: result.pagination,
   };
 
   if (input.view === 'summary') return { ...base, items: selected };

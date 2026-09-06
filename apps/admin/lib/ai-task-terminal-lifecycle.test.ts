@@ -101,7 +101,7 @@ describe('AI task terminal lifecycle', () => {
       publish,
     });
 
-    listeners.failed?.({ ...job, attemptsMade: 3 }, new Error('Job cancelled.'));
+    listeners.failed?.({ ...job, attemptsMade: 1 }, new Error('Job cancelled.'));
 
     await vi.waitFor(() => expect(publish).toHaveBeenCalledOnce());
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));

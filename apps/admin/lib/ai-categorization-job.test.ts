@@ -7,8 +7,15 @@ import {
 } from './background-jobs';
 
 const categories = [
-  { id: 10, name: 'Drills', nameAr: null, parentId: null, parentName: null },
-  { id: 20, name: 'Saws', nameAr: null, parentId: null, parentName: null },
+  {
+    id: 10,
+    updatedAt: new Date(0),
+    name: 'Drills',
+    nameAr: null,
+    parentId: null,
+    parentName: null,
+  },
+  { id: 20, updatedAt: new Date(0), name: 'Saws', nameAr: null, parentId: null, parentName: null },
 ];
 
 function payload(overrides: Partial<AiCategorizationPayload> = {}): AiCategorizationPayload {
@@ -41,6 +48,7 @@ describe('catalog categorization background job', () => {
     const products = [
       {
         id: 1,
+        updatedAt: new Date(0),
         title: 'Cordless drill',
         description: null,
         sku: 'D1',
@@ -50,6 +58,7 @@ describe('catalog categorization background job', () => {
       },
       {
         id: 2,
+        updatedAt: new Date(0),
         title: 'Existing drill',
         description: null,
         sku: 'D2',
@@ -59,6 +68,7 @@ describe('catalog categorization background job', () => {
       },
       {
         id: 3,
+        updatedAt: new Date(0),
         title: 'Unclear tool',
         description: null,
         sku: 'U1',
@@ -68,6 +78,7 @@ describe('catalog categorization background job', () => {
       },
       {
         id: 4,
+        updatedAt: new Date(0),
         title: 'Pending saw',
         description: null,
         sku: 'S1',
@@ -77,6 +88,7 @@ describe('catalog categorization background job', () => {
       },
       {
         id: 5,
+        updatedAt: new Date(0),
         title: 'Broken input',
         description: null,
         sku: 'B1',
@@ -102,6 +114,7 @@ describe('catalog categorization background job', () => {
               },
               usage: {},
               model: 'test-model',
+              runId: 70,
             };
           return {
             decision: {
@@ -112,6 +125,7 @@ describe('catalog categorization background job', () => {
             },
             usage: { totalTokens: 10 },
             model: 'test-model',
+            runId: 70,
           };
         }),
       },
@@ -161,6 +175,7 @@ describe('catalog categorization background job', () => {
     ];
     const products = decisions.map((_, index) => ({
       id: index + 1,
+      updatedAt: new Date(0),
       title: `Product ${index + 1}`,
       description: null,
       sku: null,
@@ -174,6 +189,7 @@ describe('catalog categorization background job', () => {
           decision: decisions.shift()!,
           usage: {},
           model: 'test-model',
+          runId: 70,
         })),
       },
       listCategories: async () => categories,
@@ -236,6 +252,7 @@ describe('catalog categorization background job', () => {
           },
           usage: {},
           model: 'test-model',
+          runId: 70,
         })),
       },
       listCategories: async () => categories,
@@ -245,6 +262,7 @@ describe('catalog categorization background job', () => {
           ? [
               {
                 id: 1,
+                updatedAt: new Date(0),
                 title: 'Drill',
                 description: null,
                 sku: null,
@@ -285,6 +303,7 @@ describe('catalog categorization background job', () => {
           },
           usage: {},
           model: 'test-model',
+          runId: 70,
         })),
       },
       listCategories: async () => categories,
@@ -294,6 +313,7 @@ describe('catalog categorization background job', () => {
           ? [
               {
                 id: 1,
+                updatedAt: new Date(0),
                 title: 'Drill',
                 description: null,
                 sku: null,

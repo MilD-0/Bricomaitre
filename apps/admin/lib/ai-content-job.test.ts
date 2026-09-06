@@ -127,3 +127,27 @@ describe('AI product content background job', () => {
     });
   });
 });
+
+it.each(['cancellation', 'progress failure'])(
+  'refreshes committed products after %s',
+  async (failure) => {
+    const jobHelpers = helpers();
+    const dependencies: AiContentJobDependencies = {
+      listProducts: async () => [products[0], products[2]],
+      listPendingProductIds: async () => new Set(),
+      propose: async () => ({ id: 101 }),
+      applyProposal: vi.fn(async () => ({ status: 'applied' as const, verified: true as const })),
+      refreshConsumers: vi.fn(async () => undefined),
+    };
+    if (failure === 'cancellation')
+      jobHelpers.throwIfCancelled
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Job cancelled.'));
+    else jobHelpers.updateProgress.mockRejectedValueOnce(new Error('Redis unavailable'));
+    await expect(
+      runAiContentJob(payload({ autoApply: true }), jobHelpers, dependencies),
+    ).rejects.toThrow();
+    expect(dependencies.applyProposal).toHaveBeenCalledOnce();
+    expect(dependencies.refreshConsumers).toHaveBeenCalledOnce();
+  },
+);

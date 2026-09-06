@@ -19,7 +19,7 @@ vi.mock('./ai-landing-page-product', () => ({
 vi.mock('./landing-pages', () => ({
   createLandingPage: mocks.create,
   getLandingPageDetail: mocks.detail,
-  listLandingPageSummaries: mocks.list,
+  queryLandingPageSummaries: mocks.list,
   saveLandingPage: mocks.save,
   setLandingPageActive: mocks.setActive,
 }));
@@ -110,19 +110,23 @@ describe('admin AI landing-page operations', () => {
       updatedAt: '2026-08-23T00:00:00.000Z',
       document,
     });
-    mocks.list.mockResolvedValue([
-      {
-        id: 41,
-        productId: 12,
-        productTitle: 'Perceuse',
-        productSlug: 'perceuse',
-        locale: 'fr',
-        slug: 'perceuse-41',
-        active: false,
-        currentRevision: 3,
-        updatedAt: '2026-08-23T00:00:00.000Z',
-      },
-    ]);
+    mocks.list.mockResolvedValue({
+      items: [
+        {
+          id: 41,
+          productId: 12,
+          productTitle: 'Perceuse',
+          productSlug: 'perceuse',
+          locale: 'fr',
+          slug: 'perceuse-41',
+          active: false,
+          currentRevision: 3,
+          updatedAt: '2026-08-23T00:00:00.000Z',
+        },
+      ],
+      missingIds: [],
+      pagination: { page: 1, limit: 20, total: 1, totalPages: 1, hasNextPage: false },
+    });
     mocks.save.mockResolvedValue({ id: 41, active: false, currentRevision: 4, changed: true });
     productQuery();
   });

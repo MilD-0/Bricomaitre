@@ -1,5 +1,5 @@
 import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
-import { generateText, streamText, type ToolSet } from 'ai';
+import { generateText, streamText } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -67,12 +67,6 @@ function combineUsage(...values: Array<AdminAiUsage | undefined>): AdminAiUsage 
     outputTokens: total('outputTokens'),
     totalTokens: total('totalTokens'),
   };
-}
-
-function repeatableStreamText<TOOLS extends ToolSet>(
-  options: Parameters<typeof streamText<TOOLS>>[0],
-) {
-  return () => streamText(options);
 }
 
 function hasSuccessfulMutation(toolResults: unknown[]) {
@@ -222,18 +216,19 @@ export async function POST(request: NextRequest) {
         autoAcceptProposals: parsed.data.autoAcceptProposals,
       },
     });
-    const createResult = repeatableStreamText({
-      model: languageModel,
-      instructions,
-      messages,
-      tools,
-      toolChoice: 'auto',
-      stopWhen: () => false,
-      // An operating investigation may span several live queries and a long
-      // reasoning pass. Keep it alive until the client disconnects.
-      abortSignal: request.signal,
-      maxRetries: config.maxRetries,
-    });
+    const createResult = () =>
+      streamText({
+        model: languageModel,
+        instructions,
+        messages,
+        tools,
+        toolChoice: 'auto',
+        stopWhen: () => false,
+        // An operating investigation may span several live queries and a long
+        // reasoning pass. Keep it alive until the client disconnects.
+        abortSignal: request.signal,
+        maxRetries: config.maxRetries,
+      });
 
     const encoder = new TextEncoder();
     const responseStream = new ReadableStream<Uint8Array>({

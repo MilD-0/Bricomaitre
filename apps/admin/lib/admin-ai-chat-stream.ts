@@ -17,7 +17,7 @@ export const adminAiChatStreamEventSchema = z.discriminatedUnion('type', [
       phase: z.enum(['running', 'completed', 'failed']).optional(),
     })
     .strict(),
-  z.object({ type: z.literal('text-delta'), delta: z.string().min(1).max(4_000) }).strict(),
+  z.object({ type: z.literal('text-delta'), delta: z.string().min(1) }).strict(),
   z
     .object({
       type: z.literal('result'),
@@ -62,27 +62,7 @@ export async function consumeAdminAiChatResponse(
   },
 ) {
   const contentType = response.headers.get('content-type') ?? '';
-  if (!contentType.includes('application/x-ndjson')) {
-    const body = (await response.json()) as {
-      message?: unknown;
-      error?: unknown;
-      toolResults?: unknown;
-      conversation?: unknown;
-      messageId?: unknown;
-    };
-    if (!response.ok)
-      throw new Error(typeof body.error === 'string' ? body.error : 'admin_ai_failed');
-    if (typeof body.message === 'string' && body.message) handlers.onTextDelta(body.message);
-    handlers.onResult({
-      toolResults: body.toolResults,
-      conversation: adminAiConversationSchema.parse(body.conversation),
-      messageId:
-        typeof body.messageId === 'number' && Number.isSafeInteger(body.messageId)
-          ? body.messageId
-          : null,
-    });
-    return;
-  }
+  if (!contentType.includes('application/x-ndjson')) throw new Error('admin_ai_failed');
   if (!response.ok || !response.body) throw new Error('admin_ai_failed');
 
   const reader = response.body.getReader();

@@ -164,7 +164,6 @@ describe('admin AI product jobs', () => {
       kind: 'catalog_categorization_job_busy',
       ok: false,
       startDisposition: 'busy',
-      autoApply: true,
     });
   });
 
