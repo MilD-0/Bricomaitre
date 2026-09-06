@@ -25,7 +25,13 @@ import type { AnalyticsFilters, AnalyticsMetric, AnalyticsSource } from './contr
 import { inclusiveDays } from './date-range';
 import { fridayWeekStart } from './economics-series';
 import { ratio } from './metrics';
-import { datePredicate, isoValue, nullableNumeric, numeric } from './query-values';
+import {
+  datePredicate,
+  timestampPredicate,
+  isoValue,
+  nullableNumeric,
+  numeric,
+} from './query-values';
 import {
   type AnalyticsFulfillmentSummary,
   type AnalyticsReturnObservation,
@@ -143,7 +149,7 @@ export async function loadMaterializedEconomicsReport(
       ), 'YYYY-MM-DD') as required_start_date,
       exists (
         select 1 from ${processedOrders}
-        where ${datePredicate(sql`(coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt}) at time zone 'Africa/Algiers')::date`, filters.startDate, filters.endDate)}
+        where ${timestampPredicate(sql`coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})`, filters.startDate, filters.endDate)}
       ) as has_imported_settlements
     `),
     getProfitTrackerSettings(db),
