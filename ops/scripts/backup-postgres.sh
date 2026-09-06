@@ -18,11 +18,20 @@ cleanup_partial_backup() {
 
 trap cleanup_partial_backup EXIT
 
-postgres_container="$(docker ps --filter name=postgres --format '{{.ID}}' | head -n1)"
-if [[ -z "$postgres_container" ]]; then
-  echo 'no running Postgres container found' >&2
+compose_project="${COMPOSE_PROJECT_NAME:-bricadmin}"
+mapfile -t postgres_containers < <(
+  docker ps \
+    --filter "label=com.docker.compose.project=$compose_project" \
+    --filter 'label=com.docker.compose.service=postgres' \
+    --format '{{.ID}}'
+)
+if ((${#postgres_containers[@]} != 1)); then
+  echo "expected one running Postgres container in project $compose_project, found ${#postgres_containers[@]}" >&2
   exit 1
 fi
+postgres_container="${postgres_containers[0]}"
+printf 'backing up project=%s service=postgres container=%s database=%s\n' \
+  "$compose_project" "$postgres_container" "${POSTGRES_DB:-bricadmin}" >&2
 
 docker exec "$postgres_container" \
   pg_dump -U "${POSTGRES_USER:-bricadmin}" "${POSTGRES_DB:-bricadmin}" \

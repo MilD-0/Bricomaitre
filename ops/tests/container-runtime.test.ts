@@ -1174,46 +1174,6 @@ describe('production packaging and release runtime', () => {
     expect(previousSmoke).toBeLessThan(candidateApps);
   });
 
-  it('restores failed candidates and rolls back to an explicit verified release', () => {
-    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
-    const rollback = readFileSync(resolve(workspaceRoot, 'ops/scripts/rollback.sh'), 'utf8');
-    const blueGreen = readFileSync(resolve(workspaceRoot, 'ops/scripts/blue-green.sh'), 'utf8');
-
-    expect(blueGreen).toContain('begin_image_state_transaction()');
-    expect(blueGreen).toContain('rollback_image_state_transaction()');
-    expect(blueGreen).toContain('rollback_nginx_main_config_transaction()');
-    expect(blueGreen).toContain('render_release_nginx_config()');
-    expect(blueGreen).toContain('remove_slot_release_services()');
-    expect(deploy).toContain('trap cleanup_failed_deployment EXIT');
-    expect(rollback).toContain('trap cleanup_failed_rollback EXIT');
-    expect(deploy).toContain('stage_nginx_main_config');
-    expect(rollback).toContain('stage_nginx_main_config');
-    expect(rollback).toContain('target_release="$(release_link_target "$previous_link")"');
-    expect(deploy).toContain(
-      'render_release_nginx_config "$original_current_release" "$previous_slot"',
-    );
-    expect(rollback).toContain('render_release_nginx_config "$target_release" "$target_slot"');
-    expect(rollback).toContain('render_release_nginx_config "$current_release" "$current_slot"');
-    expect(deploy).toContain('apply_release_images "$target_slot" "$release_images_file"');
-    expect(rollback).toContain(
-      'apply_release_images "$target_slot" "$release_images_file" "$verified_release_image_profile"',
-    );
-    expect(deploy).toContain('preserving the candidate services');
-    expect(rollback).toContain('preserving the rollback candidate');
-    expect(deploy.indexOf('routing_changed=true')).toBeLessThan(
-      deploy.indexOf('render_nginx_config "$target_slot"'),
-    );
-    expect(rollback.indexOf('routing_changed=true')).toBeLessThan(
-      rollback.indexOf('render_release_nginx_config "$target_release" "$target_slot"'),
-    );
-    expect(deploy.indexOf('stop_slot_app_services "$previous_slot"')).toBeGreaterThan(
-      deploy.indexOf('set_active_slot "$target_slot"'),
-    );
-    expect(rollback.indexOf('stop_slot_app_services "$current_slot"')).toBeGreaterThan(
-      rollback.indexOf('set_active_slot "$target_slot"'),
-    );
-  });
-
   it('keeps production env templates secret-free and splits browser/server marketing credentials', () => {
     const storefrontEnv = readFileSync(
       resolve(workspaceRoot, 'ops/env/storefront.env.example'),

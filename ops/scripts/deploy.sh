@@ -40,7 +40,6 @@ original_previous_release="$(release_link_target "$previous_link")"
 deployment_committed=false
 routing_changed=false
 shared_runtime_changed=false
-incumbent_reconciled=false
 
 previous_api_service=""
 previous_admin_service=""
@@ -100,6 +99,13 @@ cleanup_failed_deployment() {
       fi
     fi
 
+    if [[ "$routing_restored" == true && "$shared_runtime_changed" == true ]]; then
+      if ! reconcile_incumbent_slot; then
+        routing_restored=false
+        echo "failed to reload the incumbent with restored configuration; preserving candidate services" >&2
+      fi
+    fi
+
     if [[ "$routing_restored" == true ]]; then
       remove_slot_release_services "$target_slot"
       rollback_image_state_transaction
@@ -109,11 +115,6 @@ cleanup_failed_deployment() {
       commit_image_state_transaction
     fi
 
-    if [[ "$routing_restored" == true && "$shared_runtime_changed" == true \
-      && "$incumbent_reconciled" != true ]]; then
-      reconcile_incumbent_slot || \
-        echo "failed to reload the incumbent slot after shared runtime rollback" >&2
-    fi
 
     if [[ "$routing_restored" == true && -f "$image_state_file" ]] \
       && grep -q '^BRIC_IMAGE_STOREFRONT_META_WORKER=' "$image_state_file"; then
@@ -231,7 +232,6 @@ bash "$script_dir/wait-for-health.sh" redis
 
 if [[ "$shared_runtime_changed" == true && -n "$previous_slot" ]]; then
   reconcile_incumbent_slot
-  incumbent_reconciled=true
 fi
 
 set -a
@@ -333,11 +333,6 @@ compose up -d --force-recreate "$meta_worker_service"
 assert_service_image "$meta_worker_service"
 bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
 
-if [[ -n "$previous_slot" ]]; then
-  previous_worker_service="$(service_name admin-worker "$previous_slot")"
-  compose stop "$previous_worker_service" || true
-fi
-
 if [[ -n "$original_current_release" && "$original_current_release" != "$release_dir" ]]; then
   set_previous_release "$original_current_release"
 fi
@@ -348,6 +343,7 @@ commit_nginx_main_config_transaction
 commit_runtime_env_transaction
 deployment_committed=true
 if [[ -n "$previous_slot" ]]; then
+  compose stop "$previous_worker_service" || true
   stop_slot_app_services "$previous_slot"
 fi
 remove_obsolete_compose_containers || echo 'warning: obsolete Compose containers require manual cleanup' >&2

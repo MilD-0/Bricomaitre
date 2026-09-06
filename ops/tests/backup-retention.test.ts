@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -56,6 +56,52 @@ describe('production Postgres backup retention', () => {
       rmSync(fakeBin, { recursive: true, force: true });
     }
   });
+
+  it.each([1, 2, 0])(
+    'selects the configured stack and rejects ambiguous or absent sources (%s matches)',
+    (matches) => {
+      const directory = mkdtempSync(join(tmpdir(), 'bric-backup-source-'));
+      const backupDir = join(directory, 'backups');
+      writeFileSync(
+        join(directory, 'docker'),
+        `#!/usr/bin/env bash
+if [[ "$1" == ps ]]; then
+  if [[ "$*" != *"label=com.docker.compose.project=production"* || "$*" != *"label=com.docker.compose.service=postgres"* ]]; then
+    printf '%s\\n' unrelated-postgres production-postgres
+  elif [[ "$MATCHES" == 1 ]]; then echo production-postgres
+  elif [[ "$MATCHES" == 2 ]]; then printf '%s\\n' production-postgres duplicate-production
+  fi
+elif [[ "$1" == exec ]]; then
+  printf -- '-- dump from %s\\n' "$2"
+fi
+`,
+        { mode: 0o755 },
+      );
+      try {
+        const result = spawnSync('bash', [backupScript], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            BACKUP_DIR: backupDir,
+            COMPOSE_PROJECT_NAME: 'production',
+            MATCHES: String(matches),
+            PATH: `${directory}:${process.env.PATH ?? ''}`,
+          },
+        });
+        if (matches === 1) {
+          expect(result.status).toBe(0);
+          expect(
+            gunzipSync(readFileSync(join(backupDir, readdirSync(backupDir)[0]))).toString(),
+          ).toContain('dump from production-postgres');
+        } else {
+          expect(result.status).not.toBe(0);
+          expect(readdirSync(backupDir)).toEqual([]);
+        }
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('does not publish a partial dump when pg_dump fails', () => {
     const backupDir = mkdtempSync(join(tmpdir(), 'bric-failed-backup-'));

@@ -104,13 +104,13 @@ compose up -d --force-recreate "$meta_worker_service"
 assert_service_image "$meta_worker_service"
 bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
 
-compose stop "$current_worker_service" || true
 set_previous_release "$current_release"
 set_current_release "$target_release"
 set_active_slot "$target_slot"
 commit_image_state_transaction
 commit_nginx_main_config_transaction
 rollback_committed=true
+compose stop "$current_worker_service" || true
 stop_slot_app_services "$current_slot"
 remove_obsolete_compose_containers || echo 'warning: obsolete Compose containers require manual cleanup' >&2
 printf 'rolled back to verified release %s on slot %s\n' "$(basename "$target_release")" "$target_slot"
