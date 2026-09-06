@@ -138,7 +138,13 @@ describe('runtime system-wide job access', () => {
       86_400,
       Date.parse(snapshot.createdAt),
       '0',
+      expect.stringMatching(/"cancelRequested":true/),
     );
+    const cancellationWrite = mocks.redis.eval.mock.calls[0]!;
+    expect(JSON.parse(cancellationWrite[11] as string)).toEqual({
+      ...JSON.parse(cancellationWrite[7] as string),
+      cancelRequested: true,
+    });
   });
 
   it('does not cancel completed jobs', async () => {
@@ -192,6 +198,14 @@ describe('runtime system-wide job access', () => {
       86_400,
       expect.any(Number),
       '1',
+      expect.stringMatching(/"cancelRequested":true/),
     );
+    const failureWrite = mocks.redis.eval.mock.calls.find(
+      (call) => typeof call[7] === 'string' && call[7].includes('"status":"failed"'),
+    )!;
+    expect(JSON.parse(failureWrite[11] as string)).toEqual({
+      ...JSON.parse(failureWrite[7] as string),
+      cancelRequested: true,
+    });
   });
 });
