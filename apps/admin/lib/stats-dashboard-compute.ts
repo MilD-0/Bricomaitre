@@ -1,6 +1,6 @@
 import { eq, inArray, or, sql } from 'drizzle-orm';
 
-import { getDb } from '@bric/db/client';
+import { getReportingDb } from './reporting-db';
 import {
   adCosts,
   orders,
@@ -36,7 +36,7 @@ import { listImportHistory } from './stats-order-import';
 import { numberOrZero, round } from './stats-values';
 
 export async function computeStatsDashboard(input: StatsFilters) {
-  const db = getDb();
+  const db = getReportingDb();
   const filters = buildResolvedFilters(statsQuerySchema.parse(input));
   const where = buildStatsWhere(filters);
   const adWhere = buildAdCostWhere(filters);
@@ -180,7 +180,7 @@ export async function computeStatsDashboard(input: StatsFilters) {
         eq(processedOrders.id, processedOrderProducts.processedOrderId),
       )
       .where(where),
-    listImportHistory(),
+    listImportHistory(undefined, db),
     db
       .select({
         spend: sql<number>`coalesce(sum(${adCosts.spend})::double precision, 0)`,

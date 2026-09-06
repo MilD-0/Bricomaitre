@@ -78,8 +78,7 @@ function mapImportHistoryRow(row: typeof importBatches.$inferSelect): ImportHist
   };
 }
 
-export async function listImportHistory(limit = DEFAULT_IMPORT_HISTORY_LIMIT) {
-  const db = getDb();
+export async function listImportHistory(limit = DEFAULT_IMPORT_HISTORY_LIMIT, db = getDb()) {
   const rows = await db
     .select()
     .from(importBatches)

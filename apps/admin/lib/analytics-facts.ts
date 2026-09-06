@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 
-import { getDb } from '@bric/db/client';
+import type { getDb } from '@bric/db/client';
 import {
   analyticsEconomicsDailyFacts,
   metaAdsDailyInsights,
@@ -16,6 +16,7 @@ import {
 } from './analytics-fact-contract';
 import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import { getProfitTrackerReport } from './profit-tracker';
+import { getReportingDb } from './reporting-db';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -109,7 +110,7 @@ export async function refreshAnalyticsFacts(
     now?: Date;
   } = {},
 ) {
-  const db = options.db ?? getDb();
+  const db = options.db ?? getReportingDb();
   const now = options.now ?? new Date();
   const sourceCutoffResult = options.endDate
     ? null

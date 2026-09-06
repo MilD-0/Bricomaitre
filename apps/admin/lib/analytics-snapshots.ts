@@ -11,6 +11,7 @@ import {
   type AnalyticsQuery,
 } from './analytics';
 import { dayInTimezone } from './analytics/date-range';
+import { getReportingDb } from './reporting-db';
 
 export const ANALYTICS_SNAPSHOT_QUEUE = 'admin-analytics-snapshot';
 const FRESH_MS = 5 * 60_000;
@@ -208,7 +209,7 @@ export async function scheduleAnalyticsSnapshot(query: AnalyticsQuery) {
 
 const snapshots = createAnalyticsSnapshotStore({
   redis: getRedis,
-  compute: getAnalyticsData,
+  compute: (query) => getAnalyticsData(query, { db: getReportingDb() }),
   enqueue: scheduleAnalyticsSnapshot,
 });
 export const getAnalyticsSnapshot = snapshots.load;

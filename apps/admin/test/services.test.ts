@@ -56,6 +56,9 @@ import { createStorefrontOrder, readStorefrontOrderByToken } from '@bric/storefr
 import { dayInTimezone } from '../lib/analytics/date-range';
 import { getMetaCommercePerformance, getMetaCommerceReport } from '../lib/meta-commerce-analytics';
 import { buildWebsiteProductMetricsQuery } from '../lib/stats';
+import { computeStatsDashboard } from '../lib/stats-dashboard-compute';
+import { getReportingDb } from '../lib/reporting-db';
+import { getAnalyticsSnapshot } from '../lib/analytics-snapshots';
 import {
   ADMIN_REPORTING_TIMEZONE,
   getExperienceStats,
@@ -97,7 +100,35 @@ const runId = randomUUID();
 
 describe('real PostgreSQL and Redis contracts', () => {
   afterAll(async () => {
-    await Promise.allSettled([getRedis().quit(), getPool().end()]);
+    await Promise.allSettled([getRedis().quit(), getPool().end(), getReportingDb().$client.end()]);
+  });
+
+  it('queues snapshot queries separately from interactive reads with one nonparallel connection', async () => {
+    const reporting = getReportingDb();
+    const held = await reporting.$client.connect();
+    const computation = computeStatsDashboard({ range: '7d' });
+    try {
+      await vi.waitFor(() => expect(reporting.$client.waitingCount).toBeGreaterThan(0));
+      expect(reporting.$client.totalCount).toBe(1);
+      const interactive = await getDb().execute(sql`select 42 as value`);
+      expect(interactive.rows).toEqual([{ value: 42 }]);
+    } finally {
+      held.release();
+    }
+    const result = await computation;
+    expect(result.filters.range).toBe('7d');
+    expect(result.customers.customers).toEqual([]);
+    const settings = await reporting.execute(sql`
+      select current_setting('max_parallel_workers_per_gather') as parallel,
+        current_setting('application_name') as application
+    `);
+    expect(settings.rows).toEqual([{ parallel: '0', application: 'bric-admin-reporting' }]);
+    const analytics = await getAnalyticsSnapshot(
+      { view: 'storefront', range: '7d', grain: 'auto' },
+      { refresh: true, remember: false },
+    );
+    expect(analytics.diagnostics.cache?.state).toBe('miss');
+    expect(reporting.$client.totalCount).toBe(1);
   });
 
   it('saves loads and resets a thousand-order selected scope with a bounded database identity', async () => {

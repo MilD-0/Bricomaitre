@@ -5,6 +5,13 @@ import * as schema from './schema';
 
 const connectionString = process.env.DATABASE_URL;
 
+export function createDb(options: { max: number; application_name?: string; options?: string }) {
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is required to initialize Drizzle.');
+  }
+  return drizzle(new Pool({ ...options, connectionString }), { schema });
+}
+
 let pool: InstanceType<typeof Pool> | null = null;
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 

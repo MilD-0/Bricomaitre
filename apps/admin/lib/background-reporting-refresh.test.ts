@@ -18,6 +18,7 @@ const { db, refreshFacts, refreshSnapshots, snapshotRun } = vi.hoisted(() => {
 });
 
 vi.mock('@bric/db/client', () => ({ getDb: () => db }));
+vi.mock('./reporting-db', () => ({ getReportingDb: () => db }));
 vi.mock('./stats', () => ({ refreshAdminReportingSnapshots: refreshSnapshots }));
 vi.mock('./analytics-facts', () => ({ refreshAnalyticsFacts: refreshFacts }));
 

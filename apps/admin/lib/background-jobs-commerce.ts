@@ -49,6 +49,7 @@ import { importAdCostsSpreadsheet } from './stats-ad-costs';
 import { importStatsSpreadsheet } from './stats-order-import';
 import { refreshAdminReportingSnapshots } from './stats';
 import { refreshAnalyticsFacts } from './analytics-facts';
+import { getReportingDb } from './reporting-db';
 import {
   ADMIN_AD_COST_IMPORT_QUEUE,
   ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
@@ -708,7 +709,7 @@ export async function runAdminReportingRefreshJob(payload: ReportingRefreshPaylo
     trigger: payload.trigger,
     sourceImportBatchId: payload.sourceImportBatchId ?? null,
   });
-  const db = getDb();
+  const db = getReportingDb();
   const [run] = await db
     .select({
       pendingRefresh: adminReportingSnapshotRuns.pendingRefresh,
@@ -794,7 +795,7 @@ export async function runEcotrackShipmentSyncJob(
   },
 ) {
   const result = await syncEcotrackShipmentStates({ actor: payload.actor });
-  await refreshAnalyticsFacts({ db: getDb() });
+  await refreshAnalyticsFacts({ db: getReportingDb() });
   const summary = {
     trigger: payload.trigger,
     ...result,
