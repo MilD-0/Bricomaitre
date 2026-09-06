@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from './route';
+import { inventoryApplyResponseSchema } from '../../../../lib/inventory';
 
 const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, applyAdminInventoryBatchMock } =
   vi.hoisted(() => ({
@@ -95,8 +96,9 @@ describe('app/api/inventory/apply/route', () => {
       { email: 'admin@example.com', name: 'Admin' },
     );
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({
+    expect(inventoryApplyResponseSchema.parse(await res.json())).toEqual({
       ok: true,
+      complete: false,
       items: [{ productId: 1, previousQuantity: 2, nextQuantity: 4 }],
       skipped: [{ productId: 2, reason: 'Product not found.' }],
     });

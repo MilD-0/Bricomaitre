@@ -7,6 +7,7 @@ import {
   type ActionActor,
   type Transaction,
 } from './action-history';
+import { ActionHistoryEntityNotFoundError } from './action-history-state';
 import type { StockAllocationChange } from './stock-allocation-history';
 
 type Database = ReturnType<typeof getDb>;
@@ -35,12 +36,6 @@ export function buildInventoryRowSelection() {
     inventoryQuantity: products.inventoryQuantity,
     updatedAt: products.updatedAt,
   };
-}
-
-export async function readInventoryProductById(db: Database, id: number) {
-  return db.query.products.findFirst({
-    where: eq(products.id, id),
-  });
 }
 
 export async function applyInventoryQuantityChange(
@@ -115,6 +110,7 @@ export async function applyInventoryQuantityChangeInTransaction(
       },
     });
   } catch (error) {
+    if (error instanceof ActionHistoryEntityNotFoundError) return { kind: 'missing' as const };
     if (!(error instanceof InventoryQuantityConflictError)) {
       throw error;
     }

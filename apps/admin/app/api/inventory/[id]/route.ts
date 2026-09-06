@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { ActionHistoryEntityNotFoundError } from '../../../../lib/action-history-state';
+import { ProductIntegrityConflictError } from '../../../../lib/product-integrity';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { updateAdminInventoryProduct } from '../../../../lib/admin-inventory-workflow';
 import { auth } from '../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import {
-  applyInventoryQuantityChange,
-  readInventoryProductById,
-} from '../../../../lib/inventory-actions';
+import { applyInventoryQuantityChange } from '../../../../lib/inventory-actions';
 import { inventoryBarcodeSchema } from '../../../../lib/inventory';
 import { requireMutationAccess } from '../../../../lib/rbac';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
@@ -48,27 +47,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
   }
   const db = getDb();
-  const current = await readInventoryProductById(db, numericId);
-
-  if (!current) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  const updated =
-    'delta' in parsed.data
-      ? await applyInventoryQuantityChange(db, {
-          productId: numericId,
-          mode: parsed.data.delta > 0 ? 'increase' : 'decrease',
-          quantity: Math.abs(parsed.data.delta),
-          actor,
-        })
-      : {
-          kind: 'updated' as const,
-          item: await updateAdminInventoryProduct(db, numericId, parsed.data, actor),
-        };
+  let updated;
+  try {
+    updated =
+      'delta' in parsed.data
+        ? await applyInventoryQuantityChange(db, {
+            productId: numericId,
+            mode: parsed.data.delta > 0 ? 'increase' : 'decrease',
+            quantity: Math.abs(parsed.data.delta),
+            actor,
+          })
+        : {
+            kind: 'updated' as const,
+            item: await updateAdminInventoryProduct(db, numericId, parsed.data, actor),
+          };
+  } catch (error) {
+    if (error instanceof ActionHistoryEntityNotFoundError)
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (error instanceof ProductIntegrityConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
 
   if (updated.kind !== 'updated') {
     if (updated.kind === 'insufficient') {

@@ -119,9 +119,8 @@ describe('app/api/inventory/[id]/route', () => {
 
   it('returns 404 when the product does not exist', async () => {
     hasDbMock.mockReturnValue(true);
-    getDbMock.mockReturnValue({
-      query: { products: { findFirst: vi.fn().mockResolvedValue(undefined) } },
-    });
+    getDbMock.mockReturnValue({});
+    applyInventoryQuantityChangeMock.mockResolvedValue({ kind: 'missing' });
 
     const res = await PATCH(
       new NextRequest('http://localhost/api/inventory/9', {
@@ -320,7 +319,11 @@ describe('app/api/inventory/[id]/route', () => {
     const setMock = vi.fn().mockReturnValue({ where: whereMock });
     const updateMock = vi.fn().mockReturnValue({ set: setMock });
 
-    await execute({ update: updateMock });
+    await execute({
+      update: updateMock,
+      execute: vi.fn(),
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+    });
 
     expect(setMock).toHaveBeenCalledWith(
       expect.objectContaining({

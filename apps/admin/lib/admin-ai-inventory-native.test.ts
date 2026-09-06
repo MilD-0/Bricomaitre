@@ -21,7 +21,7 @@ import {
   scanAdminInventory,
   updateAdminInventoryState,
 } from './admin-ai-inventory';
-import { AdminInventoryNotFoundError } from './admin-inventory-workflow';
+import { ActionHistoryEntityNotFoundError } from './action-history-state';
 
 const actor = { email: 'admin@example.com', name: 'Admin' };
 
@@ -101,7 +101,7 @@ describe('admin AI native inventory operations', () => {
   it('updates explicit state fields once per product and reports partial failures', async () => {
     mocks.update
       .mockResolvedValueOnce({ id: 12, barcode: 'DRILL-12', inStock: false })
-      .mockRejectedValueOnce(new AdminInventoryNotFoundError(99));
+      .mockRejectedValueOnce(new ActionHistoryEntityNotFoundError('products', 99));
 
     await expect(
       updateAdminInventoryState(

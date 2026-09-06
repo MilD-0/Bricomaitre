@@ -35,8 +35,7 @@ export async function POST(req: NextRequest) {
     throw error;
   }
   return NextResponse.json({
-    ok: true,
-    items: result.items,
+    ...result,
     skipped: result.skipped.map((item) => ({
       productId: item.productId,
       reason:

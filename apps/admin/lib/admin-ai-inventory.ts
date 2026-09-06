@@ -1,9 +1,9 @@
+import { ActionHistoryEntityNotFoundError } from './action-history-state';
 import { getDb } from '@bric/db/client';
 import { z } from 'zod';
 
 import type { ActionActor } from './action-history';
 import {
-  AdminInventoryNotFoundError,
   applyAdminInventoryBatch,
   inspectAdminInventoryScan,
   updateAdminInventoryProduct,
@@ -154,7 +154,7 @@ export async function updateAdminInventoryState(
         productId: requested.productId,
         fields: requested.operations.map((operation) => operation.field),
         code:
-          error instanceof AdminInventoryNotFoundError
+          error instanceof ActionHistoryEntityNotFoundError
             ? 'product_not_found'
             : error instanceof Error
               ? error.name

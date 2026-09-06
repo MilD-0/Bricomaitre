@@ -15,20 +15,13 @@ import {
 import {
   applyInventoryQuantityChangeInTransaction,
   buildInventoryRowSelection,
-  readInventoryProductById,
 } from './inventory-actions';
+import { assertUniqueProductIdentifiers } from './product-integrity';
 import { productAvailabilityStatus } from './products';
 import { CACHE_TAGS, revalidateServerTags } from './server-cache';
 import { revalidateStorefrontProducts } from './storefront-revalidate';
 
 type Database = ReturnType<typeof getDb>;
-
-export class AdminInventoryNotFoundError extends Error {
-  constructor(readonly productId: number) {
-    super(`Product ${productId} was not found in inventory.`);
-    this.name = 'AdminInventoryNotFoundError';
-  }
-}
 
 export const adminInventoryStatePatchSchema = z
   .object({
@@ -56,22 +49,21 @@ export async function updateAdminInventoryProduct(
     changes.inStock === undefined
       ? changes
       : { ...changes, availabilityStatus: productAvailabilityStatus(changes.inStock) };
-  const current = await readInventoryProductById(db, productId);
-  if (!current) throw new AdminInventoryNotFoundError(productId);
 
   const [item] = await mutateEntityWithHistory(db, {
     entityType: 'products',
     entityId: productId,
     operation: 'update',
     actor,
-    execute: (tx) =>
-      tx
+    execute: async (tx) => {
+      await assertUniqueProductIdentifiers(tx, canonicalChanges, productId);
+      return tx
         .update(products)
         .set({ ...canonicalChanges, updatedAt: new Date() })
         .where(eq(products.id, productId))
-        .returning(buildInventoryRowSelection()),
+        .returning(buildInventoryRowSelection());
+    },
   });
-  if (!item) throw new AdminInventoryNotFoundError(productId);
   await refreshInventoryConsumers();
   return item;
 }
@@ -128,18 +120,15 @@ export async function applyAdminInventoryBatch(
   return result.value;
 }
 
-function isExactNumeric(value: string) {
-  return /^\d+$/.test(value);
-}
-
 export async function inspectAdminInventoryScan(
   db: Database,
   input: z.input<typeof inventoryScanQuerySchema>,
 ) {
   const { query } = inventoryScanQuerySchema.parse(input);
 
-  if (isExactNumeric(query)) {
-    const order = await loadOrderDetail(Number(query), db);
+  const numericOrderId = /^\d+$/.test(query) ? Number(query) : 0;
+  if (numericOrderId > 0 && Number.isSafeInteger(numericOrderId)) {
+    const order = await loadOrderDetail(numericOrderId, db);
     if (order) {
       const productIds = [
         ...new Set(
