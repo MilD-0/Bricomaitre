@@ -8,7 +8,12 @@ import {
   aiProposals,
   aiRuns,
   brands,
+  categories,
   ecotrackOrderStates,
+  featuredProductGroupBrands,
+  featuredProductGroupCategories,
+  featuredProductGroupProducts,
+  featuredProductGroups,
   orders,
   products,
 } from '@bric/db/schema';
@@ -352,6 +357,106 @@ describe('persisted commerce workflows', () => {
     } finally {
       await db.delete(products).where(inArray(products.id, ids));
       await db.delete(brands).where(eq(brands.id, brand!.id));
+    }
+  });
+
+  it('prioritizes active featured selections, then stock and sales, while search relevance stays first', async () => {
+    const db = getDb();
+    const [rootCategory] = await db
+      .insert(categories)
+      .values({ name: 'Ranking fixture', slug: `rank-root-${runId}` })
+      .returning();
+    const [featuredCategory] = await db
+      .insert(categories)
+      .values({
+        name: 'Featured category',
+        slug: `rank-child-${runId}`,
+        parentId: rootCategory!.id,
+      })
+      .returning();
+    const [brand] = await db
+      .insert(brands)
+      .values({ name: 'Featured brand', slug: `rank-brand-${runId}` })
+      .returning();
+    const older = new Date('2026-01-01T00:00:00Z');
+    const newer = new Date('2026-02-01T00:00:00Z');
+    const rows = await db
+      .insert(products)
+      .values(
+        [
+          { title: 'Direct selection', inStock: false, unitsSold: 0 },
+          { title: 'Brand selection', inStock: false, unitsSold: 0, brandId: brand!.id },
+          {
+            title: 'Category selection',
+            inStock: false,
+            unitsSold: 0,
+            categoryId: featuredCategory!.id,
+          },
+          { title: 'Perceuse percussion', inStock: true, unitsSold: 100 },
+          { title: 'Recent stock', inStock: true, unitsSold: 10, updatedAt: newer },
+          { title: 'Older stock', inStock: true, unitsSold: 10 },
+          { title: 'Same date higher ID', inStock: true, unitsSold: 10 },
+          { title: 'Unavailable bestseller', inStock: false, unitsSold: 1000 },
+        ].map((product, index) => ({
+          categoryId: rootCategory!.id,
+          updatedAt: older,
+          ...product,
+          slug: `rank-${runId}-${index}`,
+          description: 'Accessoire pour perceuse percussion',
+          availabilityStatus: product.inStock ? 'in_stock' : 'out_of_stock',
+          price: '1000',
+          active: true,
+        })),
+      )
+      .returning();
+    const groups = await db
+      .insert(featuredProductGroups)
+      .values([
+        { name: 'Direct', sortOrder: 10, prioritizeRecommendations: true },
+        { name: 'Brand', sortOrder: 20, prioritizeRecommendations: true },
+        { name: 'Category', sortOrder: 30, prioritizeRecommendations: true },
+        { name: 'Inactive', sortOrder: -20, prioritizeRecommendations: true, active: false },
+        { name: 'Display only', sortOrder: -10, prioritizeRecommendations: false },
+      ])
+      .returning();
+    try {
+      await db.insert(featuredProductGroupProducts).values([
+        { groupId: groups[0]!.id, productId: rows[0]!.id },
+        { groupId: groups[3]!.id, productId: rows[7]!.id },
+        { groupId: groups[4]!.id, productId: rows[7]!.id },
+      ]);
+      await db
+        .insert(featuredProductGroupBrands)
+        .values({ groupId: groups[1]!.id, brandId: brand!.id });
+      await db
+        .insert(featuredProductGroupCategories)
+        .values({ groupId: groups[2]!.id, categoryId: featuredCategory!.id });
+      const query = storefrontProductListQuerySchema.parse({
+        categoryId: rootCategory!.id,
+        sortKey: 'recommended',
+      });
+      expect((await readStorefrontProducts(db, query)).map(({ id }) => id)).toEqual(
+        [0, 1, 2, 3, 4, 6, 5, 7].map((index) => rows[index]!.id),
+      );
+      const search = await readStorefrontProducts(db, { ...query, search: 'perceuse percussion' });
+      expect(search).toHaveLength(rows.length);
+      expect(search[0]!.id).toBe(rows[3]!.id);
+    } finally {
+      await db.delete(featuredProductGroups).where(
+        inArray(
+          featuredProductGroups.id,
+          groups.map(({ id }) => id),
+        ),
+      );
+      await db.delete(products).where(
+        inArray(
+          products.id,
+          rows.map(({ id }) => id),
+        ),
+      );
+      await db.delete(brands).where(eq(brands.id, brand!.id));
+      await db.delete(categories).where(eq(categories.id, featuredCategory!.id));
+      await db.delete(categories).where(eq(categories.id, rootCategory!.id));
     }
   });
 });
