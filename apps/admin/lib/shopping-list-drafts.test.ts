@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildShoppingListDraftUrl } from '../components/orders/orders-shopping-list';
+import { createHash } from 'node:crypto';
+import { buildShoppingListDraftRequest } from '../components/orders/orders-shopping-list';
 
 import {
   buildGeneratedShoppingListDraft,
+  buildShoppingListScopeKey,
   buildShoppingListInventoryPreview,
   reconcileShoppingListAllocations,
   mergeShoppingListDraft,
@@ -99,14 +101,48 @@ describe('shopping-list draft generation', () => {
     expect(draft.draftItems).not.toBe(draft.generatedItems);
   });
 
+  it('retains legacy selection identities and hashes larger cohorts consistently in browser and server code', () => {
+    const legacy = Array.from({ length: 500 }, (_, index) => 250000 + index);
+    expect(buildShoppingListScopeKey('selected', legacy)).toBe(`selected:${legacy.join(',')}`);
+    for (const count of [501, 1000, 10000]) {
+      const ids = Array.from({ length: count }, (_, index) => 250000 + index);
+      const expected = `selected:sha256:${createHash('sha256')
+        .update(`selected:${ids.join(',')}`)
+        .digest('hex')}`;
+      const key = buildShoppingListScopeKey('selected', ids);
+      expect(key).toBe(expected);
+      expect(key.length).toBe(80);
+      expect(buildShoppingListScopeKey('selected', [...ids].reverse().concat(ids[0]!))).toBe(key);
+      expect(buildShoppingListScopeKey('selected', [...ids.slice(0, -1), 999999])).not.toBe(key);
+    }
+  });
+
   it('addresses status lists without putting the full cohort in the URL', () => {
     const ids = Array.from({ length: 681 }, (_, index) => 250000 + index);
-    expect(buildShoppingListDraftUrl('posted-and-confirmed', ids)).toBe(
+    expect(buildShoppingListDraftRequest('posted-and-confirmed', ids).url).toBe(
       '/api/orders/shopping-list-draft?sourceMode=posted-and-confirmed',
     );
-    expect(buildShoppingListDraftUrl('selected', [32, 31, 31])).toBe(
+    expect(buildShoppingListDraftRequest('selected', [32, 31, 31]).url).toBe(
       '/api/orders/shopping-list-draft?sourceMode=selected&orderIds=31&orderIds=32',
     );
+  });
+
+  it('transports large selections in validated bodies for lookup and reset, retaining every ID', () => {
+    const ids = Array.from({ length: 10000 }, (_, index) => 250000 + index);
+    for (const revision of [undefined, 3]) {
+      const { url, init } = buildShoppingListDraftRequest('selected', [...ids].reverse(), revision);
+      expect(url).toBe('/api/orders/shopping-list-draft');
+      expect(init?.method).toBe(revision === undefined ? 'POST' : 'DELETE');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        sourceMode: 'selected',
+        orderIds: ids,
+        ...(revision === undefined ? {} : { revision }),
+      });
+    }
+    expect(buildShoppingListDraftRequest('selected', [32, 31], 3)).toEqual({
+      url: '/api/orders/shopping-list-draft?sourceMode=selected&orderIds=31&orderIds=32&revision=3',
+      init: { method: 'DELETE' },
+    });
   });
 
   it('preserves a large cohort through generation and the save contract', async () => {

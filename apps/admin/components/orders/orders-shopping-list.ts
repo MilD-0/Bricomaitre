@@ -37,25 +37,49 @@ export type ProductLookupResponse = {
   };
 };
 
-export function buildShoppingListDraftUrl(
+export function buildShoppingListDraftRequest(
   sourceMode: ShoppingListSourceMode,
   orderIds: readonly number[],
-) {
+  revision?: number,
+): { url: string; init?: RequestInit } {
+  const ids = normalizeShoppingListOrderIds(orderIds);
   const params = new URLSearchParams({ sourceMode });
   if (sourceMode === 'selected') {
-    normalizeShoppingListOrderIds(orderIds).forEach((orderId) => {
-      params.append('orderIds', String(orderId));
-    });
+    ids.forEach((orderId) => params.append('orderIds', String(orderId)));
   }
-
-  return `/api/orders/shopping-list-draft?${params.toString()}`;
+  if (revision !== undefined) params.set('revision', String(revision));
+  const url = `/api/orders/shopping-list-draft?${params.toString()}`;
+  // Large cohorts remain explicit in a body; no unsaved selection depends on
+  // a hash-only URL or a separately persisted recipe. Leave room for proxies.
+  if (sourceMode === 'selected' && (ids.length > 500 || url.length > 7000)) {
+    return {
+      url: '/api/orders/shopping-list-draft',
+      init: {
+        method: revision === undefined ? 'POST' : 'DELETE',
+        body: JSON.stringify({ sourceMode, orderIds: ids, revision }),
+      },
+    };
+  }
+  return { url, init: revision === undefined ? undefined : { method: 'DELETE' } };
 }
 
 export async function fetchShoppingListDraft(
   sourceMode: ShoppingListSourceMode,
   orderIds: readonly number[],
 ) {
-  return request<ShoppingListDraftResponse>(buildShoppingListDraftUrl(sourceMode, orderIds));
+  const { url, init } = buildShoppingListDraftRequest(sourceMode, orderIds);
+  return request<ShoppingListDraftResponse>(url, init);
+}
+
+export async function resetShoppingListDraft(
+  state: NonNullable<ShoppingListState> & { revision: number },
+) {
+  const { url, init } = buildShoppingListDraftRequest(
+    state.sourceMode,
+    state.orderIds,
+    state.revision,
+  );
+  return request<ShoppingListDraftSaveResponse>(url, init);
 }
 
 export async function saveShoppingListDraft(state: NonNullable<ShoppingListState>) {

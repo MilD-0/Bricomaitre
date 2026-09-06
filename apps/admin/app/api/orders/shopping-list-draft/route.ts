@@ -7,6 +7,7 @@ import { requireMutationAccess } from '../../../../lib/rbac';
 import {
   shoppingListDraftSaveRequestSchema,
   shoppingListDraftQuerySchema,
+  shoppingListDraftResetRequestSchema,
 } from '../../../../lib/shopping-list-drafts';
 import {
   resetAdminShoppingListDraft,
@@ -38,6 +39,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ draft: null });
   }
 
+  return NextResponse.json({ draft: await loadAdminShoppingListDraft(getDb(), parsed.data) });
+}
+
+// Lookup bodies keep complete selected cohorts below request-line limits.
+export async function POST(req: NextRequest) {
+  const denied = await requireMutationAccess('orders');
+  if (denied) return denied;
+
+  const parsed = shoppingListDraftQuerySchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  if (!hasDb()) return NextResponse.json({ draft: null });
   return NextResponse.json({ draft: await loadAdminShoppingListDraft(getDb(), parsed.data) });
 }
 
@@ -79,34 +93,31 @@ export async function DELETE(req: NextRequest) {
     return denied;
   }
 
-  const parsed = parseDraftQuery(req);
+  const parsed =
+    req.body !== null
+      ? shoppingListDraftResetRequestSchema.safeParse(await req.json().catch(() => null))
+      : shoppingListDraftResetRequestSchema.safeParse({
+          sourceMode: req.nextUrl.searchParams.get('sourceMode') ?? undefined,
+          orderIds: req.nextUrl.searchParams.getAll('orderIds'),
+          revision: z.coerce
+            .number()
+            .safeParse(req.nextUrl.searchParams.get('revision') ?? undefined).data,
+        });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const revision = z.coerce
-    .number()
-    .int()
-    .nonnegative()
-    .safeParse(req.nextUrl.searchParams.get('revision') ?? undefined);
-  if (!revision.success)
-    return NextResponse.json({ error: 'A current draft revision is required.' }, { status: 400 });
   const session = await auth();
   try {
     return NextResponse.json({
       ok: true,
-      draft: await resetAdminShoppingListDraft(
-        getDb(),
-        { ...parsed.data, revision: revision.data },
-        {
-          email: session?.user?.email,
-          name: session?.user?.name,
-        },
-      ),
+      draft: await resetAdminShoppingListDraft(getDb(), parsed.data, {
+        email: session?.user?.email,
+        name: session?.user?.name,
+      }),
     });
   } catch (error) {
     if (error instanceof ShoppingListDraftConflictError)

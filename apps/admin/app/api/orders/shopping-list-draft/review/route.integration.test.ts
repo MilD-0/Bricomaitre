@@ -5,6 +5,8 @@ import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-
 import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list-drafts.server';
 import { ShoppingListAllocationReviewError } from '../../../../../lib/shopping-list-stock-allocations';
 import { GET, POST } from './route';
+import { POST as LOOKUP } from './lookup/route';
+import { buildShoppingListScopeKey } from '../../../../../lib/shopping-list-drafts';
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
@@ -70,6 +72,50 @@ describe('shopping stock review route', () => {
     expect(response.status).toBe(503);
     expect(mocks.load).not.toHaveBeenCalled();
     expect(mocks.reconcile).not.toHaveBeenCalled();
+  });
+
+  it('loads large selected review cohorts from a body and accepts their bounded attribution identity', async () => {
+    const orderIds = Array.from({ length: 1000 }, (_, i) => 250000 + i);
+    const scopeKey = buildShoppingListScopeKey('selected', orderIds);
+    mocks.load.mockResolvedValue({ reviews: [] });
+    const response = await LOOKUP(
+      new NextRequest(`${url}/lookup`, {
+        method: 'POST',
+        body: JSON.stringify({ sourceMode: 'selected', orderIds }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.load).toHaveBeenCalledWith(mocks.db, { sourceMode: 'selected', orderIds });
+    mocks.reconcile.mockResolvedValue({ ok: true });
+    const save = await POST(
+      postRequest({
+        ...payload,
+        scopeKey,
+        orders: orderIds.map((orderId) => ({ orderId, quantity: 1 })),
+      }),
+    );
+    expect(save.status).toBe(200);
+    expect(mocks.reconcile).toHaveBeenCalledWith(
+      mocks.db,
+      expect.objectContaining({
+        scopeKey,
+        orders: expect.arrayContaining([{ orderId: orderIds[999], quantity: 1 }]),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('rejects invalid body review lookups and applies the same orders permission', async () => {
+    const invalid = await LOOKUP(
+      new NextRequest(`${url}/lookup`, {
+        method: 'POST',
+        body: JSON.stringify({ sourceMode: 'selected', orderIds: ['oops'] }),
+      }),
+    );
+    expect(invalid.status).toBe(400);
+    expect(mocks.load).not.toHaveBeenCalled();
+    mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+    expect((await LOOKUP(new NextRequest(`${url}/lookup`, { method: 'POST' }))).status).toBe(403);
   });
 
   it('requires products mutation access before saving an attribution', async () => {

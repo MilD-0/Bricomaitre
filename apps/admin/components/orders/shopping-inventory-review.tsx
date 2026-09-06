@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
 import { useRef, useState } from 'react';
 
+import { buildShoppingListDraftRequest } from './orders-shopping-list';
 import { requestJson } from '../../lib/admin-api';
 import type { ShoppingListSourceMode } from '../../lib/shopping-list-drafts';
 import type { ShoppingListAllocationReview } from '../../lib/shopping-list-stock-allocations';
@@ -101,10 +102,12 @@ export function ShoppingInventoryReviewDialog({
     queryKey: ['shopping-inventory-review', sourceMode, orderIds],
     enabled: open,
     queryFn: () => {
-      const search = new URLSearchParams({ sourceMode });
-      orderIds.forEach((id) => search.append('orderIds', String(id)));
+      const lookup = buildShoppingListDraftRequest(sourceMode, orderIds);
       return requestJson<ShoppingListAllocationReview>(
-        `/api/orders/shopping-list-draft/review?${search}`,
+        lookup.init?.method === 'POST'
+          ? '/api/orders/shopping-list-draft/review/lookup'
+          : lookup.url.replace('/shopping-list-draft?', '/shopping-list-draft/review?'),
+        lookup.init,
       );
     },
   });

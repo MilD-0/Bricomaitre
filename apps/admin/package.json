@@ -43,6 +43,7 @@
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
+    "@noble/hashes": "2.4.0",
     "@sentry/nextjs": "10.72.0",
     "@sentry/node": "10.72.0",
     "@tanstack/react-query": "^5.102.8",

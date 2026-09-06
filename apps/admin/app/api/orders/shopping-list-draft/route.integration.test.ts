@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DELETE, GET, PUT } from './route';
+import { DELETE, GET, POST, PUT } from './route';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { buildShoppingListScopeKey } from '../../../../lib/shopping-list-drafts';
 
 const { hasDbMock, getDbMock, authMock, requireMutationAccessMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
@@ -153,6 +155,112 @@ describe('app/api/orders/shopping-list-draft/route', () => {
         updatedByName: 'Admin',
       },
     });
+  });
+
+  it('loads a large selection by its server-computed identity from a body', async () => {
+    const ids = Array.from({ length: 1000 }, (_, index) => 250000 + index);
+    const scopeKey = buildShoppingListScopeKey('selected', ids);
+    const where = vi.fn((_condition: import('drizzle-orm').SQL) => ({
+      limit: async () => [draftRow({ sourceMode: 'selected', scopeKey, orderIds: ids })],
+    }));
+    const db = { transaction: vi.fn(), select: () => ({ from: () => ({ where }) }) };
+    db.transaction.mockImplementation(async (fn) => fn(db));
+    getDbMock.mockReturnValue(db);
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders/shopping-list-draft', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sourceMode: 'selected',
+          orderIds: [...ids].reverse(),
+          scopeKey: 'forged',
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(new PgDialect().sqlToQuery(where.mock.calls[0]![0]!).params).toEqual([scopeKey]);
+    expect(await response.json()).toMatchObject({ draft: { scopeKey, orderIds: ids } });
+  });
+
+  it('rejects oversized or invalid lookup bodies and enforces lookup RBAC', async () => {
+    for (const payload of [
+      null,
+      { sourceMode: 'unknown', orderIds: [1] },
+      { sourceMode: 'selected', orderIds: Array.from({ length: 10001 }, (_, i) => i + 1) },
+    ]) {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders/shopping-list-draft', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+    requireMutationAccessMock.mockResolvedValue(
+      NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    );
+    expect(
+      (
+        await POST(
+          new NextRequest('http://localhost/api/orders/shopping-list-draft', { method: 'POST' }),
+        )
+      ).status,
+    ).toBe(403);
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
+  it('resets a large selection using the stored canonical cohort and revision', async () => {
+    const ids = Array.from({ length: 1000 }, (_, index) => 250000 + index);
+    const scopeKey = buildShoppingListScopeKey('selected', ids);
+    const row = draftRow({ sourceMode: 'selected', scopeKey, orderIds: ids });
+    const where = vi.fn((_condition: import('drizzle-orm').SQL) => ({ for: async () => [row] }));
+    const set = vi.fn(() => ({
+      where: () => ({ returning: async () => [{ ...row, revision: 1 }] }),
+    }));
+    const tx = { select: () => ({ from: () => ({ where }) }), update: () => ({ set }) };
+    getDbMock.mockReturnValue({ transaction: async (fn: (value: typeof tx) => unknown) => fn(tx) });
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/orders/shopping-list-draft', {
+        method: 'DELETE',
+        body: JSON.stringify({
+          sourceMode: 'selected',
+          orderIds: [...ids].reverse(),
+          revision: 0,
+          scopeKey: 'forged',
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(new PgDialect().sqlToQuery(where.mock.calls[0]![0]!).params).toEqual([scopeKey]);
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revision: 1,
+        draftItems: [expect.objectContaining({ checked: false })],
+      }),
+    );
+    expect(await response.json()).toMatchObject({
+      draft: { scopeKey, orderIds: ids, revision: 1 },
+    });
+    const stale = await DELETE(
+      new NextRequest('http://localhost/api/orders/shopping-list-draft', {
+        method: 'DELETE',
+        body: JSON.stringify({ sourceMode: 'selected', orderIds: ids, revision: 8 }),
+      }),
+    );
+    expect(stale.status).toBe(409);
+  });
+
+  it('rejects reset bodies without a current numeric revision', async () => {
+    for (const revision of [undefined, null, -1]) {
+      const response = await DELETE(
+        new NextRequest('http://localhost/api/orders/shopping-list-draft', {
+          method: 'DELETE',
+          body: JSON.stringify({ sourceMode: 'selected', orderIds: [31], revision }),
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(getDbMock).not.toHaveBeenCalled();
   });
 
   it('validates PUT payloads', async () => {

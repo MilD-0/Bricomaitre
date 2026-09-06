@@ -32,7 +32,7 @@ import type {
 import {
   buildInventoryPreview,
   buildMergedShoppingListState,
-  buildShoppingListDraftUrl,
+  resetShoppingListDraft,
   buildShoppingListPrintHtml,
   buildShoppingListStateFromDraft,
   fetchShoppingListDraft,
@@ -418,10 +418,10 @@ export function OrdersWorkflows({
         setShoppingListSaveStatus('idle');
         return;
       }
-      const response = await request<{ ok: true; draft: ShoppingListDraftRecord }>(
-        `${buildShoppingListDraftUrl(shoppingListState.sourceMode, shoppingListState.orderIds)}&revision=${shoppingListState.revision}`,
-        { method: 'DELETE' },
-      );
+      const response = await resetShoppingListDraft({
+        ...shoppingListState,
+        revision: shoppingListState.revision,
+      });
       setShoppingListState(buildShoppingListStateFromDraft(response.draft));
       setShoppingListSaveStatus('saved');
     } catch {

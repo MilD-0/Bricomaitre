@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import type { OrderRecord } from '@bric/storefront-core/order-domain';
 
@@ -165,6 +167,10 @@ export const shoppingListDraftQuerySchema = z.object({
   orderIds: shoppingListOrderIdsSchema,
 });
 
+export const shoppingListDraftResetRequestSchema = shoppingListDraftQuerySchema.extend({
+  revision: z.number().int().nonnegative(),
+});
+
 export function normalizeShoppingListOrderIds(orderIds: readonly number[]) {
   return [...new Set(orderIds)].sort((left, right) => left - right);
 }
@@ -189,7 +195,13 @@ export function buildShoppingListScopeKey(
     return 'status:posted-and-confirmed';
   }
 
-  return `selected:${normalizeShoppingListOrderIds(orderIds).join(',')}`;
+  const ids = normalizeShoppingListOrderIds(orderIds);
+  const legacyKey = `selected:${ids.join(',')}`;
+  // Keep every previously accepted scope stable, including its stock credits.
+  // Only cohorts above the former 500-order boundary need a bounded identity.
+  return ids.length <= 500
+    ? legacyKey
+    : `selected:sha256:${bytesToHex(sha256(utf8ToBytes(legacyKey)))}`;
 }
 
 export function buildShoppingListInventoryPreview(
