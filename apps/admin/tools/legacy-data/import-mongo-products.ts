@@ -200,39 +200,7 @@ async function main() {
             console.error(JSON.stringify(details, null, 2));
           }
 
-          for (const row of chunk) {
-            try {
-              await tx.insert(products).values(row);
-            } catch (rowError) {
-              console.error('Problem product row:');
-              console.error(
-                JSON.stringify(
-                  {
-                    mongoId: row.mongoId,
-                    title: row.title,
-                    sku: row.sku,
-                    brandId: row.brandId,
-                    categoryId: row.categoryId,
-                    barcode: row.barcode,
-                    inventoryQuantity: row.inventoryQuantity,
-                    imagesCount: row.images.length,
-                    createdAt: row.createdAt,
-                    updatedAt: row.updatedAt,
-                  },
-                  null,
-                  2,
-                ),
-              );
-              const details = extractDbErrorDetails(rowError);
-              if (details) {
-                console.error('Row DB error details:');
-                console.error(JSON.stringify(details, null, 2));
-              }
-              throw new Error(
-                `Failed importing product "${row.title}" (${row.mongoId ?? 'no-mongo-id'}): ${summarizeInsertError(rowError)}`,
-              );
-            }
-          }
+          throw error;
         }
         logProgress(
           'Products imported',
