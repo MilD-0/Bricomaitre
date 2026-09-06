@@ -1,9 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveAnalyticsFilters } from './date-range';
-import { loadCohortCompletionPair } from './cohort-completion';
+import { loadCohortCompletionPair, projectCohortCompletionGroups } from './cohort-completion';
 
 describe('grouped cohort completion', () => {
+  it('lets final losses override historical delivery while keeping manual completion separate from carrier payout', () => {
+    const result = projectCohortCompletionGroups(
+      ['retour_archive', 'annule', 'failed', 'manual_completed'].map((outcome) => ({
+        postedDay: '2026-08-18',
+        outcome,
+        delivered: true,
+        observedOrders: 2,
+        units: 3,
+        grossProfitDzd: 100,
+        profitSamples: 2,
+      })),
+      { startDate: '2026-08-18', endDate: '2026-08-18' },
+      0.75,
+    );
+    expect(result).toMatchObject({
+      observedOrders: 8,
+      unresolvedOrders: 0,
+      projectedPaidOrders: 0,
+      projectedPaidUnits: 0,
+      projectedAdjustedProfitDzd: 100,
+      days: [{ projectedPaidOrders: 0, projectedAdjustedProfitDzd: 100 }],
+    });
+  });
   it('weights grouped orders, units, and missing profit separately across comparison periods', async () => {
     const db = {
       execute: async () => ({

@@ -64,6 +64,7 @@ describe('admin AI order status updates', () => {
         },
       ],
       skipped: [],
+      failed: [],
     });
     expect(mocks.update).toHaveBeenCalledWith(
       'database',
@@ -119,7 +120,34 @@ describe('admin AI order status updates', () => {
         },
       ],
       skipped: [{ orderId: 92, reason: 'missing' }],
+      failed: [],
     });
+  });
+
+  it('retains committed status receipts and continues after an unresolved carrier conflict', async () => {
+    const conflict = new Error('Open carrier recovery before editing this order.');
+    conflict.name = 'EcotrackMutationConflictError';
+    mocks.update
+      .mockResolvedValueOnce(order(2, [0, 2]))
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce(order(6, [0, 6]));
+    const result = await updateAdminOrderStatuses({
+      items: [
+        { orderId: 91, status: 'confirmed' },
+        { orderId: 92, status: 'confirmed' },
+        { orderId: 93, status: 'cancelled' },
+      ],
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      items: [
+        { orderId: 91, status: 2 },
+        { orderId: 93, status: 6 },
+      ],
+      skipped: [],
+      failed: [{ orderId: 92, code: 'EcotrackMutationConflictError', message: conflict.message }],
+    });
+    expect(mocks.update).toHaveBeenCalledTimes(3);
   });
 
   it('updates customer, delivery, note, and line details through the canonical workflow', async () => {

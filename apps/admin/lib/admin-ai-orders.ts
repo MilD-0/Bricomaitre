@@ -196,6 +196,7 @@ export async function updateAdminOrderStatuses(
     orderId: number;
     reason: 'missing';
   }> = [];
+  const failed: Array<{ orderId: number; code: string; message: string }> = [];
 
   for (const item of values.items) {
     const status = ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES[item.status];
@@ -226,11 +227,15 @@ export async function updateAdminOrderStatuses(
         skipped.push({ orderId: item.orderId, reason: 'missing' });
         continue;
       }
-      throw error;
+      failed.push({
+        orderId: item.orderId,
+        code: error instanceof Error ? error.name : 'OrderStatusUpdateError',
+        message: error instanceof Error ? error.message : 'Order status update failed.',
+      });
     }
   }
 
-  return { ok: skipped.length === 0, items, skipped };
+  return { ok: skipped.length === 0 && failed.length === 0, items, skipped, failed };
 }
 
 export async function createAdminAiOrder(

@@ -74,15 +74,9 @@ export function projectCohortCompletionGroups(
     const manuallyCompleted = order.outcome === 'manual_completed';
     const terminalLoss = isTerminalLoss(order.outcome);
     const unresolved = !terminalPaid && !delivered && !manuallyCompleted && !terminalLoss;
-    const paidProbability = terminalPaid
-      ? 1
-      : delivered
-        ? 1
-        : terminalLoss || manuallyCompleted
-          ? 0
-          : unresolvedPaidRate;
-    const contributionProbability =
-      terminalPaid || delivered || manuallyCompleted ? 1 : terminalLoss ? 0 : paidProbability;
+    const paidProbability =
+      terminalLoss || manuallyCompleted ? 0 : terminalPaid || delivered ? 1 : unresolvedPaidRate;
+    const contributionProbability = terminalLoss ? 0 : manuallyCompleted ? 1 : paidProbability;
     if (unresolved) unresolvedOrders += order.observedOrders;
     projectedPaidOrders += paidProbability * order.observedOrders;
     projectedPaidUnits += order.units * paidProbability;
