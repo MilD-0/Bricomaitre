@@ -58,7 +58,6 @@ export default defineConfig({
             '**/*.integration.test.ts',
             '**/*.integration.test.tsx',
             '**/*.redis.test.ts',
-            'store/app-store.test.ts',
             '**/node_modules/**',
             '**/.next/**',
             '**/dist/**',
@@ -70,7 +69,7 @@ export default defineConfig({
           name: 'component-jsdom',
           environment: 'jsdom',
           setupFiles: ['./test/setup/component.ts'],
-          include: ['**/*.test.tsx', 'store/app-store.test.ts'],
+          include: ['**/*.test.tsx'],
           exclude: [
             '**/*.integration.test.ts',
             '**/*.integration.test.tsx',

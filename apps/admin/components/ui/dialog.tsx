@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 
 import { cn } from '../../lib/utils';
+import { useModal } from './use-modal';
 
 type DialogContextValue = {
   contentRef: React.RefObject<HTMLDivElement | null>;
@@ -13,20 +14,6 @@ type DialogContextValue = {
 };
 
 const DialogContext = React.createContext<DialogContextValue | null>(null);
-
-let openDialogCount = 0;
-
-function getFocusableElements(container: HTMLElement | null) {
-  if (!container) {
-    return [];
-  }
-
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'));
-}
 
 export function Dialog({
   open,
@@ -39,84 +26,11 @@ export function Dialog({
   fullScreen?: boolean;
   children: React.ReactNode;
 }) {
-  const mounted = React.useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
   const contentRef = React.useRef<HTMLDivElement>(null);
-  const onOpenChangeRef = React.useRef(onOpenChange);
   const titleId = React.useId();
   const descriptionId = React.useId();
 
-  React.useEffect(() => {
-    onOpenChangeRef.current = onOpenChange;
-  }, [onOpenChange]);
-
-  React.useEffect(() => {
-    if (!open || !mounted) {
-      return;
-    }
-
-    openDialogCount += 1;
-
-    const previousOverflow = document.body.style.overflow;
-    const previousActiveElement =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = 'hidden';
-
-    const focusDialog = () => {
-      const focusable = getFocusableElements(contentRef.current);
-      (focusable[0] ?? contentRef.current)?.focus();
-    };
-
-    const animationFrame = window.requestAnimationFrame(focusDialog);
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onOpenChangeRef.current(false);
-        return;
-      }
-
-      if (event.key !== 'Tab') {
-        return;
-      }
-
-      const focusable = getFocusableElements(contentRef.current);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        contentRef.current?.focus();
-        return;
-      }
-
-      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
-      const nextIndex = event.shiftKey
-        ? currentIndex <= 0
-          ? focusable.length - 1
-          : currentIndex - 1
-        : currentIndex === -1 || currentIndex === focusable.length - 1
-          ? 0
-          : currentIndex + 1;
-
-      event.preventDefault();
-      focusable[nextIndex]?.focus();
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      document.removeEventListener('keydown', handleKeyDown);
-      openDialogCount = Math.max(0, openDialogCount - 1);
-
-      if (openDialogCount === 0) {
-        document.body.style.overflow = previousOverflow;
-      }
-
-      previousActiveElement?.focus?.();
-    };
-  }, [mounted, open]);
+  const mounted = useModal(open, contentRef, onOpenChange);
 
   if (!mounted) {
     return null;
@@ -141,7 +55,7 @@ export function Dialog({
               className="absolute inset-0 bg-foreground/10 backdrop-blur-xl"
               onPointerDown={(event) => {
                 event.preventDefault();
-                onOpenChangeRef.current(false);
+                onOpenChange(false);
               }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -163,7 +77,12 @@ export function Dialog({
   );
 }
 
-export function DialogContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+export function DialogContent({
+  className,
+  onPointerDown,
+  onClick,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   const context = React.useContext(DialogContext);
 
   return (
@@ -176,11 +95,11 @@ export function DialogContent({ className, ...props }: React.HTMLAttributes<HTML
       tabIndex={-1}
       onPointerDown={(event) => {
         event.stopPropagation();
-        props.onPointerDown?.(event);
+        onPointerDown?.(event);
       }}
       onClick={(event) => {
         event.stopPropagation();
-        props.onClick?.(event);
+        onClick?.(event);
       }}
       className={cn(
         'relative z-10 my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-[var(--shape-radius-overlay)] bg-[var(--glass-surface)] p-6 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl focus:outline-hidden',

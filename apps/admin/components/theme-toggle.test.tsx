@@ -1,33 +1,24 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 
-const setThemeMock = vi.fn();
-
-vi.mock('next-themes', () => ({
-  useTheme: () => ({
-    resolvedTheme: 'dark',
-    setTheme: setThemeMock,
-  }),
-}));
-
+import { ThemeProvider } from './theme-provider';
 import { ThemeToggle } from './theme-toggle';
 
-describe('ThemeToggle', () => {
-  it('renders an icon-only control and switches to the opposite theme', async () => {
-    document.documentElement.className = 'dark';
-    window.localStorage.removeItem('theme');
-    render(<ThemeToggle />);
+it('changes the provider theme and follows subsequent changes from another tab', async () => {
+  window.localStorage.setItem('theme', 'dark');
+  render(
+    <ThemeProvider>
+      <ThemeToggle />
+    </ThemeProvider>,
+  );
+  const button = await screen.findByRole('button', { name: 'Switch to light mode' });
+  await userEvent.click(button);
+  await waitFor(() => expect(document.documentElement).toHaveClass('light'));
+  expect(window.localStorage.getItem('theme')).toBe('light');
+  expect(button).toHaveAccessibleName('Switch to dark mode');
 
-    const button = await screen.findByRole('button', { name: 'Switch to light mode' });
-    expect(button).toBeInTheDocument();
-    expect(button).not.toHaveTextContent(/\S/);
-
-    await userEvent.click(button);
-
-    expect(setThemeMock).toHaveBeenCalledWith('light');
-    expect(document.documentElement).toHaveClass('light');
-    expect(window.localStorage.getItem('theme')).toBe('light');
-    expect(button).toHaveAccessibleName('Switch to dark mode');
-  });
+  fireEvent(window, new StorageEvent('storage', { key: 'theme', newValue: 'dark' }));
+  await waitFor(() => expect(document.documentElement).toHaveClass('dark'));
+  expect(button).toHaveAccessibleName('Switch to light mode');
 });

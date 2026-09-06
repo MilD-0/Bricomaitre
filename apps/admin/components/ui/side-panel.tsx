@@ -7,16 +7,7 @@ import * as React from 'react';
 
 import { rootMotionTransition } from '../../lib/design-tokens';
 import { cn } from '../../lib/utils';
-
-function getFocusableElements(container: HTMLElement | null) {
-  if (!container) return [];
-
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'));
-}
+import { useModal } from './use-modal';
 
 export function SidePanel({
   open,
@@ -37,70 +28,11 @@ export function SidePanel({
   className?: string;
   closeLabel: string;
 }) {
-  const mounted = React.useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
   const contentRef = React.useRef<HTMLDivElement>(null);
-  const onOpenChangeRef = React.useRef(onOpenChange);
   const titleId = React.useId();
   const descriptionId = React.useId();
 
-  React.useEffect(() => {
-    onOpenChangeRef.current = onOpenChange;
-  }, [onOpenChange]);
-
-  React.useEffect(() => {
-    if (!open || !mounted) return;
-
-    const previousOverflow = document.body.style.overflow;
-    const previousActiveElement =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = 'hidden';
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      const focusable = getFocusableElements(contentRef.current);
-      (focusable[0] ?? contentRef.current)?.focus();
-    });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onOpenChangeRef.current(false);
-        return;
-      }
-
-      if (event.key !== 'Tab') return;
-
-      const focusable = getFocusableElements(contentRef.current);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        contentRef.current?.focus();
-        return;
-      }
-
-      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
-      const nextIndex = event.shiftKey
-        ? currentIndex <= 0
-          ? focusable.length - 1
-          : currentIndex - 1
-        : currentIndex === -1 || currentIndex === focusable.length - 1
-          ? 0
-          : currentIndex + 1;
-
-      event.preventDefault();
-      focusable[nextIndex]?.focus();
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousActiveElement?.focus();
-    };
-  }, [mounted, open]);
+  const mounted = useModal(open, contentRef, onOpenChange);
 
   if (!mounted) return null;
 
@@ -118,7 +50,7 @@ export function SidePanel({
             className="absolute inset-0 cursor-default"
             onPointerDown={(event) => {
               event.preventDefault();
-              onOpenChangeRef.current(false);
+              onOpenChange(false);
             }}
           />
           <motion.div
@@ -154,7 +86,7 @@ export function SidePanel({
               </div>
               <button
                 type="button"
-                onClick={() => onOpenChangeRef.current(false)}
+                onClick={() => onOpenChange(false)}
                 className="grid size-9 shrink-0 place-items-center rounded-[var(--shape-radius-control)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/20"
                 aria-label={closeLabel}
               >

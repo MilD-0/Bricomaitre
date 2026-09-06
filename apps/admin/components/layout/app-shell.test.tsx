@@ -65,7 +65,6 @@ vi.mock('../admin-ai-chat', () => ({
 }));
 
 import { AppShell } from './app-shell';
-import { useAppStore } from '../../store/app-store';
 
 describe('AppShell', () => {
   afterEach(() => {
@@ -74,7 +73,6 @@ describe('AppShell', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useAppStore.setState({ permissions: [], role: 'viewer', roleLabel: null });
     usePathnameMock.mockReturnValue('/en/administration');
     useSearchParamsMock.mockReturnValue(new URLSearchParams());
     Object.defineProperty(window, 'location', {
@@ -238,7 +236,7 @@ describe('AppShell', () => {
     );
   });
 
-  it('syncs the persisted store role from the authenticated role', async () => {
+  it('renders authenticated access and profile details', async () => {
     render(
       <AppShell
         initialPermissions={[
@@ -258,19 +256,6 @@ describe('AppShell', () => {
         <div>child</div>
       </AppShell>,
     );
-
-    await waitFor(() => {
-      expect(useAppStore.getState().role).toBe('admin');
-      expect(useAppStore.getState().permissions).toEqual([
-        'products_write',
-        'orders_write',
-        'assets_write',
-        'brands_categories_write',
-        'ops_view',
-        'analytics_manage',
-        'settings_manage',
-      ]);
-    });
 
     expect(screen.getByLabelText('BricAdmin')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'BricAdmin' })).not.toBeInTheDocument();
@@ -435,6 +420,51 @@ describe('AppShell', () => {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('keeps the mobile sidebar locked and open when its profile dialog closes', async () => {
+    render(
+      <AppShell initialPermissions={['orders_write']} initialRole="employee">
+        <div>orders</div>
+      </AppShell>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open sidebar' });
+    await userEvent.click(trigger);
+    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+    expect(screen.getAllByRole('dialog')).toHaveLength(2);
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(screen.getByRole('button', { name: 'User profile' })).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(document.body.style.overflow).toBe('');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('updates navigation and profile directly when authenticated access changes', async () => {
+    const view = render(
+      <AppShell initialPermissions={['orders_write']} initialRole="employee">
+        orders
+      </AppShell>,
+    );
+    expect(screen.getByRole('link', { name: 'nav.orders' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'nav.administration' })).not.toBeInTheDocument();
+    view.rerender(
+      <AppShell
+        initialPermissions={['settings_manage']}
+        initialRole="campaign-manager"
+        initialRoleLabel="Campaign Manager"
+      >
+        settings
+      </AppShell>,
+    );
+    expect(screen.queryByRole('link', { name: 'nav.orders' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'nav.administration' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+    expect(within(screen.getByRole('dialog')).getByText('Campaign Manager')).toBeInTheDocument();
   });
 
   it('keeps the mobile sidebar open until the pathname actually changes', async () => {

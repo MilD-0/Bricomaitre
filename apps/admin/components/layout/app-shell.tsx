@@ -31,13 +31,13 @@ import { canAccessNavigationItem } from '../../lib/navigation-access';
 import { isBuiltInRole, type PermissionKey, type Role } from '../../lib/permissions';
 import { localeLabels, locales } from '../../lib/i18n';
 import { cn } from '../../lib/utils';
-import { useAppStore } from '../../store/app-store';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Dialog, DialogContent } from '../ui/dialog';
 import { PageTransition, PendingInline } from '../ui/motion';
 import { Spinner } from '../ui/spinner';
+import { useModal } from '../ui/use-modal';
 import { useMediaQuery } from '../ui/use-media-query';
 import { ThemeToggle } from '../theme-toggle';
 import { AdminAiChat } from '../admin-ai-chat';
@@ -86,10 +86,10 @@ const desktopMediaQuery = '(min-width: 1024px)';
 
 export function AppShell({
   children,
-  initialPermissions,
-  initialRole,
+  initialPermissions: permissions,
+  initialRole: role,
   initialIsAllowed = true,
-  initialRoleLabel = null,
+  initialRoleLabel: roleLabel = null,
   initialUserEmail = null,
   initialUserImage = null,
   initialUserName = null,
@@ -106,10 +106,6 @@ export function AppShell({
   adminAiModelIds?: readonly AdminAiModelId[];
 }) {
   const t = useTranslations();
-  const permissions = useAppStore((s) => s.permissions);
-  const role = useAppStore((s) => s.role);
-  const roleLabel = useAppStore((s) => s.roleLabel);
-  const setAccess = useAppStore((s) => s.setAccess);
   const locale = useLocale();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -121,7 +117,7 @@ export function AppShell({
   const [currentHash, setCurrentHash] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
-  const sidebarTriggerRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const sidebarCloseRef = useRef<HTMLButtonElement>(null);
   const sidebarNavigationRef = useRef<HTMLElement>(null);
   const previousPathnameRef = useRef(pathname);
@@ -129,14 +125,6 @@ export function AppShell({
   const displayEmail = initialUserEmail?.trim() || t('settings.general.missingEmail');
   const avatarAlt = initialUserName?.trim() || initialUserEmail?.trim() || t('labels.userProfile');
   const roleDisplayLabel = getRoleDisplayLabel(role, roleLabel, t);
-
-  useEffect(() => {
-    setAccess({
-      permissions: initialPermissions,
-      role: initialRole,
-      roleLabel: initialRoleLabel,
-    });
-  }, [initialPermissions, initialRole, initialRoleLabel, setAccess]);
 
   useEffect(() => {
     if (previousPathnameRef.current === pathname) return;
@@ -194,7 +182,7 @@ export function AppShell({
     [initialIsAllowed, permissions],
   );
   const analyticsQuery = useMemo(() => {
-    if (!pathname.startsWith(`/${locale}/stats`) && pathname !== `/${locale}/stats`) return '';
+    if (pathname !== `/${locale}/stats` && !pathname.startsWith(`/${locale}/stats/`)) return '';
     const params = new URLSearchParams();
     const range = searchParams.get('range');
     if (range) params.set('range', range);
@@ -241,29 +229,7 @@ export function AppShell({
       parent: subItem && item ? t(`nav.${item.key}`) : null,
     };
   }, [currentHash, items, locale, pathname, t]);
-  useEffect(() => {
-    if (isDesktop || !sidebarOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    const previousActiveElement =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const sidebarTrigger = sidebarTriggerRef.current;
-    document.body.style.overflow = 'hidden';
-    const animationFrame = window.requestAnimationFrame(() => sidebarCloseRef.current?.focus());
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setSidebarOpen(false);
-    };
-    document.addEventListener('keydown', closeOnEscape);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      document.removeEventListener('keydown', closeOnEscape);
-      document.body.style.overflow = previousOverflow;
-      (previousActiveElement ?? sidebarTrigger)?.focus();
-    };
-  }, [isDesktop, sidebarOpen]);
+  useModal(!isDesktop && sidebarOpen, sidebarRef, setSidebarOpen, sidebarCloseRef);
 
   const navigate = (href: string) => {
     setPendingHref(href);
@@ -297,6 +263,7 @@ export function AppShell({
 
       <div className="flex w-full gap-2 p-2 sm:gap-4 sm:p-4">
         <motion.aside
+          ref={sidebarRef}
           data-desktop-navigation
           aria-label={t('adminWorkspace.products.selectionMore')}
           aria-modal={!isDesktop && sidebarOpen ? true : undefined}
@@ -472,7 +439,6 @@ export function AppShell({
           >
             <div className="flex min-w-0 items-center gap-3">
               <Button
-                ref={sidebarTriggerRef}
                 type="button"
                 variant="outline"
                 size="sm"

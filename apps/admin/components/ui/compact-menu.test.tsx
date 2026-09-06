@@ -46,6 +46,13 @@ describe('CompactMenu', () => {
 
   it('can open above its trigger near the bottom of a workspace', async () => {
     const user = userEvent.setup();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.getAttribute('role') === 'menu'
+        ? DOMRect.fromRect({ width: 180, height: 100 })
+        : DOMRect.fromRect({ x: 264, y: 700, width: 36, height: 36 });
+    });
     render(
       <CompactMenu label="Bottom row actions" side="top">
         <CompactMenuItem onClick={() => undefined}>Edit</CompactMenuItem>
@@ -55,6 +62,6 @@ describe('CompactMenu', () => {
     await user.click(screen.getByRole('button', { name: 'Bottom row actions' }));
 
     expect(screen.getByRole('menu').parentElement).toBe(document.body);
-    expect(screen.getByRole('menu')).toHaveClass('fixed');
+    expect(screen.getByRole('menu')).toHaveStyle({ top: '594px', left: '120px' });
   });
 });

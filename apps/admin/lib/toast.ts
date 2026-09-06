@@ -60,20 +60,14 @@ function upsertToast({
     toasts = toasts.map((toast) => (toast.id === id ? record : toast));
   }
 
-  if (tone === 'loading') {
+  if (tone === 'loading' || duration === null) {
     const existingTimeout = timeouts.get(id);
     if (existingTimeout) {
       clearTimeout(existingTimeout);
       timeouts.delete(id);
     }
-  } else if (duration !== null) {
-    scheduleRemoval(id, duration);
   } else {
-    const existingTimeout = timeouts.get(id);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-      timeouts.delete(id);
-    }
+    scheduleRemoval(id, duration);
   }
 
   emit();
