@@ -13,8 +13,13 @@ import {
   orders,
   orderStatusHistory,
   orderLineItems,
+  analyticsJourneys,
+  analyticsEvents,
+  analyticsDailyRollups,
 } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
+import { getAnalyticsData } from '../lib/analytics';
+import { analyticsForAssistant } from '../lib/ai-analytics';
 import { inspectAdminOrders } from '../lib/admin-ai-domain';
 import { loadOrderDetail, loadOrderRecordsByIds } from '../lib/admin-orders-data';
 import { proposeProductCategoryAssignment } from '../lib/ai-product-category-proposals';
@@ -40,6 +45,87 @@ afterAll(async () => {
 });
 
 describe('durable AI evidence', () => {
+  it('returns retained product interest to the assistant without double-counting rolled events', async () => {
+    const db = getDb();
+    const marker = randomUUID();
+    const startDate = '2096-03-01',
+      endDate = '2096-03-02';
+    const [product] = await db
+      .insert(products)
+      .values({
+        title: 'Telemetry product',
+        slug: marker,
+        price: '10',
+      })
+      .returning();
+    await db.insert(analyticsJourneys).values({ id: marker });
+    const [order] = await db
+      .insert(orders)
+      .values({
+        phoneNumber1: '0550000333',
+        cartProducts: [String(product!.id)],
+        createdAt: new Date(`${startDate}T12:00:00Z`),
+      })
+      .returning();
+    const rollups = await db
+      .insert(analyticsDailyRollups)
+      .values([
+        { day: startDate, dimension: 'overall', dimensionKey: '', productViews: 4 },
+        {
+          day: startDate,
+          dimension: 'product',
+          dimensionKey: String(product!.id),
+          productViews: 4,
+        },
+      ])
+      .returning();
+    try {
+      await db.insert(analyticsEvents).values(
+        [startDate, endDate].map((day) => ({
+          eventId: randomUUID(),
+          journeyId: marker,
+          sessionId: marker,
+          eventName: 'view_item',
+          productId: product!.id,
+          occurredAt: new Date(`${day}T12:00:00Z`),
+        })),
+      );
+      const payload = await getAnalyticsData(
+        {
+          view: 'storefront',
+          range: 'custom',
+          startDate,
+          endDate,
+        },
+        { db, now: new Date(`${endDate}T16:00:00Z`), includeStorefrontDetails: true },
+      );
+      const result = analyticsForAssistant(payload, {
+        dimension: 'storefront_products',
+        identifiers: [String(product!.id)],
+        limit: 20,
+      });
+      expect(result.focus?.rows).toEqual([
+        expect.objectContaining({
+          id: String(product!.id),
+          title: 'Telemetry product',
+          viewCount: 5,
+          websitePurchaseCount: 1,
+          websiteConversionRate: 20,
+        }),
+      ]);
+    } finally {
+      await db.delete(analyticsDailyRollups).where(
+        inArray(
+          analyticsDailyRollups.id,
+          rollups.map((row) => row.id),
+        ),
+      );
+      await db.delete(analyticsJourneys).where(eq(analyticsJourneys.id, marker));
+      await db.delete(orders).where(eq(orders.id, order!.id));
+      await db.delete(products).where(eq(products.id, product!.id));
+    }
+  });
+
   it('batches exact order inspection with real history, line snapshots and legacy product references', async () => {
     const db = getDb();
     const marker = randomUUID();
@@ -90,19 +176,17 @@ describe('durable AI evidence', () => {
           changedBy: 'confirmed@example.invalid',
         },
       ]);
-      await db
-        .insert(orderLineItems)
-        .values({
-          orderId: rows[1]!.id,
-          productId: product!.id,
-          contentId: String(product!.id),
-          rawValue: String(product!.id),
-          titleSnapshot: 'Sold product title',
-          originalUnitPrice: '10',
-          effectiveUnitPrice: '8',
-          quantity: 2,
-          lineTotal: '16',
-        });
+      await db.insert(orderLineItems).values({
+        orderId: rows[1]!.id,
+        productId: product!.id,
+        contentId: String(product!.id),
+        rawValue: String(product!.id),
+        titleSnapshot: 'Sold product title',
+        originalUnitPrice: '10',
+        effectiveUnitPrice: '8',
+        quantity: 2,
+        lineTotal: '16',
+      });
       const missingId = Number.MAX_SAFE_INTEGER;
       const result = await inspectAdminOrders({
         orderIds: [rows[1]!.id, missingId, rows[0]!.id, rows[1]!.id],

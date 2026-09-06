@@ -1,5 +1,6 @@
 import { getDb } from '@bric/db/client';
 import { getLiveStorefrontAnalytics } from '../storefront-analytics';
+import { getLiveWebsiteProductMetrics } from '../stats-live-commerce';
 import {
   loadStorefrontPaths,
   loadStorefrontSessionFunnel,
@@ -43,7 +44,7 @@ export async function loadStorefrontView(
   );
   const prior = priorFilters ? statsInput(priorFilters.startDate, priorFilters.endDate) : null;
   const pathCoverage = storefrontPathCoverage(storefrontFilters, now);
-  const [dashboard, previous, sources, paths, funnel] = await Promise.all([
+  const [dashboard, previous, sources, paths, funnel, productInterest] = await Promise.all([
     getLiveStorefrontAnalytics(
       db,
       statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
@@ -65,6 +66,12 @@ export async function loadStorefrontView(
           pathCoverage.coverageEndDate,
         )
       : Promise.resolve<Array<{ name: string; value: number }>>([]),
+    includeDetails
+      ? getLiveWebsiteProductMetrics(
+          db,
+          statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
+        )
+      : Promise.resolve([]),
   ]);
   const website = dashboard.website;
   const old = previous?.website;
@@ -110,7 +117,7 @@ export async function loadStorefrontView(
       },
       trend: [],
       searches: website.topSearches,
-      productInterest: website.topProducts,
+      productInterest: productInterest.map((product) => ({ ...product, id: String(product.id) })),
       acquisitionSources: website.acquisitionSources,
       vitals: website.vitals,
       paths: { ...pathCoverage, rows: [] },

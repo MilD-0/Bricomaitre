@@ -280,6 +280,26 @@ describe('admin assistant analytics focus', () => {
     expect(result.truncations).toEqual([]);
   });
 
+  it('matches exact product identity without treating counts or nested ad IDs as product IDs', () => {
+    const payload = catalogPayload();
+    const data = payload.data as unknown as { products: Array<Record<string, unknown>> };
+    data.products[0]!.metaAssociations = [{ adId: '50' }];
+    const focus = focusAnalyticsForAssistant(payload, {
+      dimension: 'products',
+      identifiers: ['50'],
+      limit: 100,
+    });
+    expect(focus.rows).toEqual([data.products[49]]);
+    expect(focus.matched).toBe(1);
+    expect(
+      focusAnalyticsForAssistant(payload, {
+        dimension: 'products',
+        identifiers: ['SKU-2'],
+        limit: 20,
+      }).rows,
+    ).toEqual([data.products[1]]);
+  });
+
   it('qualifies zero matches instead of claiming the entity does not exist', () => {
     const focus = focusAnalyticsForAssistant(catalogPayload(), {
       dimension: 'products',

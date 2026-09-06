@@ -15,7 +15,6 @@ import {
   getCanonicalStorefrontSessionCount,
   getLiveWebsiteProductMetrics,
   buildCanonicalStorefrontSessionsQuery,
-  buildWebsiteProductMetricsQuery,
   mergeCanonicalWebsitePurchases,
 } from './stats-live-commerce';
 const emptyWebsite: WebsiteAnalyticsData = {
@@ -34,7 +33,6 @@ const emptyWebsite: WebsiteAnalyticsData = {
   checkoutToPurchaseRate: 0,
   topSearches: [],
   funnel: [],
-  topProducts: [],
   ...emptyExperienceStats().website,
 };
 
@@ -93,26 +91,6 @@ describe('website analytics history scope', () => {
     expect(query.sql).toContain('analytics_events');
     expect(query.sql).not.toContain('storefrontProject');
     expect(query.params).toEqual(['2026-06-01', '2026-06-30']);
-  });
-
-  it('combines canonical order lines with a non-duplicating legacy cart fallback', () => {
-    const query = new PgDialect().sqlToQuery(
-      buildWebsiteProductMetricsQuery({
-        range: 'custom',
-        startDate: '2026-08-16',
-        endDate: '2026-08-17',
-      }),
-    );
-
-    expect(query.sql).toContain('order_product_purchases as');
-    expect(query.sql).toContain('from "order_line_items"');
-    expect(query.sql).toContain('legacy_order_products as');
-    expect(query.sql).toContain('unnest("orders"."cart_products")');
-    expect(query.sql).toContain('"products"."slug" = trim(product_ref)');
-    expect(query.sql).toContain('not exists');
-    expect(query.sql).toContain('count(distinct order_id)');
-    expect(query.sql).toContain('full join order_product_purchases');
-    expect(query.params).toEqual(expect.arrayContaining(['Africa/Algiers']));
   });
 });
 

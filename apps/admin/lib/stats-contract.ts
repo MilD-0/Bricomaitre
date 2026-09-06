@@ -31,20 +31,6 @@ export const statsQuerySchema = z
 
 export type StatsFilters = z.infer<typeof statsQuerySchema>;
 
-type WebsiteProductInterest = {
-  id: string;
-  title: string;
-  sku: string | null;
-  categoryName: string | null;
-  brandName: string | null;
-  viewCount: number;
-  addToCartCount: number;
-  checkoutCount: number;
-  websitePurchaseCount: number;
-  popularityScore: number;
-  websiteConversionRate: number;
-};
-
 export type WebsiteAnalyticsData = {
   sessions: number;
   journeys: number;
@@ -61,5 +47,4 @@ export type WebsiteAnalyticsData = {
   checkoutToPurchaseRate: number;
   topSearches: Array<{ term: string; searches: number; zeroResults: number }>;
   funnel: Array<{ name: string; value: number }>;
-  topProducts: WebsiteProductInterest[];
 } & WebsiteExperienceStats;

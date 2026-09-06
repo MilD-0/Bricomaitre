@@ -60,7 +60,6 @@ export async function getLiveStorefrontAnalytics(
         zeroResults: row.zeroResults,
       })),
       funnel: [],
-      topProducts: [],
       ...experience.website,
     },
     dailyOrders.reduce((total, day) => total + day.orders, 0),

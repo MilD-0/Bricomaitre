@@ -58,40 +58,37 @@ const adminAiAnalyticsFocusDimensions = [
 
 export type AdminAiAnalyticsFocusDimension = (typeof adminAiAnalyticsFocusDimensions)[number];
 
-const adminAiAnalyticsSelectorDimensionValues = [
-  'campaigns',
-  'adsets',
-  'ads',
-  'attribution_maturation',
-  'tracking_events',
-  'shipment_states',
-  'attempt_outcomes',
-  'storefront_paths',
-  'storefront_searches',
-  'storefront_products',
-  'storefront_sources',
-  'web_vitals',
-  'landing_pages',
-  'search_opportunities',
-  'search_pages',
-  'search_devices',
-  'search_countries',
-  'search_appearances',
-  'search_index_issues',
-  'search_sitemaps',
-  'products',
-  'basket_pairs',
-  'wilayas',
-  'communes',
-  'meta_regions',
-  'customers',
-  'operating_costs',
-  'daily_assumptions',
-] as const satisfies readonly AdminAiAnalyticsFocusDimension[];
+const identifierFields: Partial<Record<AdminAiAnalyticsFocusDimension, readonly string[]>> = {
+  campaigns: ['id', 'name'],
+  adsets: ['id', 'name', 'campaignId'],
+  ads: ['id', 'name', 'campaignId', 'adsetId'],
+  attribution_maturation: ['campaignId'],
+  tracking_events: ['name'],
+  shipment_states: ['status', 'phase'],
+  attempt_outcomes: ['outcome', 'band'],
+  storefront_paths: ['from', 'to'],
+  storefront_searches: ['term'],
+  storefront_products: ['id', 'sku', 'title'],
+  storefront_sources: ['name'],
+  web_vitals: ['name'],
+  landing_pages: ['id', 'slug', 'product'],
+  search_opportunities: ['query'],
+  search_pages: ['page', 'path'],
+  search_devices: ['device'],
+  search_countries: ['country'],
+  search_appearances: ['appearance'],
+  search_index_issues: ['url', 'path'],
+  search_sitemaps: ['path'],
+  products: ['id', 'sku', 'title'],
+  basket_pairs: ['left', 'right'],
+  wilayas: ['wilayaId', 'name'],
+  communes: ['wilayaId', 'wilayaName', 'name'],
+  meta_regions: ['name'],
+  customers: ['name'],
+  operating_costs: ['id', 'name'],
+  daily_assumptions: ['date'],
+};
 
-const adminAiAnalyticsSelectorDimensions = new Set<AdminAiAnalyticsFocusDimension>(
-  adminAiAnalyticsSelectorDimensionValues,
-);
 const adminAiAnalyticsFocusLimitSchema = z
   .number()
   .int()
@@ -510,11 +507,11 @@ export function adminAiAnalyticsFocusSchemaForView(view: AnalyticsView) {
   const dimensions = adminAiAnalyticsFocusDimensions.filter((dimension) =>
     adminAiAnalyticsDatasetSpecs[dimension].views.includes(view),
   );
-  const selectorDimensions = dimensions.filter((dimension) =>
-    adminAiAnalyticsSelectorDimensions.has(dimension),
+  const selectorDimensions = dimensions.filter(
+    (dimension) => identifierFields[dimension] !== undefined,
   );
   const fixedDimensions = dimensions.filter(
-    (dimension) => !adminAiAnalyticsSelectorDimensions.has(dimension),
+    (dimension) => identifierFields[dimension] === undefined,
   );
   const selectorSchema = selectorDimensions.length
     ? z
@@ -526,7 +523,13 @@ export function adminAiAnalyticsFocusSchemaForView(view: AnalyticsView) {
             ],
           ),
           search: z.string().trim().min(1).max(200).optional(),
-          identifiers: z.array(z.string().trim().min(1).max(200)).max(100).default([]),
+          identifiers: z
+            .array(z.string().trim().min(1).max(200))
+            .max(100)
+            .default([])
+            .describe(
+              'Exact entity IDs, keys, or labels. Numeric metric values are not identifiers.',
+            ),
           limit: adminAiAnalyticsFocusLimitSchema,
         })
         .strict()
@@ -577,21 +580,17 @@ function normalized(value: unknown) {
     .toLocaleLowerCase();
 }
 
-function scalarValues(value: unknown, depth = 0, includeNumbers = false): string[] {
+function scalarValues(value: unknown, depth = 0): string[] {
   if (depth > 4 || value == null) return [];
-  if (
-    typeof value === 'string' ||
-    typeof value === 'boolean' ||
-    (includeNumbers && typeof value === 'number')
-  ) {
+  if (typeof value === 'string' || typeof value === 'boolean') {
     return [normalized(value)];
   }
   if (Array.isArray(value)) {
-    return value.flatMap((item) => scalarValues(item, depth + 1, includeNumbers));
+    return value.flatMap((item) => scalarValues(item, depth + 1));
   }
   return record(value)
     ? Object.values(value as Record<string, unknown>).flatMap((item) =>
-        scalarValues(item, depth + 1, includeNumbers),
+        scalarValues(item, depth + 1),
       )
     : [];
 }
@@ -603,7 +602,10 @@ function matchesFocus(row: unknown, focus: AdminAiAnalyticsFocus) {
     return false;
   }
   if (focus.identifiers.length) {
-    const identifierValues = scalarValues(row, 0, true);
+    const value = record(row);
+    const identifierValues = (identifierFields[focus.dimension] ?? []).flatMap((field) =>
+      value?.[field] == null ? [] : [normalized(value[field])],
+    );
     const identifiers = focus.identifiers.map(normalized);
     if (!identifiers.some((identifier) => identifierValues.includes(identifier))) return false;
   }
