@@ -51,7 +51,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
 import { WorkspacePagination } from '../ui/workspace-pagination';
@@ -526,18 +526,10 @@ export function ProductsWorkspace({
               }}
               aria-label={t('adminWorkspace.common.filters')}
             >
-              <NativeSelectOption value="all">
-                {t('adminWorkspace.products.allStates')}
-              </NativeSelectOption>
-              <NativeSelectOption value="active">
-                {t('adminWorkspace.products.active')}
-              </NativeSelectOption>
-              <NativeSelectOption value="inactive">
-                {t('adminWorkspace.products.inactive')}
-              </NativeSelectOption>
-              <NativeSelectOption value="out">
-                {t('adminWorkspace.products.outOfStock')}
-              </NativeSelectOption>
+              <option value="all">{t('adminWorkspace.products.allStates')}</option>
+              <option value="active">{t('adminWorkspace.products.active')}</option>
+              <option value="inactive">{t('adminWorkspace.products.inactive')}</option>
+              <option value="out">{t('adminWorkspace.products.outOfStock')}</option>
             </NativeSelect>
             <NativeSelect
               value={selectedBrandId ?? ''}
@@ -547,11 +539,11 @@ export function ProductsWorkspace({
                 setPage(1);
               }}
             >
-              <NativeSelectOption value="">{t('labels.allBrands')}</NativeSelectOption>
+              <option value="">{t('labels.allBrands')}</option>
               {(metaQuery.data?.brands ?? []).map((brand) => (
-                <NativeSelectOption key={brand.id} value={brand.id}>
+                <option key={brand.id} value={brand.id}>
                   {brand.name}
-                </NativeSelectOption>
+                </option>
               ))}
             </NativeSelect>
             <NativeSelect
@@ -564,11 +556,11 @@ export function ProductsWorkspace({
                 setPage(1);
               }}
             >
-              <NativeSelectOption value="">{t('labels.allCategories')}</NativeSelectOption>
+              <option value="">{t('labels.allCategories')}</option>
               {(metaQuery.data?.categories ?? []).map((category) => (
-                <NativeSelectOption key={category.id} value={category.id}>
+                <option key={category.id} value={category.id}>
                   {category.name}
-                </NativeSelectOption>
+                </option>
               ))}
             </NativeSelect>
           </div>

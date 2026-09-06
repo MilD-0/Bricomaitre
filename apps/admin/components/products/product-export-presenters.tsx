@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Table, TableBody, TableCell, TableHead, TableRow } from '../ui/table';
 
 type MetaCatalogExportRow = {
   id: string;
@@ -97,7 +97,7 @@ export function MetaCatalogExportDialog({
                   )}
                 >
                   <Table className="text-[length:var(--type-size-label-px)] leading-tight">
-                    <TableHeader>
+                    <thead>
                       <TableRow>
                         {META_CATALOG_EXPORT_HEADERS.map((header) => (
                           <TableHead key={header} className="px-2 py-2 whitespace-nowrap">
@@ -105,7 +105,7 @@ export function MetaCatalogExportDialog({
                           </TableHead>
                         ))}
                       </TableRow>
-                    </TableHeader>
+                    </thead>
                     <TableBody>
                       {state.rows.map((row) => (
                         <TableRow key={row.id}>

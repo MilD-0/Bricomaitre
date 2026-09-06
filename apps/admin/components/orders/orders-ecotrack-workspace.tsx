@@ -22,11 +22,11 @@ import { Checkbox } from '../ui/checkbox';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '../ui/empty';
 import { Input } from '../ui/input';
 import { PendingInline } from '../ui/motion';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { ScrollableRegion } from '../ui/scrollable-region';
 import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Table, TableBody, TableCell, TableHead, TableRow } from '../ui/table';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -381,13 +381,11 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
           value={props.statusFilter}
           onChange={(event) => props.onStatusChange(event.target.value)}
         >
-          <NativeSelectOption value="all">
-            {t('ordersEcotrackManager.filters.allStatuses')}
-          </NativeSelectOption>
+          <option value="all">{t('ordersEcotrackManager.filters.allStatuses')}</option>
           {props.statuses.map((status) => (
-            <NativeSelectOption key={status} value={status}>
+            <option key={status} value={status}>
               {t(`ordersEcotrackManager.statuses.${status}`)}
-            </NativeSelectOption>
+            </option>
           ))}
         </NativeSelect>
         <div ref={filterRef} className="relative min-w-11">
@@ -417,9 +415,9 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
                     'lastStatusSyncedAt',
                   ] as const
                 ).map((key) => (
-                  <NativeSelectOption key={key} value={key}>
+                  <option key={key} value={key}>
                     {t(`ordersEcotrackManager.sort.${key}`)}
-                  </NativeSelectOption>
+                  </option>
                 ))}
               </NativeSelect>
               <NativeSelect
@@ -428,12 +426,8 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
                   props.onSortDirectionChange(event.target.value as EcotrackShipmentSortDirection)
                 }
               >
-                <NativeSelectOption value="desc">
-                  {t('ordersEcotrackManager.sort.desc')}
-                </NativeSelectOption>
-                <NativeSelectOption value="asc">
-                  {t('ordersEcotrackManager.sort.asc')}
-                </NativeSelectOption>
+                <option value="desc">{t('ordersEcotrackManager.sort.desc')}</option>
+                <option value="asc">{t('ordersEcotrackManager.sort.asc')}</option>
               </NativeSelect>
               <label className="flex items-center justify-between gap-3 text-sm">
                 {t('ordersEcotrackManager.filters.staleOnly')}
@@ -520,7 +514,7 @@ function RefinedLedger(props: OrdersEcotrackWorkspaceProps) {
     <>
       <ScrollableRegion label={t('nav.ecotrackShipments')} className="hidden lg:block">
         <Table>
-          <TableHeader>
+          <thead>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-10">
                 <Checkbox
@@ -536,7 +530,7 @@ function RefinedLedger(props: OrdersEcotrackWorkspaceProps) {
               <TableHead>{t('ordersEcotrackManager.columns.status')}</TableHead>
               <TableHead className="w-32 text-end">{t('labels.actions')}</TableHead>
             </TableRow>
-          </TableHeader>
+          </thead>
           <TableBody>
             {props.items.map((item) => {
               const expanded = props.inspectedIds.includes(item.orderId);

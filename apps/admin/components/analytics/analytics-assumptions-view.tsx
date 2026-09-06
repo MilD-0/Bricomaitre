@@ -11,7 +11,7 @@ import { toast } from '../../lib/toast';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
 import { AnalyticsTableHead as TableHead } from './analytics-presentation';
 import {
@@ -407,10 +407,8 @@ export function AssumptionsView({
                     }))
                   }
                 >
-                  <NativeSelectOption value="monthly">
-                    {copy.assumptions.monthly}
-                  </NativeSelectOption>
-                  <NativeSelectOption value="once">{copy.assumptions.once}</NativeSelectOption>
+                  <option value="monthly">{copy.assumptions.monthly}</option>
+                  <option value="once">{copy.assumptions.once}</option>
                 </NativeSelect>
               </label>
               <label>

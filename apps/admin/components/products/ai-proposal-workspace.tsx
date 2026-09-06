@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
 import { WorkspacePagination } from '../ui/workspace-pagination';
 import { useMediaQuery } from '../ui/use-media-query';
@@ -312,11 +312,11 @@ export function AiProposalWorkspace({
               aria-label={t('sort')}
               className="min-w-0 md:w-48"
             >
-              <NativeSelectOption value="newest">{t('sortNewest')}</NativeSelectOption>
-              <NativeSelectOption value="oldest">{t('sortOldest')}</NativeSelectOption>
-              <NativeSelectOption value="confidence">{t('sortConfidence')}</NativeSelectOption>
-              <NativeSelectOption value="expires">{t('sortExpiry')}</NativeSelectOption>
-              <NativeSelectOption value="type">{t('sortType')}</NativeSelectOption>
+              <option value="newest">{t('sortNewest')}</option>
+              <option value="oldest">{t('sortOldest')}</option>
+              <option value="confidence">{t('sortConfidence')}</option>
+              <option value="expires">{t('sortExpiry')}</option>
+              <option value="type">{t('sortType')}</option>
             </NativeSelect>
             <div className="contents md:flex md:gap-2">
               <Button type="submit" aria-label={t('applyFilters')}>
@@ -349,11 +349,11 @@ export function AiProposalWorkspace({
               defaultValue={initialData.query.proposalType ?? ''}
               aria-label={t('proposalType')}
             >
-              <NativeSelectOption value="">{t('allProposalTypes')}</NativeSelectOption>
+              <option value="">{t('allProposalTypes')}</option>
               {initialData.facets.proposalTypes.map((value) => (
-                <NativeSelectOption key={value} value={value}>
+                <option key={value} value={value}>
                   {humanizeProposalToken(value)}
-                </NativeSelectOption>
+                </option>
               ))}
             </NativeSelect>
             <NativeSelect
@@ -361,11 +361,11 @@ export function AiProposalWorkspace({
               defaultValue={initialData.query.entityType ?? ''}
               aria-label={t('entityType')}
             >
-              <NativeSelectOption value="">{t('allEntityTypes')}</NativeSelectOption>
+              <option value="">{t('allEntityTypes')}</option>
               {initialData.facets.entityTypes.map((value) => (
-                <NativeSelectOption key={value} value={value}>
+                <option key={value} value={value}>
                   {humanizeProposalToken(value)}
-                </NativeSelectOption>
+                </option>
               ))}
             </NativeSelect>
             <NativeSelect
@@ -373,11 +373,11 @@ export function AiProposalWorkspace({
               defaultValue={initialData.query.model ?? ''}
               aria-label={t('model')}
             >
-              <NativeSelectOption value="">{t('allModels')}</NativeSelectOption>
+              <option value="">{t('allModels')}</option>
               {initialData.facets.models.map((value) => (
-                <NativeSelectOption key={value} value={value}>
+                <option key={value} value={value}>
                   {value}
-                </NativeSelectOption>
+                </option>
               ))}
             </NativeSelect>
             <NativeSelect
@@ -385,18 +385,18 @@ export function AiProposalWorkspace({
               defaultValue={initialData.query.expiry}
               aria-label={t('expiry')}
             >
-              <NativeSelectOption value="all">{t('allExpiry')}</NativeSelectOption>
-              <NativeSelectOption value="active">{t('activeOnly')}</NativeSelectOption>
-              <NativeSelectOption value="expired">{t('expiredOnly')}</NativeSelectOption>
+              <option value="all">{t('allExpiry')}</option>
+              <option value="active">{t('activeOnly')}</option>
+              <option value="expired">{t('expiredOnly')}</option>
             </NativeSelect>
             <NativeSelect
               name="evidence"
               defaultValue={initialData.query.evidence}
               aria-label={t('evidenceFilter')}
             >
-              <NativeSelectOption value="all">{t('allEvidence')}</NativeSelectOption>
-              <NativeSelectOption value="present">{t('withEvidence')}</NativeSelectOption>
-              <NativeSelectOption value="missing">{t('withoutEvidence')}</NativeSelectOption>
+              <option value="all">{t('allEvidence')}</option>
+              <option value="present">{t('withEvidence')}</option>
+              <option value="missing">{t('withoutEvidence')}</option>
             </NativeSelect>
             <NativeSelect
               name="pageSize"
@@ -404,9 +404,9 @@ export function AiProposalWorkspace({
               aria-label={t('pageSize')}
             >
               {[10, 20, 50, 100].map((value) => (
-                <NativeSelectOption key={value} value={value}>
+                <option key={value} value={value}>
                   {t('perPage', { count: value })}
-                </NativeSelectOption>
+                </option>
               ))}
             </NativeSelect>
             {activeFilterCount > 0 || initialData.query.q ? (

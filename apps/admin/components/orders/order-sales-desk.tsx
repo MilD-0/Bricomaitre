@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { Spinner } from '../ui/spinner';
 import { Textarea } from '../ui/textarea';
 import type { ProductSearchItem, ProductSearchResponse } from './order-products-editor';
@@ -166,8 +166,8 @@ export function OrderSalesDesk({
                 value={String(delivery)}
                 onChange={(event) => setDelivery(Number(event.target.value) as 0 | 1)}
               >
-                <NativeSelectOption value="0">{t('home')}</NativeSelectOption>
-                <NativeSelectOption value="1">{t('office')}</NativeSelectOption>
+                <option value="0">{t('home')}</option>
+                <option value="1">{t('office')}</option>
               </NativeSelect>
             </label>
             <label className="grid gap-1.5 text-sm font-medium">
@@ -179,22 +179,22 @@ export function OrderSalesDesk({
                   setCity('');
                 }}
               >
-                <NativeSelectOption value="">{t('selectWilaya')}</NativeSelectOption>
+                <option value="">{t('selectWilaya')}</option>
                 {catalog?.wilayas.map((wilaya) => (
-                  <NativeSelectOption key={wilaya.wilayaId} value={wilaya.wilayaId}>
+                  <option key={wilaya.wilayaId} value={wilaya.wilayaId}>
                     {wilaya.name}
-                  </NativeSelectOption>
+                  </option>
                 ))}
               </NativeSelect>
             </label>
             <label className="grid gap-1.5 text-sm font-medium">
               {t('commune')}
               <NativeSelect value={city} onChange={(event) => setCity(event.target.value)}>
-                <NativeSelectOption value="">{t('selectCommune')}</NativeSelectOption>
+                <option value="">{t('selectCommune')}</option>
                 {communes.map((commune) => (
-                  <NativeSelectOption key={commune.communeId} value={commune.communeId}>
+                  <option key={commune.communeId} value={commune.communeId}>
                     {commune.name}
-                  </NativeSelectOption>
+                  </option>
                 ))}
               </NativeSelect>
             </label>

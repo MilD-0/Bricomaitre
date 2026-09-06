@@ -40,7 +40,7 @@ import {
   DialogTitle,
 } from './ui/dialog';
 import { SurfacePendingOverlay } from './ui/motion';
-import { NativeSelect, NativeSelectOption } from './ui/native-select';
+import { NativeSelect } from './ui/native-select';
 import { SidePanel } from './ui/side-panel';
 import { Switch } from './ui/switch';
 import { WorkspacePagination } from './ui/workspace-pagination';
@@ -577,11 +577,11 @@ export function ActionHistoryPanel({
             }}
           >
             {['all', 'create', 'update', 'delete'].map((value) => (
-              <NativeSelectOption key={value} value={value}>
+              <option key={value} value={value}>
                 {value === 'all'
                   ? t('history.filters.allActions')
                   : t(`history.operations.${value}`)}
-              </NativeSelectOption>
+              </option>
             ))}
           </NativeSelect>
           <NativeSelect
@@ -592,7 +592,7 @@ export function ActionHistoryPanel({
               setResource(event.target.value as HistoryResourceFilter);
             }}
           >
-            <NativeSelectOption value="all">{t('history.filters.allAreas')}</NativeSelectOption>
+            <option value="all">{t('history.filters.allAreas')}</option>
             {[
               'orders',
               'products',
@@ -603,9 +603,9 @@ export function ActionHistoryPanel({
               'settings',
               'ecotrack',
             ].map((value) => (
-              <NativeSelectOption key={value} value={value}>
+              <option key={value} value={value}>
                 {t(`history.resources.${value}`)}
-              </NativeSelectOption>
+              </option>
             ))}
           </NativeSelect>
           <NativeSelect
@@ -616,9 +616,9 @@ export function ActionHistoryPanel({
               setState(event.target.value as HistoryState);
             }}
           >
-            <NativeSelectOption value="all">{t('history.filters.allStates')}</NativeSelectOption>
-            <NativeSelectOption value="applied">{t('history.state.applied')}</NativeSelectOption>
-            <NativeSelectOption value="undone">{t('history.state.undone')}</NativeSelectOption>
+            <option value="all">{t('history.filters.allStates')}</option>
+            <option value="applied">{t('history.state.applied')}</option>
+            <option value="undone">{t('history.state.undone')}</option>
           </NativeSelect>
           <div className="flex items-center gap-2 text-sm text-foreground">
             <Switch

@@ -7,7 +7,7 @@ import { brandFormSchema, categoryFormSchema } from '../../lib/brands-categories
 import { Button } from '../ui/button';
 import { Field, FieldError, FieldLabel } from '../ui/field';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
 import { ImageUploadField } from '../image-upload-field';
 
@@ -124,13 +124,13 @@ export function TaxonomyEditorPanel({
                 value={parentId}
                 onChange={(event) => setParentId(event.target.value)}
               >
-                <NativeSelectOption value="">{copy.noParent}</NativeSelectOption>
+                <option value="">{copy.noParent}</option>
                 {parentOptions
                   .filter((option) => option.id !== item?.id)
                   .map((option) => (
-                    <NativeSelectOption key={option.id} value={option.id}>
+                    <option key={option.id} value={option.id}>
                       {option.name}
-                    </NativeSelectOption>
+                    </option>
                   ))}
               </NativeSelect>
             </Field>

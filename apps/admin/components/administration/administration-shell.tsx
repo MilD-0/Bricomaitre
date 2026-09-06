@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 
 import { administrationAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import {
   WorkspaceFrame,
   WorkspaceHeader,
@@ -51,9 +51,9 @@ export function AdministrationShell({
           }}
         >
           {sections.map((key) => (
-            <NativeSelectOption key={key} value={key}>
+            <option key={key} value={key}>
               {label(key)}
-            </NativeSelectOption>
+            </option>
           ))}
         </NativeSelect>
       </div>

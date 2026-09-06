@@ -18,7 +18,7 @@ import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption, NativeSelectOptGroup } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
 
 type AccessGrantItem = {
@@ -165,20 +165,20 @@ export function AdministrationUsersWorkspace() {
             }
           }}
         >
-          <NativeSelectOptGroup label={t('settings.accessManager.builtInGroup')}>
+          <optgroup label={t('settings.accessManager.builtInGroup')}>
             {query.data.availableBuiltInRoles.map((role) => (
-              <NativeSelectOption key={role} value={`built-in:${role}`}>
+              <option key={role} value={`built-in:${role}`}>
                 {t(`roles.${role}`)}
-              </NativeSelectOption>
+              </option>
             ))}
-          </NativeSelectOptGroup>
-          <NativeSelectOptGroup label={t('settings.accessManager.customGroup')}>
+          </optgroup>
+          <optgroup label={t('settings.accessManager.customGroup')}>
             {query.data.availableCustomRoles.map((role) => (
-              <NativeSelectOption key={role.id} value={`custom:${role.id}`}>
+              <option key={role.id} value={`custom:${role.id}`}>
                 {role.name}
-              </NativeSelectOption>
+              </option>
             ))}
-          </NativeSelectOptGroup>
+          </optgroup>
         </NativeSelect>
       </label>
       <div className="flex flex-wrap gap-2 border-t border-border/60 pt-4">

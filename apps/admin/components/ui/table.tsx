@@ -6,13 +6,6 @@ export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTab
   return <table className={cn('w-full caption-bottom text-sm', className)} {...props} />;
 }
 
-export function TableHeader({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn(className)} {...props} />;
-}
-
 export function TableBody({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
   return <tbody className={cn('[&_tr:nth-child(even)]:bg-muted/35', className)} {...props} />;
 }

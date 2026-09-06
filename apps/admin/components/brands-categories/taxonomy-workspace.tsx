@@ -24,7 +24,7 @@ import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Checkbox } from '../ui/checkbox';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { Switch } from '../ui/switch';
 import {
   WorkspaceActions,
@@ -376,9 +376,9 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
             }}
             className="min-w-44"
           >
-            <NativeSelectOption value="updated">{t.recentlyModified}</NativeSelectOption>
-            <NativeSelectOption value="name">{t.alphabetically}</NativeSelectOption>
-            <NativeSelectOption value="products">{t.mostProducts}</NativeSelectOption>
+            <option value="updated">{t.recentlyModified}</option>
+            <option value="name">{t.alphabetically}</option>
+            <option value="products">{t.mostProducts}</option>
           </NativeSelect>
         </label>
       </WorkspaceToolbar>

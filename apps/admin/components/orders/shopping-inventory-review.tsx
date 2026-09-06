@@ -11,7 +11,7 @@ import type { ShoppingListAllocationReview } from '../../lib/shopping-list-stock
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 
 const copy = {
   en: {
@@ -143,9 +143,9 @@ export function ShoppingInventoryReviewDialog({
                 onChange={(event) => setSelected(event.target.value)}
               >
                 {choices.map((item) => (
-                  <NativeSelectOption key={item.key} value={item.key}>
+                  <option key={item.key} value={item.key}>
                     {item.product.title} · {item.review.title}
-                  </NativeSelectOption>
+                  </option>
                 ))}
               </NativeSelect>
             </label>

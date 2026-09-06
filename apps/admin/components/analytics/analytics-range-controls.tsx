@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 
 type AnalyticsRange = '7d' | '14d' | '30d' | '90d' | 'year' | 'all' | 'custom';
 type AnalyticsGrain = 'auto' | 'day' | 'week' | 'month';
@@ -87,9 +87,9 @@ export function AnalyticsRangeControls({
         onChange={(event) => onRangeChange(event.target.value as AnalyticsRange)}
       >
         {ranges.map((option) => (
-          <NativeSelectOption key={option} value={option}>
+          <option key={option} value={option}>
             {rangeLabels[option]}
-          </NativeSelectOption>
+          </option>
         ))}
       </NativeSelect>
       {range === 'custom' ? (
@@ -137,9 +137,9 @@ export function AnalyticsRangeControls({
         onChange={(event) => onGrainChange(event.target.value as AnalyticsGrain)}
       >
         {grains.map((option) => (
-          <NativeSelectOption key={option} value={option}>
+          <option key={option} value={option}>
             {grainLabels[option]}
-          </NativeSelectOption>
+          </option>
         ))}
       </NativeSelect>
     </div>

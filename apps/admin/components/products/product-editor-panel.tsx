@@ -21,7 +21,7 @@ import { Button } from '../ui/button';
 import { Field, FieldError, FieldLabel } from '../ui/field';
 import { FormSection } from '../ui/form-section';
 import { Input } from '../ui/input';
-import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { NativeSelect } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
@@ -404,11 +404,11 @@ export function ProductEditorPanel({
                     setValueAs: optionalNumericInput,
                   })}
                 >
-                  <NativeSelectOption value="">{t('labels.noBrand')}</NativeSelectOption>
+                  <option value="">{t('labels.noBrand')}</option>
                   {meta.brands.map((brand) => (
-                    <NativeSelectOption key={brand.id} value={brand.id}>
+                    <option key={brand.id} value={brand.id}>
                       {brand.name}
-                    </NativeSelectOption>
+                    </option>
                   ))}
                 </NativeSelect>
                 {form.formState.errors.brandId ? (
@@ -423,11 +423,11 @@ export function ProductEditorPanel({
                     setValueAs: optionalNumericInput,
                   })}
                 >
-                  <NativeSelectOption value="">{t('labels.noCategory')}</NativeSelectOption>
+                  <option value="">{t('labels.noCategory')}</option>
                   {meta.categories.map((category) => (
-                    <NativeSelectOption key={category.id} value={category.id}>
+                    <option key={category.id} value={category.id}>
                       {category.name}
-                    </NativeSelectOption>
+                    </option>
                   ))}
                 </NativeSelect>
                 {form.formState.errors.categoryId ? (

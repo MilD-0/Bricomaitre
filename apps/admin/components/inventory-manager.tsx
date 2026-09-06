@@ -49,7 +49,7 @@ import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './
 import { ScrollableRegion } from './ui/scrollable-region';
 import { Skeleton } from './ui/skeleton';
 import { Switch } from './ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Table, TableBody, TableCell, TableHead, TableRow } from './ui/table';
 import {
   WorkspaceFrame,
   WorkspaceHeader,
@@ -833,7 +833,7 @@ export function InventoryManager({ title }: { title: string }) {
           >
             <ScrollableRegion label={t('nav.inventory')} className="hidden md:block">
               <Table>
-                <TableHeader>
+                <thead>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>
                       <MultiSortHeader
@@ -858,7 +858,7 @@ export function InventoryManager({ title }: { title: string }) {
                       />
                     </TableHead>
                   </TableRow>
-                </TableHeader>
+                </thead>
                 <TableBody>
                   {isLoading ? <InventoryTableSkeleton /> : null}
 

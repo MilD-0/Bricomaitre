@@ -19,17 +19,3 @@ export function NativeSelect({
     />
   );
 }
-
-export function NativeSelectOption({
-  children,
-  ...props
-}: React.OptionHTMLAttributes<HTMLOptionElement>) {
-  return <option {...props}>{children}</option>;
-}
-
-export function NativeSelectOptGroup({
-  children,
-  ...props
-}: React.OptgroupHTMLAttributes<HTMLOptGroupElement>) {
-  return <optgroup {...props}>{children}</optgroup>;
-}
