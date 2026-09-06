@@ -297,9 +297,16 @@ export async function readStorefrontProducts(db: Database, query: StorefrontProd
       : [standardOrderBy, direction(products.id)];
   const whereClause = buildStorefrontProductWhereClause(query);
 
-  const rows = await db
-    .select(productSelection)
-    .from(products)
+  const statement = db.select(productSelection).from(products).$dynamic();
+  if (query.search) {
+    statement
+      .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
+      .leftJoin(
+        categories,
+        and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
+      );
+  }
+  const rows = await statement
     .where(whereClause)
     .orderBy(...orderBy)
     .limit(query.limit)
@@ -455,10 +462,16 @@ function buildStorefrontProductWhereClause(query: StorefrontProductListQuery) {
 }
 
 export async function countStorefrontProducts(db: Database, query: StorefrontProductListQuery) {
-  const rows = await db
-    .select({ count: count() })
-    .from(products)
-    .where(buildStorefrontProductWhereClause(query));
+  const statement = db.select({ count: count() }).from(products).$dynamic();
+  if (query.search) {
+    statement
+      .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
+      .leftJoin(
+        categories,
+        and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
+      );
+  }
+  const rows = await statement.where(buildStorefrontProductWhereClause(query));
 
   return Number(rows[0]?.count ?? 0);
 }

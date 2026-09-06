@@ -8,10 +8,14 @@ import {
   storefrontOrderIdempotency,
 } from '@bric/db/schema';
 import {
+  countStorefrontProducts,
   readStorefrontProductById,
   readStorefrontProductByToken,
 } from '@bric/storefront-core/catalog';
-import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contracts';
+import {
+  storefrontOrderCreateRequestSchema,
+  storefrontProductListQuerySchema,
+} from '@bric/storefront-core/contracts';
 import { readPublishedStorefrontLandingPage } from '@bric/storefront-core/landing-page-records';
 import {
   claimStorefrontOrderIdempotency,
@@ -212,6 +216,12 @@ describe('storefront transaction boundaries', () => {
         collision!.id,
       );
       expect((await readStorefrontProductById(db, first!.id))?.item.id).toBe(first!.id);
+      expect(
+        await countStorefrontProducts(
+          db,
+          storefrontProductListQuerySchema.parse({ search: 'Bound product', id: first!.id }),
+        ),
+      ).toBe(1);
       expect(
         (await readPublishedStorefrontLandingPage(db, { slug: page!.slug, locale: 'fr' }))?.product
           .id,
