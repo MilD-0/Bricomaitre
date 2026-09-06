@@ -42,9 +42,11 @@ export function buildShoppingListDraftUrl(
   orderIds: readonly number[],
 ) {
   const params = new URLSearchParams({ sourceMode });
-  normalizeShoppingListOrderIds(orderIds).forEach((orderId) => {
-    params.append('orderIds', String(orderId));
-  });
+  if (sourceMode === 'selected') {
+    normalizeShoppingListOrderIds(orderIds).forEach((orderId) => {
+      params.append('orderIds', String(orderId));
+    });
+  }
 
   return `/api/orders/shopping-list-draft?${params.toString()}`;
 }

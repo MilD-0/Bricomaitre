@@ -5,7 +5,11 @@ import { orderInventoryAllocations, products, shoppingListDrafts } from '@bric/d
 import type { ActionActor } from './action-history';
 import { runIdempotentAdminMutation } from './admin-mutation-idempotency';
 import { applyInventoryQuantityChangeInTransaction } from './inventory-actions';
-import { buildShoppingListScopeKey, shoppingListDraftQuerySchema } from './shopping-list-drafts';
+import {
+  buildShoppingListScopeKey,
+  MAX_SHOPPING_LIST_ENTRIES,
+  shoppingListDraftQuerySchema,
+} from './shopping-list-drafts';
 import {
   serializeShoppingListDraft,
   ShoppingListDraftConflictError,
@@ -25,7 +29,7 @@ export const shoppingListInventoryApplySchema = shoppingListDraftQuerySchema
   .extend({
     revision: z.number().int().nonnegative(),
     requestId: z.string().trim().min(1).max(200),
-    draftIds: z.array(z.string().min(1).max(220)).min(1).max(500),
+    draftIds: z.array(z.string().min(1).max(220)).min(1).max(MAX_SHOPPING_LIST_ENTRIES),
   })
   .strict();
 

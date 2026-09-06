@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
 import {
@@ -212,6 +212,8 @@ export function BulletinBoard() {
   const loadingToastIdRef = useRef<string | null>(null);
   const [editingPost, setEditingPost] = useState<BulletinPostRecord | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [attachmentsUploading, setAttachmentsUploading] = useState(false);
+  const attachmentsUploadingRef = useRef(false);
   const [activeTag, setActiveTag] = useState<string>('all');
   const [sort, setSort] = useState<'updated-desc' | 'updated-asc' | 'created-desc'>('updated-desc');
   const [page, setPage] = useState(1);
@@ -708,40 +710,47 @@ export function BulletinBoard() {
     }),
   );
 
-  const onSubmit = form.handleSubmit(async (values) => {
-    const payload = {
-      title: values.title,
-      body: values.body,
-      tags: parseBulletinTags(values.tagsInput),
-      pinned: values.pinned,
-      attachments: values.attachments,
-    };
-
-    const parsed = bulletinPostSchema.safeParse(payload);
-    if (!parsed.success) {
-      parsed.error.issues.forEach((issue) => {
-        const path = issue.path[0];
-        if (path === 'title' || path === 'body') {
-          form.setError(path, { message: issue.message });
-        }
-        if (path === 'tags') {
-          form.setError('tagsInput', { message: issue.message });
-        }
-        if (path === 'attachments') {
-          form.setError('attachments', { message: issue.message });
-        }
-      });
-      toast.error(t('notifications.validation'));
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (attachmentsUploadingRef.current) {
+      event.preventDefault();
       return;
     }
+    return form.handleSubmit(async (values) => {
+      if (attachmentsUploadingRef.current) return;
+      const payload = {
+        title: values.title,
+        body: values.body,
+        tags: parseBulletinTags(values.tagsInput),
+        pinned: values.pinned,
+        attachments: values.attachments,
+      };
 
-    if (editingPost) {
-      await updateMutation.mutateAsync({ id: editingPost.id, values });
-      return;
-    }
+      const parsed = bulletinPostSchema.safeParse(payload);
+      if (!parsed.success) {
+        parsed.error.issues.forEach((issue) => {
+          const path = issue.path[0];
+          if (path === 'title' || path === 'body') {
+            form.setError(path, { message: issue.message });
+          }
+          if (path === 'tags') {
+            form.setError('tagsInput', { message: issue.message });
+          }
+          if (path === 'attachments') {
+            form.setError('attachments', { message: issue.message });
+          }
+        });
+        toast.error(t('notifications.validation'));
+        return;
+      }
 
-    await createMutation.mutateAsync(values);
-  });
+      if (editingPost) {
+        await updateMutation.mutateAsync({ id: editingPost.id, values });
+        return;
+      }
+
+      await createMutation.mutateAsync(values);
+    })(event);
+  };
 
   const allTags = ['all', ...boardQuery.data.availableTags];
   const busy =
@@ -897,6 +906,11 @@ export function BulletinBoard() {
 
             <FileUploadField
               uploadUrl="/api/uploads/bulletin"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              onUploadingChange={(uploading) => {
+                attachmentsUploadingRef.current = uploading;
+                setAttachmentsUploading(uploading);
+              }}
               label={t('composer.attachmentsLabel')}
               hint={t('composer.attachmentsHint')}
               value={normalizeAttachments(draftValues.attachments)}
@@ -927,7 +941,10 @@ export function BulletinBoard() {
             </Field>
 
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={busy || !boardQuery.data.permissions.canPost}>
+              <Button
+                type="submit"
+                disabled={busy || attachmentsUploading || !boardQuery.data.permissions.canPost}
+              >
                 {createMutation.isPending || updateMutation.isPending ? (
                   <LoaderCircle data-icon="inline-start" className="animate-spin" />
                 ) : (

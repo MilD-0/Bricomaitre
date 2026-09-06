@@ -2,7 +2,18 @@ import { z } from 'zod';
 
 import { paginationMetaSchema, paginationQuerySchema } from './pagination';
 
-export { paginationQuerySchema };
+export const inventorySortKeys = ['title', 'inventoryQuantity', 'inStock'] as const;
+export const inventoryQuerySchema = paginationQuerySchema.extend({
+  sort: z
+    .array(
+      z.object({
+        key: z.enum(inventorySortKeys),
+        direction: z.enum(['asc', 'desc']),
+      }),
+    )
+    .max(inventorySortKeys.length)
+    .default([{ key: 'title', direction: 'asc' }]),
+});
 
 const inventoryRowSchema = z.object({
   id: z.number().int().positive(),

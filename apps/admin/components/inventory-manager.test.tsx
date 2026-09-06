@@ -6,6 +6,8 @@ import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import messages from '../messages/en.json';
+import { applyClientMultiSort, parseSortRuleStrings } from '../lib/multi-sort';
+import { inventorySortKeys } from '../lib/inventory';
 import { toast } from '../lib/toast';
 import { server } from '../test/mocks/server';
 import { InventoryManager } from './inventory-manager';
@@ -61,7 +63,13 @@ describe('InventoryManager', () => {
 
         const perPage = search ? 50 : 50;
         const start = (page - 1) * perPage;
-        const pageItems = filtered.slice(start, start + perPage);
+        const parsedSort = parseSortRuleStrings(url.searchParams.getAll('sort'), inventorySortKeys);
+        const sorted = applyClientMultiSort(filtered, parsedSort.ok ? parsedSort.rules : [], {
+          title: (row) => row.title,
+          inventoryQuantity: (row) => row.inventoryQuantity,
+          inStock: (row) => row.inStock,
+        });
+        const pageItems = sorted.slice(start, start + perPage);
 
         return HttpResponse.json({
           writable: true,
@@ -213,28 +221,28 @@ describe('InventoryManager', () => {
         .slice(1)
         .map((row) => within(row).getByText(/Hammer|Wrench/).textContent);
 
-    expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Hammer', 'Wrench']));
 
     await userEvent.click(within(table).getByRole('button', { name: /^Product/ }));
-    expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Hammer', 'Wrench']));
 
     await userEvent.click(within(table).getByRole('button', { name: /^Product/ }));
-    expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Wrench', 'Hammer']));
 
     await userEvent.click(within(table).getByRole('button', { name: /^Inventory quantity/ }));
-    expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Wrench', 'Hammer']));
 
     await userEvent.click(within(table).getByRole('button', { name: /^Inventory quantity/ }));
-    expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Wrench', 'Hammer']));
 
     await userEvent.click(within(table).getByRole('button', { name: /^Product/ }));
-    expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Hammer', 'Wrench']));
 
     await userEvent.click(within(table).getByRole('button', { name: /^In stock/ }));
-    expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Hammer', 'Wrench']));
 
     await userEvent.click(within(table).getByRole('button', { name: /^In stock/ }));
-    expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
+    await waitFor(() => expect(getProductOrder()).toEqual(['Hammer', 'Wrench']));
   });
 
   it('supports barcode add and inventory controls from the table', async () => {

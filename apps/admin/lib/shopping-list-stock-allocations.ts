@@ -14,6 +14,7 @@ import {
 } from '@bric/db/schema';
 import {
   buildShoppingListScopeKey,
+  MAX_SHOPPING_LIST_ENTRIES,
   reconcileShoppingListAllocations,
   shoppingListDraftPayloadSchema,
   type ShoppingListDraftPayload,
@@ -329,7 +330,7 @@ export const shoppingListAllocationReviewSchema = z
           })
           .strict(),
       )
-      .max(500),
+      .max(MAX_SHOPPING_LIST_ENTRIES),
     manualQuantity: z.number().int().nonnegative().max(999999),
   })
   .strict();

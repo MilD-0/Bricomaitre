@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { buildShoppingListDraftUrl } from '../components/orders/orders-shopping-list';
 
 import {
   buildGeneratedShoppingListDraft,
   buildShoppingListInventoryPreview,
   reconcileShoppingListAllocations,
   mergeShoppingListDraft,
+  shoppingListDraftSaveRequestSchema,
 } from './shopping-list-drafts';
 
 function orderProduct(overrides: Record<string, unknown> = {}) {
@@ -95,6 +97,36 @@ describe('shopping-list draft generation', () => {
     expect(resolveProductDetails).toHaveBeenCalledWith(12);
     expect(resolveBrandName).toHaveBeenCalledTimes(2);
     expect(draft.draftItems).not.toBe(draft.generatedItems);
+  });
+
+  it('addresses status lists without putting the full cohort in the URL', () => {
+    const ids = Array.from({ length: 681 }, (_, index) => 250000 + index);
+    expect(buildShoppingListDraftUrl('posted-and-confirmed', ids)).toBe(
+      '/api/orders/shopping-list-draft?sourceMode=posted-and-confirmed',
+    );
+    expect(buildShoppingListDraftUrl('selected', [32, 31, 31])).toBe(
+      '/api/orders/shopping-list-draft?sourceMode=selected&orderIds=31&orderIds=32',
+    );
+  });
+
+  it('preserves a large cohort through generation and the save contract', async () => {
+    const draft = await buildGeneratedShoppingListDraft({
+      orders: Array.from({ length: 681 }, (_, index) => ({
+        id: index + 1,
+        fullName: `Customer ${index}`,
+        note: null,
+        orderProducts: [orderProduct({ productId: index + 1 })],
+      })),
+      sourceMode: 'posted-and-confirmed',
+      title: 'Combined shopping list',
+      resolveProductDetails: async () => ({ inventoryQuantity: 3, purchasePrice: 100 }),
+      resolveBrandName: async () => 'Bosch',
+    });
+    const saved = shoppingListDraftSaveRequestSchema.parse({ ...draft, revision: null });
+    expect(saved.generatedItems).toHaveLength(681);
+    expect(saved.draftItems).toHaveLength(681);
+    expect(saved.orders).toHaveLength(681);
+    expect(saved.orderIds).toHaveLength(681);
   });
 
   it('only deducts units that have not already been applied, including quantity edits', () => {

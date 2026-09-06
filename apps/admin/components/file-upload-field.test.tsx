@@ -1,4 +1,4 @@
-import { cleanup, render as testingRender, screen } from '@testing-library/react';
+import { act, cleanup, render as testingRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
@@ -24,6 +24,7 @@ function render(ui: ReactNode) {
 const mockUse = vi.fn();
 const mockOn = vi.fn();
 const mockDestroy = vi.fn();
+const mockUpload = vi.fn();
 const mockUppyConstructor = vi.fn();
 
 vi.mock('@uppy/core', () => ({
@@ -35,7 +36,7 @@ vi.mock('@uppy/core', () => ({
     use = mockUse;
     on = mockOn;
     addFile = vi.fn();
-    upload = vi.fn().mockResolvedValue(undefined);
+    upload = mockUpload;
     cancelAll = vi.fn();
     destroy = mockDestroy;
   },
@@ -69,6 +70,7 @@ describe('FileUploadField', () => {
     mockUse.mockReset();
     mockOn.mockReset();
     mockDestroy.mockReset();
+    mockUpload.mockReset().mockResolvedValue(undefined);
     mockUppyConstructor.mockReset();
     URL.createObjectURL = vi.fn(() => 'blob:preview');
     URL.revokeObjectURL = vi.fn();
@@ -173,6 +175,77 @@ describe('FileUploadField', () => {
       file: uploaded,
       body: { files: [uploaded], import: { newOrders: 4 } },
     });
+  });
+
+  it('retains both parallel upload completions before the parent rerenders', () => {
+    const onChange = vi.fn();
+    render(
+      <FileUploadField
+        uploadUrl="/api/uploads/bulletin"
+        label="Attachments"
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+    const success = mockOn.mock.calls.find(([event]) => event === 'upload-success')![1];
+    act(() => {
+      success({ id: 'one' }, { body: { files: [value[0]] } });
+      success({ id: 'two' }, { body: { files: [value[1]] } });
+    });
+    expect(onChange).toHaveBeenLastCalledWith(value);
+  });
+
+  it('reports pending work until the upload settles', async () => {
+    let finish!: () => void;
+    mockUpload.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const pending = vi.fn();
+    const view = render(
+      <FileUploadField
+        uploadUrl="/api/uploads/bulletin"
+        label="Attachments"
+        value={[]}
+        onChange={vi.fn()}
+        onUploadingChange={pending}
+      />,
+    );
+    await userEvent.upload(
+      view.container.querySelector('input[type="file"]')!,
+      new File(['hello'], 'hello.txt', { type: 'text/plain' }),
+    );
+    expect(pending).toHaveBeenLastCalledWith(true);
+    await act(async () => finish());
+    expect(pending).toHaveBeenLastCalledWith(false);
+  });
+
+  it('lets an in-flight upload settle after the composer closes', async () => {
+    let finish!: () => void;
+    mockUpload.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const pending = vi.fn();
+    const view = render(
+      <FileUploadField
+        uploadUrl="/api/uploads/bulletin"
+        label="Attachments"
+        value={[]}
+        onChange={vi.fn()}
+        onUploadingChange={pending}
+      />,
+    );
+    await userEvent.upload(
+      view.container.querySelector('input[type="file"]')!,
+      new File(['hello'], 'hello.txt', { type: 'text/plain' }),
+    );
+    view.unmount();
+    await act(async () => finish());
+    expect(pending).toHaveBeenLastCalledWith(false);
+    expect(mockDestroy).toHaveBeenCalledOnce();
   });
 
   it('can bundle uploads and override the file count limit', () => {

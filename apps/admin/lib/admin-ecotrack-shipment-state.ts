@@ -143,13 +143,13 @@ export async function softDeleteShipmentRow(
       return false;
     }
 
+    const restoreToConfirmed =
+      options.restorePostedOrderToConfirmed &&
+      (coerceOrderStatus(row.order.inHouseStatus) === ORDER_STATUS.POSTED ||
+        coerceOrderStatus(row.order.inHouseStatus) === ORDER_STATUS.DISPATCHED);
     await updateCanonicalOrder(tx, {
       orderId: row.order.id,
-      status:
-        options.restorePostedOrderToConfirmed &&
-        coerceOrderStatus(row.order.inHouseStatus) === ORDER_STATUS.POSTED
-          ? { value: ORDER_STATUS.CONFIRMED, noAnswerCount: 0 }
-          : undefined,
+      status: restoreToConfirmed ? { value: ORDER_STATUS.CONFIRMED, noAnswerCount: 0 } : undefined,
       allowStatusCorrection: options.restorePostedOrderToConfirmed,
       actor: options.actor ?? undefined,
       values: {
@@ -164,6 +164,7 @@ export async function softDeleteShipmentRow(
 
     const afterOrderState = {
       ...beforeOrderState,
+      ...(restoreToConfirmed ? { inHouseStatus: ORDER_STATUS.CONFIRMED, noAnswerCount: 0 } : {}),
       ecotrackStatus: null,
       ecotrackStatusLastUpdate: null,
       ecotrackStatusData: null,

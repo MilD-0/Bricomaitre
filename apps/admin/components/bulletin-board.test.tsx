@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { http, HttpResponse } from 'msw';
@@ -10,8 +10,10 @@ vi.mock('./file-upload-field', () => ({
     label,
     value,
     onChange,
+    onUploadingChange,
   }: {
     label: string;
+    onUploadingChange?: (uploading: boolean) => void;
     value: Array<{
       fileName: string;
       fileUrl: string;
@@ -31,6 +33,12 @@ vi.mock('./file-upload-field', () => ({
   }) => (
     <label>
       {label}
+      <button type="button" aria-label="Start upload" onClick={() => onUploadingChange?.(true)}>
+        Start upload
+      </button>
+      <button type="button" aria-label="Finish upload" onClick={() => onUploadingChange?.(false)}>
+        Finish upload
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -240,6 +248,22 @@ describe('BulletinBoard', () => {
     expect((patchCalls[0]!.body as Record<string, unknown>).tagsInput).toBeUndefined();
   });
 
+  it('blocks both publish and form submission while an attachment is uploading', async () => {
+    renderBoard();
+    await screen.findByText('Pinned issue');
+    await userEvent.click(screen.getByRole('button', { name: 'New post' }));
+    await userEvent.type(await screen.findByPlaceholderText('Post title'), 'Upload pending');
+    await userEvent.type(screen.getByPlaceholderText('Post content'), 'Wait for the attachment.');
+    await userEvent.click(screen.getByRole('button', { name: 'Start upload' }));
+    const publish = screen.getByRole('button', { name: 'Publish post' });
+    expect(publish).toBeDisabled();
+    fireEvent.submit(publish.closest('form')!);
+    await waitFor(() => expect(createCalls).toHaveLength(0));
+    await userEvent.click(screen.getByRole('button', { name: 'Finish upload' }));
+    await userEvent.click(publish);
+    await waitFor(() => expect(createCalls).toHaveLength(1));
+  });
+
   it('creates a post with normalized tags and attachments from the closed composer flow', async () => {
     const view = renderBoard();
 
@@ -266,7 +290,7 @@ describe('BulletinBoard', () => {
       'Lock the paint cage after receiving the final truck.',
     );
     await userEvent.type(screen.getByPlaceholderText('Tags'), '#Ops, Closing, ops');
-    await userEvent.click(screen.getByRole('button', { name: 'Attachments' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Pin this post' }));
     await userEvent.click(screen.getByRole('button', { name: 'Publish post' }));
 

@@ -1,17 +1,17 @@
-import { count, desc, eq, gt, ilike, inArray, or } from 'drizzle-orm';
+import { asc, count, desc, eq, gt, ilike, inArray, or } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
-import { paginationQuerySchema, type InventoryListResponse } from './inventory';
+import { inventoryQuerySchema, type InventoryListResponse } from './inventory';
 
-type InventoryQuery = ReturnType<typeof paginationQuerySchema.parse>;
+type InventoryQuery = import('zod').input<typeof inventoryQuerySchema>;
 
 export async function loadInventoryPageData(
   input: InventoryQuery,
   writable: boolean,
   productIds: readonly number[] = [],
 ): Promise<InventoryListResponse> {
-  const query = paginationQuerySchema.parse(input);
+  const query = inventoryQuerySchema.parse(input);
   const uniqueProductIds = [...new Set(productIds)].slice(0, 100);
 
   if (!hasDb()) {
@@ -60,7 +60,12 @@ export async function loadInventoryPageData(
     })
     .from(products)
     .where(searchFilter)
-    .orderBy(desc(products.updatedAt))
+    .orderBy(
+      ...query.sort.map(({ key, direction }) =>
+        direction === 'asc' ? asc(products[key]) : desc(products[key]),
+      ),
+      asc(products.id),
+    )
     .limit(query.limit)
     .offset((page - 1) * query.limit);
 

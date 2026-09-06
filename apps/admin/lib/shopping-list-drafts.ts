@@ -86,7 +86,12 @@ const generatedAtSchema = z
   .optional()
   .default(legacyShoppingListGeneratedAt);
 
-const shoppingListOrderIdsSchema = z.array(z.coerce.number().int().positive()).max(500).default([]);
+export const MAX_SHOPPING_LIST_ENTRIES = 10_000;
+
+const shoppingListOrderIdsSchema = z
+  .array(z.coerce.number().int().positive())
+  .max(MAX_SHOPPING_LIST_ENTRIES)
+  .default([]);
 
 const shoppingListDraftItemSchema = z.object({
   draftId: z.string().trim().min(1).max(220),
@@ -146,9 +151,9 @@ export const shoppingListDraftPayloadSchema = z.object({
   sourceMode: shoppingListSourceModeSchema,
   orderIds: shoppingListOrderIdsSchema,
   title: z.string().trim().min(1).max(220),
-  generatedItems: z.array(shoppingListDraftItemSchema).max(500),
-  draftItems: z.array(shoppingListDraftItemSchema).max(500),
-  orders: z.array(shoppingListOrderGroupSchema).max(500),
+  generatedItems: z.array(shoppingListDraftItemSchema).max(MAX_SHOPPING_LIST_ENTRIES),
+  draftItems: z.array(shoppingListDraftItemSchema).max(MAX_SHOPPING_LIST_ENTRIES),
+  orders: z.array(shoppingListOrderGroupSchema).max(MAX_SHOPPING_LIST_ENTRIES),
 });
 
 export const shoppingListDraftSaveRequestSchema = shoppingListDraftPayloadSchema.extend({

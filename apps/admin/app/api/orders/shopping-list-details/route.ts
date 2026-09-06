@@ -6,10 +6,12 @@ import { getDb, hasDb } from '@bric/db/client';
 import { brands, products } from '@bric/db/schema';
 import { requireMutationAccess } from '../../../../lib/rbac';
 
+import { MAX_SHOPPING_LIST_ENTRIES } from '../../../../lib/shopping-list-drafts';
+
 const requestSchema = z
   .object({
-    productIds: z.array(z.number().int().positive()).max(10000),
-    brandIds: z.array(z.number().int().positive()).max(10000),
+    productIds: z.array(z.number().int().positive()).max(MAX_SHOPPING_LIST_ENTRIES),
+    brandIds: z.array(z.number().int().positive()).max(MAX_SHOPPING_LIST_ENTRIES),
   })
   .strict();
 

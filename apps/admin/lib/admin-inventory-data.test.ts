@@ -1,3 +1,4 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -27,11 +28,10 @@ describe('loadInventoryPageData', () => {
         updatedAt: new Date('2026-08-23T00:00:00.000Z'),
       },
     ]);
-    const whereRows = vi.fn().mockReturnValue({
-      orderBy: vi.fn().mockReturnValue({
-        limit: vi.fn().mockReturnValue({ offset }),
-      }),
+    const orderBy = vi.fn().mockReturnValue({
+      limit: vi.fn().mockReturnValue({ offset }),
     });
+    const whereRows = vi.fn().mockReturnValue({ orderBy });
     const from = vi
       .fn()
       .mockReturnValueOnce({ where: countWhere })
@@ -39,7 +39,19 @@ describe('loadInventoryPageData', () => {
     mocks.getDb.mockReturnValue({ select: vi.fn().mockReturnValue({ from }) });
 
     await expect(
-      loadInventoryPageData({ page: 1, limit: 20, search: '' }, false, [17, 17]),
+      loadInventoryPageData(
+        {
+          page: 1,
+          limit: 20,
+          search: '',
+          sort: [
+            { key: 'inventoryQuantity', direction: 'asc' },
+            { key: 'title', direction: 'desc' },
+          ],
+        },
+        false,
+        [17, 17],
+      ),
     ).resolves.toEqual({
       writable: false,
       items: [
@@ -64,5 +76,11 @@ describe('loadInventoryPageData', () => {
       },
     });
     expect(whereRows).toHaveBeenCalledOnce();
+    const dialect = new PgDialect();
+    expect(orderBy.mock.calls[0].map((expression) => dialect.sqlToQuery(expression).sql)).toEqual([
+      '"products"."inventory_quantity" asc',
+      '"products"."title" desc',
+      '"products"."id" asc',
+    ]);
   });
 });

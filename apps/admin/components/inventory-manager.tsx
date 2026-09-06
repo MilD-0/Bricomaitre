@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslations } from 'next-intl';
-import { useDeferredValue, useMemo, useRef, useState, useTransition } from 'react';
+import { useDeferredValue, useRef, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -21,7 +21,6 @@ import {
   type InventoryScanResponse,
 } from '../lib/inventory';
 import {
-  applyClientMultiSort,
   getEffectiveSortRules,
   getSortRuleState,
   toggleSortRule,
@@ -397,11 +396,11 @@ export function InventoryManager({ title }: { title: string }) {
   });
 
   const query = useQuery({
-    queryKey: ['inventory-table', page, deferredSearch],
+    queryKey: ['inventory-table', page, deferredSearch, sortRules],
     queryFn: async () =>
       inventoryListResponseSchema.parse(
         await request(
-          `/api/inventory?page=${page}&limit=50&search=${encodeURIComponent(deferredSearch)}`,
+          `/api/inventory?page=${page}&limit=50&search=${encodeURIComponent(deferredSearch)}&${new URLSearchParams(getEffectiveSortRules(sortRules, defaultInventorySort).map(({ key, direction }) => ['sort', `${key}:${direction}`]))}`,
         ),
       ),
     placeholderData: keepPreviousData,
@@ -524,21 +523,12 @@ export function InventoryManager({ title }: { title: string }) {
     },
   });
 
-  const items = useMemo(() => {
-    return applyClientMultiSort(
-      query.data?.items ?? [],
-      getEffectiveSortRules(sortRules, defaultInventorySort),
-      {
-        title: (row) => row.title,
-        inventoryQuantity: (row) => row.inventoryQuantity,
-        inStock: (row) => row.inStock,
-      },
-    );
-  }, [query.data?.items, sortRules]);
+  const items = query.data?.items ?? [];
 
   const toggleSort = (key: InventorySortKey) => {
     startFilterTransition(() => {
       setSortRules((current) => toggleSortRule(current, key, 'asc'));
+      setPage(1);
     });
   };
 

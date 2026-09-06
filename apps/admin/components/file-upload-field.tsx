@@ -38,9 +38,11 @@ type FileUploadFieldProps = {
   uploadUrl: string;
   label: string;
   hint?: string;
+  disabled?: boolean;
   value: BulletinAttachment[];
   onChange: (files: BulletinAttachment[]) => void;
   onUploadStart?: () => void;
+  onUploadingChange?: (uploading: boolean) => void;
   onUploaded?: (payload: { file: BulletinAttachment; body: unknown }) => void;
   extraFields?: Record<string, string>;
   bundleUploads?: boolean;
@@ -77,9 +79,11 @@ export function FileUploadField({
   uploadUrl,
   label,
   hint,
+  disabled = false,
   value,
   onChange,
   onUploadStart,
+  onUploadingChange,
   onUploaded,
   extraFields,
   bundleUploads = false,
@@ -97,6 +101,9 @@ export function FileUploadField({
   const onChangeRef = useRef(onChange);
   const onUploadedRef = useRef(onUploaded);
   const valueRef = useRef(value);
+  const onUploadingChangeRef = useRef(onUploadingChange);
+  const uploadingRef = useRef(false);
+  const [uploading, setUploading] = useState(false);
 
   const existingFiles = useMemo(
     () => value.map((file, index) => ({ ...file, index, id: `${file.fileUrl}-${index}` })),
@@ -107,7 +114,8 @@ export function FileUploadField({
     onChangeRef.current = onChange;
     onUploadedRef.current = onUploaded;
     valueRef.current = value;
-  }, [onChange, onUploaded, value]);
+    onUploadingChangeRef.current = onUploadingChange;
+  }, [onChange, onUploaded, onUploadingChange, value]);
 
   useEffect(() => {
     const uppy = new Uppy<{ files: BulletinAttachment[] }, Record<string, never>>({
@@ -189,7 +197,11 @@ export function FileUploadField({
             : upload,
         ),
       );
-      onChangeRef.current([...valueRef.current, ...uploadedFiles]);
+      const newFiles = uploadedFiles.filter(
+        (uploaded) => !valueRef.current.some((existing) => existing.fileKey === uploaded.fileKey),
+      );
+      valueRef.current = [...valueRef.current, ...newFiles];
+      onChangeRef.current(valueRef.current);
       onUploadedRef.current?.({ file: uploadedFile, body });
       window.setTimeout(() => {
         setUploads((current) => {
@@ -227,6 +239,9 @@ export function FileUploadField({
         });
         return [];
       });
+      uploadingRef.current = false;
+      setUploading(false);
+      onUploadingChangeRef.current?.(false);
       uppy.destroy();
       uppyRef.current = null;
     };
@@ -248,10 +263,14 @@ export function FileUploadField({
   };
 
   const addFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !uppyRef.current) {
+    if (disabled || !files || files.length === 0 || !uppyRef.current || uploadingRef.current) {
       return;
     }
 
+    const uppy = uppyRef.current;
+    uploadingRef.current = true;
+    setUploading(true);
+    onUploadingChangeRef.current?.(true);
     onUploadStart?.();
 
     const mapped = Array.from(files).map((file) => ({
@@ -263,18 +282,27 @@ export function FileUploadField({
 
     mapped.forEach((file) => {
       try {
-        uppyRef.current?.addFile(file);
+        uppy.addFile(file);
       } catch {
         // Preserve current state if Uppy rejects a file.
       }
     });
 
-    await uppyRef.current.upload();
-    uppyRef.current.cancelAll();
+    try {
+      await uppy.upload();
+    } finally {
+      if (uppyRef.current === uppy) {
+        uppy.cancelAll();
+        uploadingRef.current = false;
+        setUploading(false);
+        onUploadingChangeRef.current?.(false);
+      }
+    }
   };
 
   const removeFile = (index: number) => {
-    onChange(value.filter((_, currentIndex) => currentIndex !== index));
+    valueRef.current = valueRef.current.filter((_, currentIndex) => currentIndex !== index);
+    onChange(valueRef.current);
   };
 
   return (
@@ -285,6 +313,7 @@ export function FileUploadField({
           ref={inputRef}
           type="file"
           multiple
+          disabled={disabled || uploading}
           accept={allowedFileTypes.join(',')}
           className="sr-only"
           onChange={(event) => void addFiles(event.target.files)}
@@ -398,6 +427,7 @@ export function FileUploadField({
         <button
           type="button"
           className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-border/80 bg-muted/30 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
+          disabled={disabled || uploading}
           onClick={openPicker}
         >
           <ImagePlus className="size-4" />

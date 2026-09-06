@@ -281,6 +281,24 @@ describe('admin ecotrack shipment reconciliation', () => {
     ).toBeInstanceOf(Date);
   });
 
+  it('restores a dispatched order when its recreated shipment is deleted', async () => {
+    const row = createShipmentRow();
+    row.order.inHouseStatus = 3;
+    const { db, updates } = createDbMock([row]);
+    getDbMock.mockReturnValue(db);
+    deleteEcotrackOrderMock.mockResolvedValue({});
+
+    await expect(deletePostedEcotrackOrder(11, {})).resolves.toEqual({
+      ok: true,
+      inHouseOrderStatus: 'confirmed',
+    });
+    expect(updates.find((update) => update.target === orders)?.values).toMatchObject({
+      inHouseStatus: 2,
+      noAnswerCount: 0,
+      ecotrackTrackingNumber: null,
+    });
+  });
+
   it('does not report deletion after the active local shipment was replaced', async () => {
     const row = createShipmentRow();
     const { db, updates } = createDbMock([row], { rejectShipmentWrites: true });
