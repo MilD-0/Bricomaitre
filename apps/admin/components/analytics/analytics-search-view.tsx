@@ -209,7 +209,16 @@ export function SearchVisibilityView({
                     onClick={() => setSelectedQuery(row)}
                   >
                     <td className="max-w-md px-3 py-2.5">
-                      <p className="truncate font-medium">{row.query}</p>
+                      <button
+                        type="button"
+                        className="block max-w-full truncate text-start font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedQuery(row);
+                        }}
+                      >
+                        {row.query}
+                      </button>
                       <p className="text-xs text-muted-foreground">
                         {formatNumber(locale, row.pages)} {copy.labels.rankingPages} ·{' '}
                         {row.branded ? copy.labels.brand : copy.labels.discovery}
@@ -301,7 +310,16 @@ export function SearchVisibilityView({
                 onClick={() => setSelectedPage(row)}
               >
                 <td className="max-w-lg px-3 py-2.5">
-                  <p className="truncate font-medium">{row.label}</p>
+                  <button
+                    type="button"
+                    className="block max-w-full truncate text-start font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedPage(row);
+                    }}
+                  >
+                    {row.label}
+                  </button>
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
                   {formatNumber(locale, row.clicks)}

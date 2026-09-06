@@ -511,6 +511,7 @@ export function AcquisitionView({
                     <button
                       type="button"
                       aria-label={`${copy.compare} ${entity.name}`}
+                      aria-pressed={selected}
                       className={cn(
                         'grid size-5 place-items-center rounded border',
                         selected
@@ -532,7 +533,16 @@ export function AcquisitionView({
                     </button>
                   </td>
                   <td className="max-w-72 px-3 py-2.5">
-                    <p className="truncate font-medium">{entity.name}</p>
+                    <button
+                      type="button"
+                      className="block max-w-full truncate text-start font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setInspectedId(entity.id);
+                      }}
+                    >
+                      {entity.name}
+                    </button>
                     {level !== 'campaign' ? (
                       <p className="truncate text-xs text-muted-foreground">
                         {entity.campaignName}

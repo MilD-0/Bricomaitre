@@ -477,7 +477,23 @@ export function AssumptionsView({
                   className={cost.id ? 'cursor-pointer hover:bg-muted/25' : undefined}
                   onClick={() => openCost(cost)}
                 >
-                  <td className="px-3 py-2.5 font-medium">{cost.name}</td>
+                  <td className="px-3 py-2.5 font-medium">
+                    {cost.id ? (
+                      <button
+                        type="button"
+                        disabled={costFormLocked}
+                        className="text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openCost(cost);
+                        }}
+                      >
+                        {cost.name}
+                      </button>
+                    ) : (
+                      cost.name
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-muted-foreground">
                     {copy.assumptions[cost.period]}
                   </td>
@@ -553,7 +569,16 @@ export function AssumptionsView({
                 onClick={() => openDayOverride(day)}
               >
                 <td className="px-3 py-2.5 font-medium">
-                  {formatDate(locale, day.date, { long: true })}
+                  <button
+                    type="button"
+                    className="text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openDayOverride(day);
+                    }}
+                  >
+                    {formatDate(locale, day.date, { long: true })}
+                  </button>
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
                   {formatMoney(locale, day.grossProfitDzd)}

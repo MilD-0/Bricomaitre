@@ -4,6 +4,7 @@ import { useId, useMemo, useState } from 'react';
 import type { FocusEvent, PointerEvent } from 'react';
 
 import geometry from './data/algeria-wilayas-58.json';
+import { getAnalyticsCopy, type AnalyticsCopy } from './analytics-copy';
 
 type Coordinate = [number, number];
 type PolygonCoordinates = Coordinate[][];
@@ -138,10 +139,12 @@ function MapTooltip({
   position,
   row,
   number,
+  copy,
 }: {
   position: TooltipPosition | null;
   row: WilayaValue | undefined;
   number: Intl.NumberFormat;
+  copy: AnalyticsCopy['map'];
 }) {
   if (!position) return null;
   return (
@@ -156,13 +159,14 @@ function MapTooltip({
     >
       <p className="font-semibold text-popover-foreground">{row?.name ?? position.name}</p>
       <p className="mt-1 tabular-nums text-muted-foreground">
-        {number.format(row?.postedOrders ?? 0)} posted
+        {number.format(row?.postedOrders ?? 0)} {copy.postedOrders}
       </p>
     </div>
   );
 }
 
 export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale: string }) {
+  const copy = getAnalyticsCopy(locale).map;
   const byName = useMemo(
     () => new Map(rows.map((row) => [normalizeWilayaName(row.name), row])),
     [rows],
@@ -182,8 +186,8 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
     value == null
       ? '—'
       : value < 48
-        ? `${number.format(value)} h`
-        : `${number.format(value / 24)} d`;
+        ? `${number.format(value)} ${copy.hours}`
+        : `${number.format(value / 24)} ${copy.days}`;
   const resolvedSelectedName =
     selectedName && byName.has(normalizeWilayaName(selectedName))
       ? selectedName
@@ -250,7 +254,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
           {features.map((feature) => {
             const featureName = feature.properties.nam;
             const row = byName.get(normalizeWilayaName(featureName));
-            const label = `${row?.name ?? featureName}: ${number.format(row?.postedOrders ?? 0)} posted, ${percent(row?.terminalPaidRatePct ?? null)} paid among resolved orders`;
+            const label = `${row?.name ?? featureName}: ${number.format(row?.postedOrders ?? 0)} ${copy.postedOrders}, ${percent(row?.terminalPaidRatePct ?? null)} ${copy.resolvedOrders}`;
             return (
               <path
                 key={`${layer}-hit-${featureName}`}
@@ -299,7 +303,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
         <svg
           viewBox={`0 0 ${countryWidth} ${countryHeight}`}
           role="img"
-          aria-label="Algeria delivery volume by wilaya"
+          aria-label={copy.countryLabel}
           className="mx-auto block h-auto max-h-[31rem] w-full"
         >
           {mapPaths('country')}
@@ -308,6 +312,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
           position={tooltip?.layer === 'country' ? tooltip : null}
           row={tooltip ? byName.get(normalizeWilayaName(tooltip.name)) : undefined}
           number={number}
+          copy={copy}
         />
       </div>
 
@@ -315,14 +320,14 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
         <div className="border-y border-border/60 py-3">
           <div className="mb-2 px-1">
             <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
-              Northern detail
+              {copy.northernDetail}
             </p>
           </div>
           <div data-map-frame className="relative overflow-hidden bg-muted/10">
             <svg
               viewBox={`0 0 ${northWidth} ${northHeight}`}
               role="img"
-              aria-label="Northern Algeria wilaya detail"
+              aria-label={copy.northLabel}
               className="block h-auto w-full"
             >
               <defs>
@@ -336,48 +341,50 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
               position={tooltip?.layer === 'north' ? tooltip : null}
               row={tooltip ? byName.get(normalizeWilayaName(tooltip.name)) : undefined}
               number={number}
+              copy={copy}
             />
           </div>
         </div>
 
         <div className="border-b border-border/60 py-4">
           <div
-            aria-label="Posted order volume scale"
+            aria-label={copy.scaleLabel}
             className="h-1.5"
             style={{
-              background:
-                'linear-gradient(90deg, hsl(var(--muted)), hsl(var(--chart-1) / 0.45), hsl(var(--chart-1)))',
+              background: `linear-gradient(${locale.startsWith('ar') ? '270deg' : '90deg'}, hsl(var(--muted)), hsl(var(--chart-1) / 0.45), hsl(var(--chart-1)))`,
             }}
           />
           <div className="mt-2 flex justify-between text-[length:var(--type-size-label-px)] text-muted-foreground">
-            <span>No posted orders</span>
-            <span>{number.format(maximum)} posted</span>
+            <span>{copy.noPostedOrders}</span>
+            <span>
+              {number.format(maximum)} {copy.postedOrders}
+            </span>
           </div>
         </div>
 
         <div className="grid grid-cols-2 divide-x divide-border/60 border-b border-border/60">
-          <div className="py-3 pr-4">
+          <div className="py-3 pe-4">
             <p className="truncate text-sm font-semibold">{activeRow?.name ?? activeName ?? '—'}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums">
               {number.format(activeRow?.postedOrders ?? 0)}
             </p>
             <p className="text-[length:var(--type-size-label-px)] text-muted-foreground">
-              posted orders
+              {copy.postedOrders}
             </p>
           </div>
-          <div className="py-3 pl-4">
-            <p className="text-xs text-muted-foreground">Paid among resolved</p>
+          <div className="py-3 ps-4">
+            <p className="text-xs text-muted-foreground">{copy.paidAmongResolved}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums">
               {percent(activeRow?.terminalPaidRatePct ?? null)}
             </p>
             <p className="text-[length:var(--type-size-label-px)] text-muted-foreground">
-              {number.format(activeRow?.activeOrders ?? 0)} active ·{' '}
-              {duration(activeRow?.deliveryMedianHours ?? null)} median
+              {number.format(activeRow?.activeOrders ?? 0)} {copy.active} ·{' '}
+              {duration(activeRow?.deliveryMedianHours ?? null)} {copy.median}
             </p>
           </div>
         </div>
 
-        <div className="border-b border-border/60" aria-label="Top wilayas by posted orders">
+        <div className="border-b border-border/60" aria-label={copy.topWilayas}>
           {rankedRows.slice(0, 6).map((row, index) => {
             const isActive = activeName
               ? normalizeWilayaName(activeName) === normalizeWilayaName(row.name)
@@ -386,7 +393,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
               <button
                 type="button"
                 key={row.name}
-                className={`grid w-full grid-cols-[1.75rem_1fr_auto] items-center gap-2 border-b border-border/40 px-1 py-2 text-left text-sm transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none ${
+                className={`grid w-full grid-cols-[1.75rem_1fr_auto] items-center gap-2 border-b border-border/40 px-1 py-2 text-start text-sm transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none ${
                   isActive ? 'bg-primary/10 text-foreground' : 'text-muted-foreground'
                 }`}
                 onPointerEnter={() => setHoveredName(row.name)}

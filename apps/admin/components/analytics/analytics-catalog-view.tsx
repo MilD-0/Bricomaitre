@@ -328,7 +328,16 @@ export function CatalogView({
                 onClick={() => setSelectedId(product.id)}
               >
                 <td className="max-w-80 px-3 py-2.5">
-                  <p className="truncate font-medium">{product.title}</p>
+                  <button
+                    type="button"
+                    className="block max-w-full truncate text-start font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedId(product.id);
+                    }}
+                  >
+                    {product.title}
+                  </button>
                   <p className="truncate text-xs text-muted-foreground">
                     {product.sku ?? copy.labels.noSku} ·{' '}
                     {product.categoryName ?? copy.labels.uncategorized}

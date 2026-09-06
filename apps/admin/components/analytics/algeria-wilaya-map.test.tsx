@@ -100,11 +100,16 @@ describe('AlgeriaWilayaMap', () => {
     expect(container.querySelector('p.text-lg')?.textContent).toBe('8');
   });
 
-  it('uses the analytics palette rather than a decorative violet ramp', () => {
-    const { container } = render(<AlgeriaWilayaMap locale="en" rows={[]} />);
-    const scale = container.querySelector<HTMLElement>('[aria-label="Posted order volume scale"]');
-    expect(scale).not.toBeNull();
-    expect(scale!.getAttribute('style')).toContain('var(--chart-1)');
-    expect(scale!.getAttribute('style')).not.toContain('violet');
+  it.each([
+    ['fr', 'Volume de livraison en Algérie par wilaya', 'commandes expédiées'],
+    ['ar', 'حجم التوصيل في الجزائر حسب الولاية', 'طلبات مرسلة'],
+  ])('localizes the %s map and keyboard inspection', (locale, label, posted) => {
+    const { container } = render(<AlgeriaWilayaMap locale={locale} rows={[]} />);
+    expect(screen.getByRole('img', { name: label })).toBeInTheDocument();
+    const target = container.querySelector<SVGPathElement>('[data-map-hit-layer="country"] path')!;
+    fireEvent.focus(target);
+    expect(target.getAttribute('aria-label')).toContain(posted);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(posted);
+    expect(screen.queryByText('Northern detail')).not.toBeInTheDocument();
   });
 });
