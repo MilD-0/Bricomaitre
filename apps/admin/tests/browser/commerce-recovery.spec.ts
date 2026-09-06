@@ -67,10 +67,9 @@ async function capture(page: Page, testInfo: TestInfo, locale: string, name: str
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     ),
   ).toBeLessThanOrEqual(1);
-  await testInfo.attach(`${locale}-${name}`, {
-    body: await page.screenshot(),
-    contentType: 'image/png',
-  });
+  const path = testInfo.outputPath(`${locale}-${name}.png`);
+  await page.screenshot({ path });
+  await testInfo.attach(`${locale}-${name}`, { path, contentType: 'image/png' });
 }
 for (const [locale, messages] of [
   ['fr', fr],
@@ -216,7 +215,10 @@ for (const [locale, messages] of [
     });
     await expect(cancel).toBeEnabled();
     await expect(
-      page.getByText(messages.products.exportAll.progress.queued, { exact: true }),
+      page.getByText(
+        `${messages.products.exportAll.status.queued} · ${messages.products.exportAll.progress.queued}`,
+        { exact: true },
+      ),
     ).toBeVisible();
     await capture(page, testInfo, locale, 'queued-export');
     await cancel.click();
@@ -289,13 +291,14 @@ for (const [locale, messages] of [
     await dialog.getByRole('button', { name: /Browser drill/ }).click();
     await dialog.getByRole('button', { name: copy.save, exact: true }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole('alert')).toContainText(copy.failure);
+    const refreshError = page.locator('[data-assets-workspace]').getByRole('alert');
+    await expect(refreshError).toContainText(copy.failure);
     await expect(page.getByRole('button', { name: copy.create, exact: true })).toBeDisabled();
     await expect(page.getByText('Browser group', { exact: true })).toBeVisible();
     await capture(page, testInfo, locale, 'accepted-asset-refresh');
     failRefresh = false;
     await page.getByRole('button', { name: copy.refresh }).click();
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(refreshError).toHaveCount(0);
     await expect(page.getByRole('button', { name: copy.create, exact: true })).toBeEnabled();
     expect(posts).toBe(1);
   });
