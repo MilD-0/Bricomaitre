@@ -46,10 +46,10 @@ describe('app/storefront/products/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Storefront database is unavailable.' });
   });
 
-  it('returns active storefront products with serialized timestamps', async () => {
+  it('returns matching products and their total using the same normalized query', async () => {
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({ tag: 'db' });
-    readStorefrontProductsMock.mockResolvedValue([
+    const items = [
       {
         id: 1,
         slug: 'desk-lamp',
@@ -71,7 +71,8 @@ describe('app/storefront/products/route', () => {
         createdAt: '2026-04-01T10:00:00.000Z',
         updatedAt: '2026-04-02T10:00:00.000Z',
       },
-    ]);
+    ];
+    readStorefrontProductsMock.mockResolvedValue(items);
     countStorefrontProductsMock.mockResolvedValue(37);
 
     const res = await GET(new NextRequest('http://localhost/storefront/products?search=lamp'));
@@ -84,32 +85,7 @@ describe('app/storefront/products/route', () => {
       { tag: 'db' },
       expect.objectContaining({ search: 'lamp' }),
     );
-    await expect(res.json()).resolves.toEqual({
-      items: [
-        {
-          id: 1,
-          slug: 'desk-lamp',
-          title: 'Desk Lamp',
-          titleAr: null,
-          description: 'Warm light',
-          descriptionAr: null,
-          sku: 'DL-1',
-          barcode: '123',
-          price: '1500.00',
-          oldPrice: null,
-          active: true,
-          inStock: true,
-          availabilityStatus: 'in_stock',
-          inventoryQuantity: 5,
-          brandId: 2,
-          categoryId: 3,
-          images: ['https://cdn.example.com/lamp.jpg'],
-          createdAt: '2026-04-01T10:00:00.000Z',
-          updatedAt: '2026-04-02T10:00:00.000Z',
-        },
-      ],
-      total: 37,
-    });
+    await expect(res.json()).resolves.toEqual({ items, total: 37 });
   });
 
   it('passes id lookups through to the catalog reader', async () => {

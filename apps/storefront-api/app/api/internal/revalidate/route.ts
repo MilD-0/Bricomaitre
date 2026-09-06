@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { verifyInternalRequestSignature } from '@bric/runtime/internal-signing';
+import { storefrontRevalidationRequestSchema } from '@bric/storefront-core/contracts';
 import { CACHE_TAGS, revalidateServerTags } from '@bric/storefront-core/server-cache';
 
-function getRevalidateSecret(env: NodeJS.ProcessEnv = process.env) {
-  return env.STOREFRONT_REVALIDATE_SECRET?.trim() ?? '';
-}
-
 export async function POST(request: NextRequest) {
-  const secret = getRevalidateSecret();
+  const secret = process.env.STOREFRONT_REVALIDATE_SECRET?.trim() ?? '';
 
   if (!secret) {
     return NextResponse.json({ error: 'revalidation secret is not configured' }, { status: 503 });
@@ -26,32 +23,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: verification.error }, { status: 401 });
   }
 
-  let parsed: { scope?: string };
+  let payload: unknown;
 
   try {
-    parsed = JSON.parse(bodyText) as { scope?: string };
+    payload = JSON.parse(bodyText);
   } catch {
     return NextResponse.json({ error: 'Invalid revalidation payload' }, { status: 400 });
   }
 
-  if (
-    parsed.scope !== 'assets' &&
-    parsed.scope !== 'products' &&
-    parsed.scope !== 'product-meta' &&
-    parsed.scope !== 'settings' &&
-    parsed.scope !== 'landing-pages'
-  ) {
+  const parsed = storefrontRevalidationRequestSchema.safeParse(payload);
+  if (!parsed.success) {
     return NextResponse.json({ error: 'Unsupported revalidation scope' }, { status: 400 });
   }
 
   const tag =
-    parsed.scope === 'settings'
+    parsed.data.scope === 'settings'
       ? CACHE_TAGS.storefrontSettings
-      : parsed.scope === 'landing-pages'
+      : parsed.data.scope === 'landing-pages'
         ? CACHE_TAGS.landingPages
-        : parsed.scope === 'products'
+        : parsed.data.scope === 'products'
           ? CACHE_TAGS.products
-          : parsed.scope === 'product-meta'
+          : parsed.data.scope === 'product-meta'
             ? CACHE_TAGS.productsMeta
             : CACHE_TAGS.assets;
   revalidateServerTags(tag);

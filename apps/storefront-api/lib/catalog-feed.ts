@@ -13,46 +13,13 @@ function readRequiredEnv(name: string) {
   return value;
 }
 
-function getCatalogFeedKey() {
-  return process.env.PRODUCT_CATALOG_FEED_S3_KEY?.trim() || DEFAULT_CATALOG_FEED_S3_KEY;
-}
-
-function getCatalogFeedClient() {
-  return new S3Client({
+export async function readCatalogFeed() {
+  const bucket = readRequiredEnv('AWS_S3_BUCKET');
+  const key = process.env.PRODUCT_CATALOG_FEED_S3_KEY?.trim() || DEFAULT_CATALOG_FEED_S3_KEY;
+  const client = new S3Client({
     region: readRequiredEnv('AWS_REGION'),
     ...getS3EndpointConfig(),
   });
-}
-
-async function readBodyAsBuffer(body: unknown) {
-  if (
-    typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray ===
-    'function'
-  ) {
-    const bytes = await (
-      body as { transformToByteArray: () => Promise<Uint8Array> }
-    ).transformToByteArray();
-    return Buffer.from(bytes);
-  }
-
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of body as AsyncIterable<Uint8Array | Buffer | string>) {
-    chunks.push(
-      typeof chunk === 'string'
-        ? Buffer.from(chunk)
-        : Buffer.isBuffer(chunk)
-          ? chunk
-          : Buffer.from(chunk),
-    );
-  }
-
-  return Buffer.concat(chunks);
-}
-
-export async function readCatalogFeed() {
-  const bucket = readRequiredEnv('AWS_S3_BUCKET');
-  const key = getCatalogFeedKey();
-  const client = getCatalogFeedClient();
 
   const response = await client.send(
     new GetObjectCommand({
@@ -66,7 +33,7 @@ export async function readCatalogFeed() {
   }
 
   return {
-    body: await readBodyAsBuffer(response.Body),
+    body: Buffer.from(await response.Body.transformToByteArray()),
     contentType: response.ContentType?.trim() || 'text/csv; charset=utf-8',
     lastModified: response.LastModified ?? null,
     etag: response.ETag?.trim() || null,

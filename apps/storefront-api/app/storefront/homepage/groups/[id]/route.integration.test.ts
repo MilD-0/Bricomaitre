@@ -18,7 +18,7 @@ const context = (id: string) => ({ params: Promise.resolve({ id }) });
 describe('storefront homepage featured group route', () => {
   beforeEach(() => Object.values(mocks).forEach((mock) => mock.mockReset()));
 
-  it('serves a bounded progressive page and cache tags', async () => {
+  it('serves the requested bounded progressive page', async () => {
     mocks.hasDb.mockReturnValue(true);
     mocks.getDb.mockReturnValue({ db: true });
     mocks.read.mockResolvedValue({ items: [{ id: 7 }], total: 31 });

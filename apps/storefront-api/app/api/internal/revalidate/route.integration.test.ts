@@ -41,6 +41,26 @@ describe('app/api/internal/revalidate/route', () => {
     );
   });
 
+  it.each([null, [], {}, { scope: 'unknown' }, { scope: 'products', tokens: [null] }])(
+    'rejects signed malformed payloads without invalidating caches: %j',
+    async (payload) => {
+      const body = JSON.stringify(payload);
+      const timestamp = String(Date.now());
+      const response = await POST(
+        new NextRequest('http://localhost/api/internal/revalidate', {
+          method: 'POST',
+          body,
+          headers: {
+            'x-revalidate-timestamp': timestamp,
+            'x-revalidate-signature': signInternalRequest(body, 'revalidate-secret', timestamp),
+          },
+        }),
+      );
+      expect(response.status).toBe(400);
+      expect(revalidateServerTagsMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('revalidates storefront asset tags for signed requests', async () => {
     const body = JSON.stringify({ scope: 'assets' });
     const timestamp = String(Date.now());

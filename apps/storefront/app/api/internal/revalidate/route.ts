@@ -1,22 +1,13 @@
 import { revalidateTag } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
+import { storefrontRevalidationRequestSchema } from '@bric/storefront-core/contracts';
 
 import { verifyInternalRequestSignature } from '@bric/runtime/internal-signing';
 
 import { getStorefrontProductCacheTag, STOREFRONT_CACHE_TAGS } from '@/lib/cache-tags';
 
-const revalidationPayloadSchema = z.object({
-  scope: z.enum(['assets', 'products', 'product-meta', 'settings', 'landing-pages']),
-  tokens: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
-});
-
-function getRevalidationSecret() {
-  return process.env.STOREFRONT_REVALIDATE_SECRET?.trim() ?? '';
-}
-
 export async function POST(request: NextRequest) {
-  const secret = getRevalidationSecret();
+  const secret = process.env.STOREFRONT_REVALIDATE_SECRET?.trim() ?? '';
   if (!secret) {
     return NextResponse.json({ error: 'revalidation secret is not configured' }, { status: 503 });
   }
@@ -39,7 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid revalidation payload' }, { status: 400 });
   }
 
-  const parsed = revalidationPayloadSchema.safeParse(payload);
+  const parsed = storefrontRevalidationRequestSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Unsupported revalidation payload' }, { status: 400 });
   }
