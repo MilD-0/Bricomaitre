@@ -11,7 +11,11 @@ import {
   productCards,
 } from '@bric/db/schema';
 
-import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import {
+  mutateEntityWithHistory,
+  mutateEntityWithHistoryTransaction,
+  type ActionActor,
+} from './action-history';
 import {
   assetBannerSchema,
   assetReorderSchema,
@@ -283,47 +287,48 @@ export async function updateAdminAssetStates(
   actor?: ActionActor,
 ) {
   const { items } = adminAssetStateMutationSchema.parse(input);
-  const updated = [];
-
-  for (const item of items) {
-    const values = {
-      active: item.active,
-      ...(item.kind === 'featured-group'
-        ? { prioritizeRecommendations: item.prioritizeRecommendations }
-        : {}),
-      updatedAt: new Date(),
-    };
-    if (item.kind === 'banner') {
-      await mutateEntityWithHistory(db, {
-        entityType: 'assetBanners',
-        entityId: item.id,
-        operation: 'update',
-        actor,
-        execute: (tx) => tx.update(assetBanners).set(values).where(eq(assetBanners.id, item.id)),
-      });
-    } else if (item.kind === 'featured-group') {
-      await mutateEntityWithHistory(db, {
-        entityType: 'featuredProductGroups',
-        entityId: item.id,
-        operation: 'update',
-        actor,
-        execute: (tx) =>
-          tx.update(featuredProductGroups).set(values).where(eq(featuredProductGroups.id, item.id)),
-      });
-    } else {
-      await mutateEntityWithHistory(db, {
-        entityType: 'productCards',
-        entityId: item.id,
-        operation: 'update',
-        actor,
-        execute: (tx) => tx.update(productCards).set(values).where(eq(productCards.id, item.id)),
-      });
+  await db.transaction(async (tx) => {
+    for (const item of items) {
+      const values = {
+        active: item.active,
+        ...(item.kind === 'featured-group'
+          ? { prioritizeRecommendations: item.prioritizeRecommendations }
+          : {}),
+        updatedAt: new Date(),
+      };
+      if (item.kind === 'banner') {
+        await mutateEntityWithHistoryTransaction(tx, {
+          entityType: 'assetBanners',
+          entityId: item.id,
+          operation: 'update',
+          actor,
+          execute: (tx) => tx.update(assetBanners).set(values).where(eq(assetBanners.id, item.id)),
+        });
+      } else if (item.kind === 'featured-group') {
+        await mutateEntityWithHistoryTransaction(tx, {
+          entityType: 'featuredProductGroups',
+          entityId: item.id,
+          operation: 'update',
+          actor,
+          execute: (tx) =>
+            tx
+              .update(featuredProductGroups)
+              .set(values)
+              .where(eq(featuredProductGroups.id, item.id)),
+        });
+      } else {
+        await mutateEntityWithHistoryTransaction(tx, {
+          entityType: 'productCards',
+          entityId: item.id,
+          operation: 'update',
+          actor,
+          execute: (tx) => tx.update(productCards).set(values).where(eq(productCards.id, item.id)),
+        });
+      }
     }
-    updated.push(item);
-  }
-
+  });
   await revalidateStorefrontAssets();
-  return { ok: true, updatedCount: updated.length, items: updated };
+  return { ok: true, updatedCount: items.length, items };
 }
 
 export async function reorderAdminAssets(db: Database, input: z.input<typeof assetReorderSchema>) {

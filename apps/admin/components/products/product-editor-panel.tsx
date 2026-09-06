@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Copy, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 
 import { requestJson as request } from '../../lib/admin-api';
@@ -130,14 +130,30 @@ export function ProductEditorPanel({
     initialDataUpdatedAt: 0,
     staleTime: 0,
   });
+  const initialDetailLoading =
+    productId !== null && detailQuery.isFetching && detailQuery.dataUpdatedAt === 0;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  const isDirty = form.formState.isDirty;
+  const [sourceUpdatedAt, setSourceUpdatedAt] = useState<string | null>(null);
+  const currentUpdatedAt = detailQuery.data?.item.updatedAt ?? null;
+  if (!isDirty && sourceUpdatedAt !== currentUpdatedAt) setSourceUpdatedAt(currentUpdatedAt);
+  const initializedProductRef = useRef<number | 'new' | null>(null);
   useEffect(() => {
-    if (!state) return;
+    if (!state) {
+      initializedProductRef.current = null;
+      return;
+    }
+    const identity = state.mode === 'edit' ? state.product.id : 'new';
     const source = state.mode === 'edit' ? (detailQuery.data?.item ?? state.product) : null;
-    form.reset(source ? productFormValues(source) : emptyProduct);
-  }, [detailQuery.data?.item, form, state]);
+    if (initializedProductRef.current !== identity) {
+      form.reset(source ? productFormValues(source) : emptyProduct);
+      initializedProductRef.current = identity;
+    } else if (!isDirty) {
+      form.reset(source ? productFormValues(source) : emptyProduct);
+    }
+  }, [detailQuery.data?.item, form, state, isDirty]);
 
   const saveMutation = useMutation({
     mutationFn: async (values: ProductPayload) => {
@@ -234,7 +250,7 @@ export function ProductEditorPanel({
           </Button>
           <Button
             type="button"
-            disabled={uploading || saveMutation.isPending || (isEdit && detailQuery.isFetching)}
+            disabled={uploading || saveMutation.isPending || (isEdit && initialDetailLoading)}
             onClick={() => void submit()}
           >
             {saveMutation.isPending ? <Spinner className="size-4" /> : null}
@@ -253,7 +269,28 @@ export function ProductEditorPanel({
           {detailQuery.error.message}
         </p>
       ) : null}
-      {isEdit && detailQuery.isFetching ? (
+      {isDirty && detailQuery.data?.item.updatedAt !== sourceUpdatedAt ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm sm:px-6"
+        >
+          <p>{t('adminWorkspace.products.changedElsewhere')}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={uploading}
+            onClick={() => {
+              if (!detailQuery.data?.item) return;
+              setSourceUpdatedAt(detailQuery.data.item.updatedAt);
+              form.reset(productFormValues(detailQuery.data.item));
+            }}
+          >
+            {t('adminWorkspace.products.loadLatest')}
+          </Button>
+        </div>
+      ) : null}
+      {isEdit && initialDetailLoading ? (
         <div className="grid min-h-[28rem] place-items-center px-6 text-sm text-muted-foreground">
           <span className="flex items-center gap-2">
             <Spinner className="size-4" />

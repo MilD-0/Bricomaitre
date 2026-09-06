@@ -146,32 +146,37 @@ export async function deleteExpiredPrivateS3Objects({
     bucket = config.bucket;
   }
 
-  const listed = await client.send(
-    new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix,
-      MaxKeys: 1_000,
-    }),
-  );
-  const expiredKeys = (listed.Contents ?? [])
-    .filter(
-      (object): object is typeof object & { Key: string } =>
-        Boolean(object.Key) && Boolean(object.LastModified) && object.LastModified! <= cutoff,
-    )
-    .map((object) => object.Key);
-  if (expiredKeys.length === 0) return 0;
-
-  const deletion = await client.send(
-    new DeleteObjectsCommand({
-      Bucket: bucket,
-      Delete: {
-        Objects: expiredKeys.map((Key) => ({ Key })),
-        Quiet: true,
-      },
-    }),
-  );
-  if (deletion.Errors?.length) {
-    throw new Error(`Failed to delete ${deletion.Errors.length} expired private S3 object(s).`);
-  }
-  return expiredKeys.length;
+  let continuationToken: string | undefined;
+  let deleted = 0;
+  do {
+    const listed = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        MaxKeys: 1000,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const expiredKeys = (listed.Contents ?? [])
+      .filter(
+        (object): object is typeof object & { Key: string } =>
+          Boolean(object.Key) && Boolean(object.LastModified) && object.LastModified! <= cutoff,
+      )
+      .map((object) => object.Key);
+    if (expiredKeys.length) {
+      const deletion = await client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: expiredKeys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+      if (deletion.Errors?.length)
+        throw new Error(`Failed to delete ${deletion.Errors.length} expired private S3 object(s).`);
+      deleted += expiredKeys.length;
+    }
+    continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    if (listed.IsTruncated && !continuationToken)
+      throw new Error('S3 returned a truncated listing without a continuation token.');
+  } while (continuationToken);
+  return deleted;
 }

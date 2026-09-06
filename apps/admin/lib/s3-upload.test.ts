@@ -106,3 +106,27 @@ describe('private S3 retention', () => {
     ]);
   });
 });
+
+it('continues past a recent first page and surfaces partial deletion failure', async () => {
+  const send = vi
+    .fn()
+    .mockResolvedValueOnce({
+      Contents: [{ Key: 'exports/recent', LastModified: new Date('2026-09-06') }],
+      IsTruncated: true,
+      NextContinuationToken: 'page-2',
+    })
+    .mockResolvedValueOnce({
+      Contents: [{ Key: 'exports/expired', LastModified: new Date('2026-09-01') }],
+    })
+    .mockResolvedValueOnce({ Errors: [{ Key: 'exports/expired', Code: 'AccessDenied' }] });
+  await expect(
+    deleteExpiredPrivateS3Objects({
+      prefix: 'exports/',
+      cutoff: new Date('2026-09-04'),
+      client: { send } as unknown as S3Client,
+      bucket: 'private',
+    }),
+  ).rejects.toThrow('Failed to delete 1');
+  expect(send.mock.calls[1]![0].input.ContinuationToken).toBe('page-2');
+  expect(send.mock.calls[2]![0].input.Delete.Objects).toEqual([{ Key: 'exports/expired' }]);
+});

@@ -1,3 +1,4 @@
+import { ActionHistoryEntityNotFoundError } from '../../../../../../lib/action-history-state';
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,8 +34,11 @@ vi.mock('../../../../../../lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../../lib/action-history', () => ({
+vi.mock('../../../../../../lib/action-history', async () => ({
+  ActionHistoryEntityNotFoundError: (await import('../../../../../../lib/action-history-state'))
+    .ActionHistoryEntityNotFoundError,
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
+  mutateEntityWithHistoryTransaction: mutateEntityWithHistoryMock,
 }));
 
 vi.mock('../../../../../../lib/storefront-revalidate', () => ({
@@ -55,9 +59,48 @@ describe('app/api/assets/[kind]/[id]/route', () => {
     revalidateStorefrontAssetsMock.mockResolvedValue(undefined);
   });
 
+  it.each(['PATCH', 'PUT', 'DELETE'] as const)(
+    'returns 404 for a missing asset on %s without refreshing consumers',
+    async (method) => {
+      hasDbMock.mockReturnValue(true);
+      getDbMock.mockReturnValue({ transaction: async (fn: (tx: unknown) => unknown) => fn({}) });
+      mutateEntityWithHistoryMock.mockRejectedValue(
+        new ActionHistoryEntityNotFoundError('assetBanners', 999),
+      );
+      const request = new NextRequest('http://localhost/api/assets/banner/999', {
+        method,
+        ...(method !== 'DELETE'
+          ? {
+              body: JSON.stringify(
+                method === 'PATCH'
+                  ? { active: true }
+                  : {
+                      data: {
+                        title: 'Missing',
+                        titleAr: 'مفقود',
+                        imageUrlLandscape: 'https://cdn.example.com/banner.jpg',
+                        imageUrlPortrait: 'https://cdn.example.com/banner.jpg',
+                        productId: 1,
+                      },
+                    },
+              ),
+            }
+          : {}),
+      });
+      const response = await { PATCH, PUT, DELETE }[method](request, {
+        params: Promise.resolve({ kind: 'banner', id: '999' }),
+      });
+      expect(response.status).toBe(404);
+      expect(revalidateStorefrontAssetsMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('returns 400 for invalid toggle payloads', async () => {
     hasDbMock.mockReturnValue(true);
-    getDbMock.mockReturnValue({ marker: 'db' });
+    getDbMock.mockReturnValue({
+      marker: 'db',
+      transaction: async (fn: (tx: unknown) => unknown) => fn({ marker: 'db' }),
+    });
 
     const req = new NextRequest('http://localhost/api/assets/banner/7', {
       method: 'PATCH',
@@ -74,7 +117,10 @@ describe('app/api/assets/[kind]/[id]/route', () => {
     'rejects featured-group fields on %s toggles before entering the mutation path',
     async (kind) => {
       hasDbMock.mockReturnValue(true);
-      getDbMock.mockReturnValue({ marker: 'db' });
+      getDbMock.mockReturnValue({
+        marker: 'db',
+        transaction: async (fn: (tx: unknown) => unknown) => fn({ marker: 'db' }),
+      });
 
       const req = new NextRequest(`http://localhost/api/assets/${kind}/7`, {
         method: 'PATCH',
@@ -156,7 +202,10 @@ describe('app/api/assets/[kind]/[id]/route', () => {
 
   it('updates banner records with validated payloads', async () => {
     hasDbMock.mockReturnValue(true);
-    const db = { marker: 'db' };
+    const db = {
+      marker: 'db',
+      transaction: async (fn: (tx: unknown) => unknown) => fn({ marker: 'db' }),
+    };
     getDbMock.mockReturnValue(db);
 
     vi.spyOn(assetBannerSchema, 'safeParse').mockReturnValue({
@@ -195,7 +244,10 @@ describe('app/api/assets/[kind]/[id]/route', () => {
 
   it('deletes product cards through action history', async () => {
     hasDbMock.mockReturnValue(true);
-    const db = { marker: 'db' };
+    const db = {
+      marker: 'db',
+      transaction: async (fn: (tx: unknown) => unknown) => fn({ marker: 'db' }),
+    };
     getDbMock.mockReturnValue(db);
 
     const req = new NextRequest('http://localhost/api/assets/product-card/12', {
@@ -236,7 +288,10 @@ describe('app/api/assets/[kind]/[id]/route', () => {
 
   it('allows featured-group storefront top placement toggles', async () => {
     hasDbMock.mockReturnValue(true);
-    const db = { marker: 'db' };
+    const db = {
+      marker: 'db',
+      transaction: async (fn: (tx: unknown) => unknown) => fn({ marker: 'db' }),
+    };
     getDbMock.mockReturnValue(db);
 
     const req = new NextRequest('http://localhost/api/assets/featured-group/7', {
@@ -248,7 +303,7 @@ describe('app/api/assets/[kind]/[id]/route', () => {
     const res = await PATCH(req, { params: Promise.resolve({ kind: 'featured-group', id: '7' }) });
 
     expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
-      db,
+      { marker: 'db' },
       expect.objectContaining({
         entityType: 'featuredProductGroups',
         entityId: 7,

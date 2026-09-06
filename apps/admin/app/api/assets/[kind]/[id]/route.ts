@@ -1,3 +1,4 @@
+import { ActionHistoryEntityNotFoundError } from '../../../../../lib/action-history';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
@@ -45,55 +46,62 @@ export async function PATCH(
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  if (kind === 'banner') {
-    const parsed = assetActiveToggleSchema.safeParse(payload);
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
+  try {
+    if (kind === 'banner') {
+      const parsed = assetActiveToggleSchema.safeParse(payload);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
+      }
+
+      await updateAdminAssetStates(
+        db,
+        {
+          items: [{ kind: 'banner', id: numericId, ...parsed.data }],
+        },
+        actor,
+      );
+      return NextResponse.json({ ok: true });
     }
 
-    await updateAdminAssetStates(
-      db,
-      {
-        items: [{ kind: 'banner', id: numericId, ...parsed.data }],
-      },
-      actor,
-    );
-    return NextResponse.json({ ok: true });
-  }
+    if (kind === 'featured-group') {
+      const parsed = featuredProductGroupToggleSchema.safeParse(payload);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
+      }
 
-  if (kind === 'featured-group') {
-    const parsed = featuredProductGroupToggleSchema.safeParse(payload);
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
+      await updateAdminAssetStates(
+        db,
+        {
+          items: [{ kind: 'featured-group', id: numericId, ...parsed.data }],
+        },
+        actor,
+      );
+      return NextResponse.json({ ok: true });
     }
 
-    await updateAdminAssetStates(
-      db,
-      {
-        items: [{ kind: 'featured-group', id: numericId, ...parsed.data }],
-      },
-      actor,
-    );
-    return NextResponse.json({ ok: true });
-  }
+    if (kind === 'product-card') {
+      const parsed = assetActiveToggleSchema.safeParse(payload);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
+      }
 
-  if (kind === 'product-card') {
-    const parsed = assetActiveToggleSchema.safeParse(payload);
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
+      await updateAdminAssetStates(
+        db,
+        {
+          items: [{ kind: 'product-card', id: numericId, ...parsed.data }],
+        },
+        actor,
+      );
+      return NextResponse.json({ ok: true });
     }
 
-    await updateAdminAssetStates(
-      db,
-      {
-        items: [{ kind: 'product-card', id: numericId, ...parsed.data }],
-      },
-      actor,
-    );
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
+  } catch (error) {
+    if (error instanceof ActionHistoryEntityNotFoundError) {
+      return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+    }
+    throw error;
   }
-
-  return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
 }
 
 export async function PUT(
@@ -122,37 +130,44 @@ export async function PUT(
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  if (kind === 'banner') {
-    const parsed = assetBannerSchema.safeParse(body.data.data);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  try {
+    if (kind === 'banner') {
+      const parsed = assetBannerSchema.safeParse(body.data.data);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
+
+      await replaceAdminAsset(db, 'banner', numericId, parsed.data, actor);
+      return NextResponse.json({ ok: true });
     }
 
-    await replaceAdminAsset(db, 'banner', numericId, parsed.data, actor);
-    return NextResponse.json({ ok: true });
-  }
+    if (kind === 'featured-group') {
+      const parsed = featuredProductGroupSchema.safeParse(body.data.data);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
 
-  if (kind === 'featured-group') {
-    const parsed = featuredProductGroupSchema.safeParse(body.data.data);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      await replaceAdminAsset(db, 'featured-group', numericId, parsed.data, actor);
+      return NextResponse.json({ ok: true });
     }
 
-    await replaceAdminAsset(db, 'featured-group', numericId, parsed.data, actor);
-    return NextResponse.json({ ok: true });
-  }
+    if (kind === 'product-card') {
+      const parsed = productCardSchema.safeParse(body.data.data);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
 
-  if (kind === 'product-card') {
-    const parsed = productCardSchema.safeParse(body.data.data);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      await replaceAdminAsset(db, 'product-card', numericId, parsed.data, actor);
+      return NextResponse.json({ ok: true });
     }
 
-    await replaceAdminAsset(db, 'product-card', numericId, parsed.data, actor);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
+  } catch (error) {
+    if (error instanceof ActionHistoryEntityNotFoundError) {
+      return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+    }
+    throw error;
   }
-
-  return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
 }
 
 export async function DELETE(
@@ -177,20 +192,27 @@ export async function DELETE(
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  if (kind === 'banner') {
-    await deleteAdminAsset(db, 'banner', numericId, actor);
-    return NextResponse.json({ ok: true });
-  }
+  try {
+    if (kind === 'banner') {
+      await deleteAdminAsset(db, 'banner', numericId, actor);
+      return NextResponse.json({ ok: true });
+    }
 
-  if (kind === 'featured-group') {
-    await deleteAdminAsset(db, 'featured-group', numericId, actor);
-    return NextResponse.json({ ok: true });
-  }
+    if (kind === 'featured-group') {
+      await deleteAdminAsset(db, 'featured-group', numericId, actor);
+      return NextResponse.json({ ok: true });
+    }
 
-  if (kind === 'product-card') {
-    await deleteAdminAsset(db, 'product-card', numericId, actor);
-    return NextResponse.json({ ok: true });
-  }
+    if (kind === 'product-card') {
+      await deleteAdminAsset(db, 'product-card', numericId, actor);
+      return NextResponse.json({ ok: true });
+    }
 
-  return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
+    return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
+  } catch (error) {
+    if (error instanceof ActionHistoryEntityNotFoundError) {
+      return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+    }
+    throw error;
+  }
 }

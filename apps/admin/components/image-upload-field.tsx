@@ -6,6 +6,11 @@ import { ImagePlus, LoaderCircle, Pencil, Trash2, XCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  MAX_IMAGE_UPLOAD_FILES,
+  MAX_IMAGE_UPLOAD_BYTES,
+  MAX_IMAGE_UPLOAD_TOTAL_BYTES,
+} from '../lib/upload-limits';
 import { cn } from '../lib/utils';
 import { Field, FieldContent, FieldLabel } from './ui/field';
 import {
@@ -32,6 +37,9 @@ type ImageUploadFieldProps = {
 type UploadItem = {
   id: string;
   fileName: string;
+  file: File;
+  replaceUrl: string | null;
+  error?: string;
   previewUrl: string;
   progress: number;
   status: 'uploading' | 'success' | 'error';
@@ -46,39 +54,46 @@ function uploadSingleImage({
   file,
   uploadUrl,
   onProgress,
+  signal,
+  failureMessage,
 }: {
   file: File;
   uploadUrl: string;
   onProgress: (progress: number) => void;
+  signal: AbortSignal;
+  failureMessage: string;
 }) {
   return new Promise<string[]>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const fail = (error: Error) => {
+      signal.removeEventListener('abort', abort);
+      reject(error);
+    };
     xhr.open('POST', uploadUrl);
     xhr.responseType = 'json';
-
+    xhr.timeout = 60_000;
     xhr.upload.onprogress = (event) => {
-      if (!event.lengthComputable) {
-        return;
-      }
-
-      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      if (event.lengthComputable)
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
     };
-
     xhr.onload = () => {
+      signal.removeEventListener('abort', abort);
       const response = xhr.response as { urls?: string[]; error?: string } | null;
-      if (xhr.status >= 200 && xhr.status < 300 && response?.urls) {
-        onProgress(100);
+      if (xhr.status >= 200 && xhr.status < 300 && response?.urls?.length) {
         resolve(response.urls);
-        return;
+      } else {
+        reject(new Error(response?.error ?? failureMessage));
       }
-
-      reject(new Error(response?.error ?? 'Upload failed'));
     };
-
-    xhr.onerror = () => {
-      reject(new Error('Upload failed'));
-    };
-
+    xhr.onerror = () => fail(new Error(failureMessage));
+    xhr.ontimeout = () => fail(new Error(failureMessage));
+    xhr.onabort = () => fail(new DOMException('Upload cancelled', 'AbortError'));
+    if (signal.aborted) {
+      fail(new DOMException('Upload cancelled', 'AbortError'));
+      return;
+    }
+    signal.addEventListener('abort', abort, { once: true });
     const body = new FormData();
     body.append('files', file);
     xhr.send(body);
@@ -101,7 +116,9 @@ export function ImageUploadField({
   const [isDragActive, setIsDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pickerStateRef = useRef<PickerState>({ multiple, replaceIndex: null });
-  const cleanupTimeoutRef = useRef<number | null>(null);
+  const previewUrlsRef = useRef(new Set<string>());
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const uploadingRef = useRef(false);
   const uploading = uploads.some((upload) => upload.status === 'uploading');
@@ -112,12 +129,13 @@ export function ImageUploadField({
 
   useEffect(() => {
     mountedRef.current = true;
+    const previewUrls = previewUrlsRef.current;
     return () => {
       mountedRef.current = false;
 
-      if (cleanupTimeoutRef.current !== null) {
-        window.clearTimeout(cleanupTimeoutRef.current);
-      }
+      uploadAbortRef.current?.abort();
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+      previewUrls.clear();
     };
   }, []);
 
@@ -130,110 +148,121 @@ export function ImageUploadField({
     }
   };
 
-  const applyUploadedUrls = (uploadedUrls: string[]) => {
-    const { replaceIndex } = pickerStateRef.current;
-
-    if (replaceIndex !== null) {
-      const next = [...value];
-      if (uploadedUrls[0]) {
-        next[replaceIndex] = uploadedUrls[0];
-      }
-      onChange(next.filter(Boolean));
-      return;
-    }
-
-    if (!multiple) {
-      onChange(uploadedUrls[0] ? [uploadedUrls[0]] : value);
-      return;
-    }
-
-    onChange([...new Set([...value, ...uploadedUrls])]);
+  const removeUpload = (upload: UploadItem) => {
+    URL.revokeObjectURL(upload.previewUrl);
+    previewUrlsRef.current.delete(upload.previewUrl);
+    setUploads((current) => current.filter((item) => item.id !== upload.id));
   };
 
-  const uploadImages = async (files: FileList | null) => {
-    if (!files || files.length === 0 || uploadingRef.current) return;
-    uploadingRef.current = true;
-    onUploadingChange?.(true);
-
+  const uploadImages = async (files: FileList | File[] | null, retry?: UploadItem) => {
+    if (!files?.length || uploadingRef.current) return;
     const selectedFiles = Array.from(files);
     const effectiveFiles = pickerStateRef.current.multiple
       ? selectedFiles
       : selectedFiles.slice(0, 1);
-    const nextUploads = effectiveFiles.map((file, index) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
-      fileName: file.name,
-      previewUrl: URL.createObjectURL(file),
-      progress: 0,
-      status: 'uploading' as const,
-      file,
-    }));
-
-    setUploads((current) => [
-      ...current,
-      ...nextUploads.map((upload) => ({
-        id: upload.id,
-        fileName: upload.fileName,
-        previewUrl: upload.previewUrl,
-        progress: upload.progress,
-        status: upload.status,
-      })),
-    ]);
-
+    if (
+      effectiveFiles.length > MAX_IMAGE_UPLOAD_FILES ||
+      effectiveFiles.some((file) => file.size > MAX_IMAGE_UPLOAD_BYTES) ||
+      effectiveFiles.reduce((total, file) => total + file.size, 0) > MAX_IMAGE_UPLOAD_TOTAL_BYTES
+    ) {
+      setBatchError(t('batchLimit'));
+      return;
+    }
+    setBatchError(null);
+    uploadingRef.current = true;
+    onUploadingChange?.(true);
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
+    const replaceUrl = retry
+      ? retry.replaceUrl
+      : (value[pickerStateRef.current.replaceIndex ?? -1] ?? null);
+    const nextUploads: UploadItem[] = retry
+      ? [{ ...retry, progress: 0, status: 'uploading', error: undefined }]
+      : effectiveFiles.map((file) => {
+          const previewUrl = URL.createObjectURL(file);
+          previewUrlsRef.current.add(previewUrl);
+          return {
+            id: crypto.randomUUID(),
+            fileName: file.name,
+            file,
+            replaceUrl,
+            previewUrl,
+            progress: 0,
+            status: 'uploading',
+          };
+        });
+    setUploads((current) => [...current.filter((item) => item.id !== retry?.id), ...nextUploads]);
+    const uploadedUrls: string[] = [];
     try {
-      const uploadedUrls = await Promise.allSettled(
-        nextUploads.map(async ({ id, file }) => {
-          try {
-            const urls = await uploadSingleImage({
-              file,
-              uploadUrl,
-              onProgress: (progress) => {
+      for (let offset = 0; offset < nextUploads.length && !controller.signal.aborted; offset += 3) {
+        const results = await Promise.all(
+          nextUploads.slice(offset, offset + 3).map(async (item) => {
+            try {
+              const urls = await uploadSingleImage({
+                file: item.file,
+                uploadUrl,
+                signal: controller.signal,
+                failureMessage: t('uploadFailed'),
+                onProgress: (progress) => {
+                  if (mountedRef.current)
+                    setUploads((current) =>
+                      current.map((upload) =>
+                        upload.id === item.id ? { ...upload, progress } : upload,
+                      ),
+                    );
+                },
+              });
+              if (mountedRef.current)
                 setUploads((current) =>
-                  current.map((upload) => (upload.id === id ? { ...upload, progress } : upload)),
+                  current.map((upload) =>
+                    upload.id === item.id
+                      ? { ...upload, progress: 100, status: 'success' }
+                      : upload,
+                  ),
                 );
-              },
-            });
-            setUploads((current) =>
-              current.map((upload) =>
-                upload.id === id ? { ...upload, progress: 100, status: 'success' } : upload,
-              ),
-            );
-            return urls;
-          } catch {
-            setUploads((current) =>
-              current.map((upload) => (upload.id === id ? { ...upload, status: 'error' } : upload)),
-            );
-            throw new Error('Upload failed');
-          }
-        }),
-      );
-
-      if (mountedRef.current) {
-        applyUploadedUrls(
-          uploadedUrls.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+              return urls;
+            } catch (error) {
+              if (mountedRef.current)
+                setUploads((current) =>
+                  current.map((upload) =>
+                    upload.id === item.id
+                      ? {
+                          ...upload,
+                          status: 'error',
+                          error: error instanceof Error ? error.message : t('uploadFailed'),
+                        }
+                      : upload,
+                  ),
+                );
+              return [];
+            }
+          }),
         );
+        uploadedUrls.push(...results.flat());
       }
-    } catch {
-      // Preserve current value on failed uploads.
+      if (mountedRef.current && uploadedUrls.length) {
+        const replaceIndex = replaceUrl ? value.indexOf(replaceUrl) : -1;
+        if (replaceIndex !== -1) {
+          const next = [...value];
+          next[replaceIndex] = uploadedUrls[0]!;
+          onChange(next);
+        } else {
+          onChange(multiple ? [...new Set([...value, ...uploadedUrls])] : [uploadedUrls[0]!]);
+        }
+      }
     } finally {
       uploadingRef.current = false;
-      if (mountedRef.current) onUploadingChange?.(false);
-      if (cleanupTimeoutRef.current !== null) {
-        window.clearTimeout(cleanupTimeoutRef.current);
-      }
-
-      cleanupTimeoutRef.current = window.setTimeout(() => {
-        if (!mountedRef.current) {
-          return;
-        }
-
+      uploadAbortRef.current = null;
+      if (mountedRef.current) {
+        onUploadingChange?.(false);
         setUploads((current) => {
-          const retained = current.filter((upload) => upload.status === 'uploading');
-          current
-            .filter((upload) => upload.status !== 'uploading')
-            .forEach((upload) => URL.revokeObjectURL(upload.previewUrl));
-          return retained;
+          for (const item of current.filter((upload) => upload.status === 'success')) {
+            URL.revokeObjectURL(item.previewUrl);
+            previewUrlsRef.current.delete(item.previewUrl);
+          }
+          return current.filter((upload) => upload.status !== 'success');
         });
-      }, 900);
+      }
     }
   };
 
@@ -265,6 +294,11 @@ export function ImageUploadField({
         />
 
         {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+        {batchError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {batchError}
+          </p>
+        ) : null}
 
         {existingImages.length > 0 || uploads.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -377,8 +411,30 @@ export function ImageUploadField({
                       ? t('progress', { progress: upload.progress })
                       : upload.status === 'success'
                         ? t('uploaded')
-                        : t('uploadFailed')}
+                        : (upload.error ?? t('uploadFailed'))}
                   </p>
+                  {upload.status === 'error' ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploading}
+                        onClick={() => void uploadImages([upload.file], upload)}
+                      >
+                        {t('retry')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={uploading}
+                        onClick={() => removeUpload(upload)}
+                      >
+                        {t('delete')}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))}

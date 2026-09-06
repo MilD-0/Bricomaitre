@@ -3,7 +3,10 @@ import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { productPromoCodes, products } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../../lib/action-history';
+import {
+  ActionHistoryEntityNotFoundError,
+  mutateEntityWithHistory,
+} from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
@@ -15,6 +18,7 @@ import {
   replaceProductThroughCanonicalWorkflow,
 } from '../../../../lib/product-update-workflow';
 import { assertUniqueProductIdentifiers } from '../../../../lib/product-integrity';
+import { hasPermission, normalizePermissions } from '../../../../lib/permissions';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../../lib/sentry';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
@@ -65,7 +69,18 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .from(productPromoCodes)
     .where(eq(productPromoCodes.productId, numericId));
 
-  return NextResponse.json({ item: { ...row, promoCodes: promoRows.map(toProductPromoResponse) } });
+  const session = await auth();
+  const permissions = normalizePermissions(session?.user?.permissions);
+  const canReadCost =
+    hasPermission(permissions, 'products_write') || hasPermission(permissions, 'orders_write');
+  const { purchasePrice, ...publicFields } = row;
+  return NextResponse.json({
+    item: {
+      ...publicFields,
+      ...(canReadCost ? { purchasePrice } : {}),
+      promoCodes: promoRows.map(toProductPromoResponse),
+    },
+  });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -97,6 +112,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     await replaceProductThroughCanonicalWorkflow(db, numericId, parsed.data, actor);
   } catch (error) {
+    if (
+      error instanceof ProductMutationNotFoundError ||
+      error instanceof ActionHistoryEntityNotFoundError
+    )
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (error instanceof ProductIntegrityConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
@@ -165,6 +185,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
   } catch (error) {
+    if (
+      error instanceof ProductMutationNotFoundError ||
+      error instanceof ActionHistoryEntityNotFoundError
+    )
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (error instanceof ProductIntegrityConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
@@ -212,7 +237,10 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   try {
     await archiveProductThroughCanonicalWorkflow(db, numericId, actor);
   } catch (error) {
-    if (error instanceof ProductMutationNotFoundError) {
+    if (
+      error instanceof ProductMutationNotFoundError ||
+      error instanceof ActionHistoryEntityNotFoundError
+    ) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     throw error;

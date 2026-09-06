@@ -27,6 +27,8 @@
     "settings": "Settings"
   },
   "uploadFields": {
+    "retry": "Retry",
+    "batchLimit": "Choose up to 12 images, 10 MB per image and 30 MB in total.",
     "openImage": "Open image {number}",
     "imageAlt": "Image {number}",
     "changeImage": "Change image {number}",
@@ -208,6 +210,8 @@
       "upToDate": "No unsaved changes"
     },
     "products": {
+      "changedElsewhere": "This product changed elsewhere. Your unsaved edits are preserved.",
+      "loadLatest": "Discard edits and load latest",
       "resultCount": "{count} products",
       "searchPlaceholder": "Search product, SKU, or barcode",
       "allStates": "All catalog states",

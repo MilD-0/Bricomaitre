@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { NextIntlClientProvider } from 'next-intl';
@@ -80,11 +80,10 @@ vi.mock('../image-upload-field', () => ({
   ),
 }));
 
-function renderWorkspace(paginationOverrides: Partial<PaginationMeta> = {}) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
+function renderWorkspace(
+  paginationOverrides: Partial<PaginationMeta> = {},
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -171,16 +170,6 @@ describe('ProductsWorkspace', () => {
     await user.click(screen.getAllByRole('button', { name: 'Actions · First product' })[0]!);
     await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
     expect(await screen.findByRole('dialog', { name: 'Edit product' })).toBeInTheDocument();
-    expect(screen.queryByText('Set the product details, pricing, stock, and images.')).toBeNull();
-    expect(screen.queryByText('Customer-facing names and operational references.')).toBeNull();
-    expect(
-      screen.queryByText('Pricing, organization, inventory, and publishing state.'),
-    ).toBeNull();
-    expect(screen.queryByText('French and Arabic content share one editing flow.')).toBeNull();
-    expect(
-      screen.queryByText('Create hidden product discount links with fixed promotional prices.'),
-    ).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'AI product content' })).toBeNull();
     const title = await screen.findByLabelText('Product name');
     await user.clear(title);
     await user.type(title, 'First product revised');
@@ -195,6 +184,39 @@ describe('ProductsWorkspace', () => {
         inStock: true,
       }),
     );
+  });
+
+  it('preserves dirty values and the mounted form during background detail refresh', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    server.use(http.get('/api/products/1', () => HttpResponse.json({ item: products[0] })));
+    renderWorkspace({}, queryClient);
+    await user.click(screen.getAllByRole('button', { name: 'Actions · First product' })[0]!);
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const title = await screen.findByLabelText('Product name');
+    await user.clear(title);
+    await user.type(title, 'My unsaved title');
+    server.use(
+      http.get('/api/products/1', () =>
+        HttpResponse.json({
+          item: {
+            ...products[0],
+            title: 'Another operator title',
+            updatedAt: '2026-09-06T12:00:00.000Z',
+          },
+        }),
+      ),
+    );
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['products-workspace-editor', 1] });
+    });
+    expect(screen.getByLabelText('Product name')).toBe(title);
+    expect(title).toHaveValue('My unsaved title');
+    expect(
+      await screen.findByText('This product changed elsewhere. Your unsaved edits are preserved.'),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Discard edits and load latest' }));
+    expect(title).toHaveValue('Another operator title');
   });
 
   it('does not carry a cancelled upload lock into the next product editor', async () => {

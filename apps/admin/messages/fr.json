@@ -27,6 +27,8 @@
     "settings": "Paramètres"
   },
   "uploadFields": {
+    "retry": "Réessayer",
+    "batchLimit": "Choisissez jusqu’à 12 images, 10 Mo par image et 30 Mo au total.",
     "openImage": "Ouvrir l’image {number}",
     "imageAlt": "Image {number}",
     "changeImage": "Modifier l’image {number}",
@@ -208,6 +210,8 @@
       "upToDate": "Aucune modification non enregistrée"
     },
     "products": {
+      "changedElsewhere": "Ce produit a été modifié ailleurs. Vos modifications non enregistrées sont conservées.",
+      "loadLatest": "Abandonner et charger la dernière version",
       "resultCount": "{count} produits",
       "searchPlaceholder": "Rechercher un produit, SKU ou code-barres",
       "allStates": "Tous les états du catalogue",

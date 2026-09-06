@@ -1,39 +1,19 @@
-import { getDb } from '@bric/db/client';
-import { productSlugHistory, products } from '@bric/db/schema';
+import type { getDb } from '@bric/db/client';
 import { normalizePromoCode, productPayloadSchema, type ProductPromoCodePayload } from './products';
 import { resolveUniqueSlug } from './slug';
 
+type Database = ReturnType<typeof getDb>;
+
 async function resolveProductSlug(
+  db: Database,
   data: ReturnType<typeof productPayloadSchema.parse>,
   currentId?: number,
 ) {
-  const db = getDb() as {
-    query?: {
-      products?: {
-        findFirst?: (input: unknown) => Promise<{ id: number } | undefined>;
-      };
-      productSlugHistory?: {
-        findFirst?: (input: unknown) => Promise<{ productId: number } | undefined>;
-      };
-    };
-  };
-
-  if (!db.query?.products?.findFirst) {
-    return resolveUniqueSlug(data.slug ?? data.title, async () => false);
-  }
-
   return resolveUniqueSlug(data.slug ?? data.title, async (slug) => {
     const [existing, historical] = await Promise.all([
-      db.query?.products?.findFirst?.({
+      db.query.products.findFirst({
         columns: { id: true },
-        where: (
-          productsTable: typeof products,
-          helpers: {
-            and: typeof import('drizzle-orm').and;
-            eq: typeof import('drizzle-orm').eq;
-            ne: typeof import('drizzle-orm').ne;
-          },
-        ) =>
+        where: (productsTable, helpers) =>
           currentId == null
             ? helpers.eq(productsTable.slug, slug)
             : helpers.and(
@@ -41,16 +21,9 @@ async function resolveProductSlug(
                 helpers.ne(productsTable.id, currentId),
               ),
       }),
-      db.query?.productSlugHistory?.findFirst?.({
+      db.query.productSlugHistory.findFirst({
         columns: { productId: true },
-        where: (
-          historyTable: typeof productSlugHistory,
-          helpers: {
-            and: typeof import('drizzle-orm').and;
-            eq: typeof import('drizzle-orm').eq;
-            ne: typeof import('drizzle-orm').ne;
-          },
-        ) =>
+        where: (historyTable, helpers) =>
           currentId == null
             ? helpers.eq(historyTable.slug, slug)
             : helpers.and(
@@ -65,6 +38,7 @@ async function resolveProductSlug(
 }
 
 export async function toProductMutationValues(
+  db: Database,
   data: ReturnType<typeof productPayloadSchema.parse>,
   currentId?: number,
 ) {
@@ -72,7 +46,7 @@ export async function toProductMutationValues(
   void promoCodes;
   return {
     ...productValues,
-    slug: await resolveProductSlug(data, currentId),
+    slug: await resolveProductSlug(db, data, currentId),
     price: data.price.toFixed(2),
     oldPrice: data.oldPrice == null ? null : data.oldPrice.toFixed(2),
     purchasePrice: data.purchasePrice == null ? null : data.purchasePrice.toFixed(2),

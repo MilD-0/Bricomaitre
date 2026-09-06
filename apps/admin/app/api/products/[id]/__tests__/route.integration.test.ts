@@ -1,3 +1,4 @@
+import { ActionHistoryEntityNotFoundError } from '../../../../../lib/action-history-state';
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,7 +48,9 @@ vi.mock('../../../../../lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/action-history', () => ({
+vi.mock('../../../../../lib/action-history', async () => ({
+  ActionHistoryEntityNotFoundError: (await import('../../../../../lib/action-history-state'))
+    .ActionHistoryEntityNotFoundError,
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
@@ -100,6 +103,50 @@ describe('app/api/products/[id]/route', () => {
     revalidateStorefrontLandingPagesMock.mockResolvedValue(undefined);
     revalidateServerTagsMock.mockReset();
     captureAdminExceptionMock.mockReset();
+  });
+
+  it.each([[], ['products_write'], ['orders_write']] as string[][])(
+    'limits purchase cost to an explicit operational permission: %j',
+    async (...permissions) => {
+      const allowed = permissions.flat();
+      hasDbMock.mockReturnValue(true);
+      authMock.mockResolvedValue({ user: { permissions: allowed } });
+      getDbMock.mockReturnValue({
+        query: {
+          products: {
+            findFirst: vi
+              .fn()
+              .mockResolvedValue({ id: 1, title: 'Visible product', purchasePrice: '700.00' }),
+          },
+        },
+        select: () => ({ from: () => ({ where: async () => [] }) }),
+      });
+      const response = await GET(new NextRequest('http://localhost/api/products/1'), {
+        params: Promise.resolve({ id: '1' }),
+      });
+      const { item } = await response.json();
+      expect(response.status).toBe(200);
+      expect(item.title).toBe('Visible product');
+      if (allowed.length) expect(item.purchasePrice).toBe('700.00');
+      else expect(item).not.toHaveProperty('purchasePrice');
+    },
+  );
+
+  it('returns 404 for a missing PATCH target before refreshing consumers', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({});
+    mutateEntityWithHistoryMock.mockRejectedValue(
+      new ActionHistoryEntityNotFoundError('products', 999),
+    );
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/products/999', {
+        method: 'PATCH',
+        body: JSON.stringify({ active: true }),
+      }),
+      { params: Promise.resolve({ id: '999' }) },
+    );
+    expect(response.status).toBe(404);
+    expect(revalidateStorefrontProductsMock).not.toHaveBeenCalled();
   });
 
   it('returns 503 when DB is unavailable for GET', async () => {
@@ -230,7 +277,13 @@ describe('app/api/products/[id]/route', () => {
       },
     } as never);
 
-    const db = { marker: 'db' };
+    const db = {
+      marker: 'db',
+      query: {
+        products: { findFirst: vi.fn().mockResolvedValue(undefined) },
+        productSlugHistory: { findFirst: vi.fn().mockResolvedValue(undefined) },
+      },
+    };
     getDbMock.mockReturnValue(db);
 
     const res = await PUT(
@@ -309,7 +362,13 @@ describe('app/api/products/[id]/route', () => {
       },
     } as never);
 
-    const db = { marker: 'db' };
+    const db = {
+      marker: 'db',
+      query: {
+        products: { findFirst: vi.fn().mockResolvedValue(undefined) },
+        productSlugHistory: { findFirst: vi.fn().mockResolvedValue(undefined) },
+      },
+    };
     getDbMock.mockReturnValue(db);
 
     const res = await PATCH(
@@ -350,7 +409,13 @@ describe('app/api/products/[id]/route', () => {
 
   it('archives a product when RBAC allows it', async () => {
     hasDbMock.mockReturnValue(true);
-    const db = { marker: 'db' };
+    const db = {
+      marker: 'db',
+      query: {
+        products: { findFirst: vi.fn().mockResolvedValue(undefined) },
+        productSlugHistory: { findFirst: vi.fn().mockResolvedValue(undefined) },
+      },
+    };
     getDbMock.mockReturnValue(db);
 
     const res = await DELETE(
@@ -378,7 +443,13 @@ describe('app/api/products/[id]/route', () => {
 
   it('does not fail product deletion when feed enqueue fails', async () => {
     hasDbMock.mockReturnValue(true);
-    const db = { marker: 'db' };
+    const db = {
+      marker: 'db',
+      query: {
+        products: { findFirst: vi.fn().mockResolvedValue(undefined) },
+        productSlugHistory: { findFirst: vi.fn().mockResolvedValue(undefined) },
+      },
+    };
     getDbMock.mockReturnValue(db);
     startProductCatalogFeedRefreshJobMock.mockRejectedValue(new Error('queue unavailable'));
 
@@ -401,7 +472,13 @@ describe('app/api/products/[id]/route', () => {
 
   it('returns 404 when the archive target no longer exists', async () => {
     hasDbMock.mockReturnValue(true);
-    getDbMock.mockReturnValue({ marker: 'db' });
+    getDbMock.mockReturnValue({
+      marker: 'db',
+      query: {
+        products: { findFirst: vi.fn().mockResolvedValue(undefined) },
+        productSlugHistory: { findFirst: vi.fn().mockResolvedValue(undefined) },
+      },
+    });
     archiveProductMock.mockRejectedValue(new ProductMutationNotFoundError(404));
 
     const res = await DELETE(

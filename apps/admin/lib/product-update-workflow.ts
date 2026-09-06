@@ -92,7 +92,7 @@ export async function replaceProductThroughCanonicalWorkflow(
   actor: ProductMutationActor,
 ) {
   const data = productPayloadSchema.parse(input);
-  const values = await toProductMutationValues(data, productId);
+  const values = await toProductMutationValues(db, data, productId);
   await mutateEntityWithHistory(db, {
     entityType: 'products',
     entityId: productId,
@@ -168,7 +168,7 @@ export async function createProductThroughCanonicalWorkflow(
   actor: ProductMutationActor,
 ) {
   const data = productPayloadSchema.parse(input);
-  const values = await toProductMutationValues(data);
+  const values = await toProductMutationValues(db, data);
   const rows = await mutateEntityWithHistory(db, {
     entityType: 'products',
     operation: 'create',

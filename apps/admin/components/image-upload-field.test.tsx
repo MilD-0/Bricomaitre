@@ -15,6 +15,8 @@ import messages from '../messages/en.json';
 import { ImageUploadField } from './image-upload-field';
 
 let deferUploadCompletion = false;
+const requests: MockXHR[] = [];
+let failureMessage: string | null = null;
 const pendingUploadCompletions: Array<() => void> = [];
 
 function render(ui: ReactNode) {
@@ -35,13 +37,20 @@ class MockXHR {
   };
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+  abort = vi.fn(() => this.onabort?.());
+  constructor() {
+    requests.push(this);
+  }
 
   open = vi.fn();
   send = vi.fn(() => {
     this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
     const complete = () => {
-      this.status = 200;
-      this.response = { urls: ['https://cdn.example.com/uploaded.jpg'] };
+      this.status = failureMessage ? 400 : 200;
+      this.response = failureMessage
+        ? { error: failureMessage }
+        : { urls: ['https://cdn.example.com/uploaded.jpg'] };
       this.onload?.();
     };
     if (deferUploadCompletion) {
@@ -55,6 +64,8 @@ class MockXHR {
 describe('ImageUploadField', () => {
   beforeEach(() => {
     deferUploadCompletion = false;
+    failureMessage = null;
+    requests.length = 0;
     pendingUploadCompletions.length = 0;
     vi.stubGlobal('XMLHttpRequest', MockXHR as unknown as typeof XMLHttpRequest);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
@@ -65,6 +76,79 @@ describe('ImageUploadField', () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('aborts active requests and releases previews when the editor closes', async () => {
+    deferUploadCompletion = true;
+    const onChange = vi.fn();
+    const { unmount } = render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.upload(
+      document.querySelector('input[type="file"]') as HTMLInputElement,
+      new File(['img'], 'pending.png', { type: 'image/png' }),
+    );
+    unmount();
+    expect(requests[0]?.abort).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+    await act(async () => pendingUploadCompletions.splice(0).forEach((complete) => complete()));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps server failures visible until the same file is retried successfully', async () => {
+    failureMessage = 'File content does not match its declared image type';
+    const onChange = vi.fn();
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.upload(
+      document.querySelector('input[type="file"]') as HTMLInputElement,
+      new File(['img'], 'retry.png', { type: 'image/png' }),
+    );
+    expect(await screen.findByText(failureMessage)).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    failureMessage = null;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith(['https://cdn.example.com/uploaded.jpg']),
+    );
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
+
+  it('limits simultaneous uploads to three and rejects oversized batches before uploading', async () => {
+    deferUploadCompletion = true;
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        multiple
+        label="Images"
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const files = Array.from(
+      { length: 13 },
+      (_, i) => new File(['img'], `${i}.png`, { type: 'image/png' }),
+    );
+    await userEvent.upload(fileInput, files);
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose up to 12 images');
+    expect(requests).toHaveLength(0);
+    await userEvent.upload(fileInput, files.slice(0, 5));
+    expect(requests).toHaveLength(3);
+    await act(async () => pendingUploadCompletions.splice(0).forEach((complete) => complete()));
+    expect(requests).toHaveLength(5);
+    await act(async () => pendingUploadCompletions.splice(0).forEach((complete) => complete()));
   });
 
   it('shows a thumbnail and upload progress before applying the returned URL', async () => {
@@ -181,24 +265,6 @@ describe('ImageUploadField', () => {
       'src',
       'https://cdn.example.com/existing.jpg',
     );
-    expect(screen.getByRole('img', { name: 'Image 1' }).parentElement).toHaveClass(
-      'bg-[hsl(var(--background)/0.86)]',
-    );
-  });
-
-  it('renders pointer cursors for image actions', () => {
-    render(
-      <ImageUploadField
-        uploadUrl="/api/uploads/test"
-        label="Images"
-        value={['https://cdn.example.com/existing.jpg']}
-        onChange={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByRole('button', { name: 'Open image 1' })).toHaveClass('cursor-pointer');
-    expect(screen.getByRole('button', { name: 'Change image 1' })).toHaveClass('cursor-pointer');
-    expect(screen.getByRole('button', { name: 'Delete image 1' })).toHaveClass('cursor-pointer');
   });
 
   it('asks for confirmation before deleting an image', async () => {

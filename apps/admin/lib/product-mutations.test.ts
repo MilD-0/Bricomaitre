@@ -1,13 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@bric/db/client', () => ({ getDb: () => ({}) }));
-
 import { toProductMutationValues } from './product-mutations';
 import { productPayloadSchema } from './products';
 
 describe('product mutation values', () => {
   it('resolves a slug and formats every commercial amount for persistence', async () => {
+    const productQuery = vi.fn().mockResolvedValueOnce({ id: 1 }).mockResolvedValue(undefined);
+    const historicalQuery = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ productId: 2 })
+      .mockResolvedValue(undefined);
     const values = await toProductMutationValues(
+      {
+        query: {
+          products: { findFirst: productQuery },
+          productSlugHistory: { findFirst: historicalQuery },
+        },
+      } as never,
       productPayloadSchema.parse({
         title: 'Test Product',
         slug: 'Test Product',
@@ -20,7 +30,7 @@ describe('product mutation values', () => {
 
     expect(values).toMatchObject({
       title: 'Test Product',
-      slug: 'test-product',
+      slug: 'test-product-3',
       price: '12.30',
       oldPrice: '14.00',
       purchasePrice: '9.50',

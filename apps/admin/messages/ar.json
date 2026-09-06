@@ -27,6 +27,8 @@
     "settings": "الإعدادات"
   },
   "uploadFields": {
+    "retry": "إعادة المحاولة",
+    "batchLimit": "اختر حتى 12 صورة، بحد أقصى 10 ميغابايت للصورة و30 ميغابايت للمجموع.",
     "openImage": "فتح الصورة {number}",
     "imageAlt": "الصورة {number}",
     "changeImage": "تغيير الصورة {number}",
@@ -208,6 +210,8 @@
       "upToDate": "لا توجد تغييرات غير محفوظة"
     },
     "products": {
+      "changedElsewhere": "تم تعديل هذا المنتج من مكان آخر. تم الاحتفاظ بتعديلاتك غير المحفوظة.",
+      "loadLatest": "تجاهل التعديلات وتحميل أحدث نسخة",
       "resultCount": "{count} منتجًا",
       "searchPlaceholder": "ابحث بالمنتج أو SKU أو الباركود",
       "allStates": "كل حالات الكتالوج",
