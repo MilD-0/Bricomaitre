@@ -38,6 +38,30 @@ import {
   roleDefinitions,
   userAccessGrants,
 } from '@bric/db/schema';
+import {
+  ActionHistoryConflictError,
+  ActionHistoryEntityNotFoundError,
+  assertChangedFieldsCurrent,
+  fetchOrderState,
+  insertOrderState,
+  updateOrderState,
+  fetchProductState,
+  insertProductState,
+  updateProductState,
+  fetchFeaturedGroupState,
+  insertFeaturedGroupState,
+  updateFeaturedGroupState,
+  snapshotChanges,
+  snapshotValues,
+} from './action-history-state';
+export {
+  ActionHistoryConflictError,
+  ActionHistoryEntityNotFoundError,
+} from './action-history-state';
+import {
+  assertNoUnresolvedEcotrackMutation,
+  EcotrackMutationConflictError,
+} from './ecotrack-mutations';
 import { parseSortRuleStrings } from './multi-sort';
 import { normalizePermissions } from './permissions';
 import {
@@ -106,7 +130,12 @@ type MutableEntityConfig = {
   reversible?: boolean;
   fetchState?: (tx: Database | Transaction, entityId: number) => Promise<SnapshotRecord | null>;
   insertState?: (tx: Transaction, snapshot: SnapshotRecord) => Promise<void>;
-  updateState?: (tx: Transaction, entityId: number, snapshot: SnapshotRecord) => Promise<void>;
+  updateState?: (
+    tx: Transaction,
+    entityId: number,
+    snapshot: SnapshotRecord,
+    expected?: SnapshotRecord,
+  ) => Promise<void>;
   deleteState?: (tx: Transaction, entityId: number) => Promise<void>;
 };
 
@@ -117,12 +146,6 @@ export type ActionActor = {
 
 export type ActionLogEntry = typeof actionLogs.$inferSelect;
 
-export class ActionHistoryConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ActionHistoryConflictError';
-  }
-}
 export type ActionHistoryChange = {
   key: string;
   field: string;
@@ -298,6 +321,9 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     table: products,
     label: (row) => String(row.title ?? row.slug ?? `#${row.id ?? 'unknown'}`),
     timestampKeys: ['createdAt', 'updatedAt', 'publishedAt', 'archivedAt'],
+    fetchState: fetchProductState,
+    insertState: insertProductState,
+    updateState: updateProductState,
   },
   orders: {
     entityType: 'orders',
@@ -308,7 +334,16 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
         ([row.firstName, row.lastName].filter(Boolean).join(' ') || row.phoneNumber1) ??
           `#${row.id ?? 'unknown'}`,
       ),
-    timestampKeys: ['createdAt', 'updatedAt', 'confirmedAt', 'ecotrackStatusLastUpdate'],
+    timestampKeys: [
+      'createdAt',
+      'updatedAt',
+      'confirmedAt',
+      'ecotrackStatusLastUpdate',
+      'publicTokenExpiresAt',
+    ],
+    fetchState: fetchOrderState,
+    insertState: insertOrderState,
+    updateState: updateOrderState,
   },
   assets: {
     entityType: 'assets',
@@ -330,6 +365,9 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     table: featuredProductGroups,
     label: (row) => String(row.name ?? `#${row.id ?? 'unknown'}`),
     timestampKeys: ['createdAt', 'updatedAt'],
+    fetchState: fetchFeaturedGroupState,
+    insertState: insertFeaturedGroupState,
+    updateState: updateFeaturedGroupState,
   },
   productCards: {
     entityType: 'productCards',
@@ -884,7 +922,9 @@ async function insertEntity(tx: Transaction, entityType: string, snapshot: Snaps
   }
 
   const allowedKeys = new Set(Object.keys(getTableColumns(config.table)));
-  await tx.insert(config.table).values(cleanSnapshot(snapshot, allowedKeys) as never);
+  await tx
+    .insert(config.table)
+    .values(snapshotValues(config.table, cleanSnapshot(snapshot, allowedKeys)!) as never);
 }
 
 async function updateEntity(
@@ -892,6 +932,7 @@ async function updateEntity(
   entityType: string,
   entityId: number,
   snapshot: SnapshotRecord,
+  expected?: SnapshotRecord,
 ) {
   const config = getActionEntityConfig(entityType);
 
@@ -899,8 +940,17 @@ async function updateEntity(
     throw new Error(`Unsupported entity type: ${entityType}`);
   }
 
+  if (expected) {
+    const current = await fetchEntity(tx, entityType, entityId);
+    if (!current) throw new ActionHistoryEntityNotFoundError(entityType, entityId);
+    assertChangedFieldsCurrent(
+      serializeSnapshot(current) as SnapshotRecord,
+      serializeSnapshot(snapshot) as SnapshotRecord,
+      serializeSnapshot(expected) as SnapshotRecord,
+    );
+  }
   if (config.updateState) {
-    await config.updateState(tx, entityId, snapshot);
+    await config.updateState(tx, entityId, snapshot, expected);
     return;
   }
 
@@ -911,7 +961,13 @@ async function updateEntity(
   const allowedKeys = new Set(Object.keys(getTableColumns(config.table)));
   await tx
     .update(config.table)
-    .set(cleanSnapshot(snapshot, allowedKeys) as never)
+    .set({
+      ...snapshotValues(
+        config.table,
+        cleanSnapshot(snapshotChanges(snapshot, expected), allowedKeys)!,
+      ),
+      updatedAt: new Date(),
+    } as never)
     .where(eq(config.table.id, entityId));
 }
 
@@ -1035,10 +1091,11 @@ export async function mutateEntityWithHistoryTransaction<T>(
     snapshotFields?: { before?: SnapshotRecord; after?: SnapshotRecord };
   },
 ) {
-  if (params.entityType === 'products' && params.entityId) {
-    // A product snapshot must include stock changes committed before this mutation.
-    await tx.execute(sql`select ${products.id} from ${products}
-      where ${products.id} = ${params.entityId} for update`);
+  const entityTable = getActionEntityConfig(params.entityType)?.table;
+  if (entityTable && params.entityId) {
+    await tx.execute(
+      sql`select ${entityTable.id} from ${entityTable} where ${entityTable.id} = ${params.entityId} for update`,
+    );
   }
   const taxonomyDelete =
     isTaxonomyEntity(params.entityType) && params.operation === 'delete' && params.entityId;
@@ -1049,6 +1106,9 @@ export async function mutateEntityWithHistoryTransaction<T>(
   const beforeState = params.entityId
     ? await fetchEntity(tx, params.entityType, params.entityId)
     : null;
+  if (params.operation !== 'create' && !beforeState && params.entityId) {
+    throw new ActionHistoryEntityNotFoundError(params.entityType, params.entityId);
+  }
   const result = await params.execute(tx);
   const entityId = params.resolveEntityId?.(result) ?? params.entityId;
 
@@ -1232,6 +1292,12 @@ export async function applyHistoryAction(
         where ${products.id} = ${entry.entityId} for update`);
       }
 
+      if (config.table && entry.entityType !== 'products' && !isTaxonomyEntity(entry.entityType)) {
+        await tx.execute(
+          sql`select ${config.table.id} from ${config.table} where ${config.table.id} = ${entry.entityId} for update`,
+        );
+      }
+
       const entityHistory = await tx
         .select({
           id: actionLogs.id,
@@ -1258,6 +1324,16 @@ export async function applyHistoryAction(
         throw new ActionHistoryConflictError(message);
       }
 
+      if (entry.entityType === 'orders') {
+        await assertNoUnresolvedEcotrackMutation(tx, entry.entityId);
+        const [live] = await tx.select().from(orders).where(eq(orders.id, entry.entityId)).limit(1);
+        if (live?.ecotrackTrackingNumber || live?.ecotrackReference) {
+          throw new ActionHistoryConflictError(
+            'Use the carrier workflow to recover an order with an active shipment.',
+          );
+        }
+      }
+
       const beforeState = reviveSnapshot(
         entry.beforeState as SnapshotRecord | null,
         config.timestampKeys,
@@ -1280,7 +1356,13 @@ export async function applyHistoryAction(
           await deleteEntity(tx, entry.entityType, entry.entityId);
         }
         if (entry.operation === 'update' && beforeState) {
-          await updateEntity(tx, entry.entityType, entry.entityId, beforeState);
+          await updateEntity(
+            tx,
+            entry.entityType,
+            entry.entityId,
+            beforeState,
+            afterState ?? undefined,
+          );
         }
         if (entry.operation === 'delete' && beforeState) {
           await insertEntity(tx, entry.entityType, beforeState);
@@ -1315,7 +1397,13 @@ export async function applyHistoryAction(
         await insertEntity(tx, entry.entityType, afterState);
       }
       if (entry.operation === 'update' && afterState) {
-        await updateEntity(tx, entry.entityType, entry.entityId, afterState);
+        await updateEntity(
+          tx,
+          entry.entityType,
+          entry.entityId,
+          afterState,
+          beforeState ?? undefined,
+        );
       }
       if (entry.operation === 'delete') {
         if (isTaxonomyEntity(entry.entityType)) {
@@ -1347,6 +1435,7 @@ export async function applyHistoryAction(
     })
     .catch((error: unknown) => {
       if (
+        error instanceof EcotrackMutationConflictError ||
         error instanceof StockAllocationHistoryConflictError ||
         error instanceof TaxonomyHistoryConflictError
       ) {

@@ -328,29 +328,20 @@ export async function updateAdminAssetStates(
 
 export async function reorderAdminAssets(db: Database, input: z.input<typeof assetReorderSchema>) {
   const value = assetReorderSchema.parse(input);
+  const table =
+    value.kind === 'banner'
+      ? assetBanners
+      : value.kind === 'featured-group'
+        ? featuredProductGroups
+        : productCards;
   await db.transaction(async (tx) => {
-    const now = new Date();
-    if (value.kind === 'banner') {
-      await Promise.all(
-        value.items.map(({ id, sortOrder }) =>
-          tx.update(assetBanners).set({ sortOrder, updatedAt: now }).where(eq(assetBanners.id, id)),
-        ),
-      );
-    } else if (value.kind === 'featured-group') {
-      await Promise.all(
-        value.items.map(({ id, sortOrder }) =>
-          tx
-            .update(featuredProductGroups)
-            .set({ sortOrder, updatedAt: now })
-            .where(eq(featuredProductGroups.id, id)),
-        ),
-      );
-    } else {
-      await Promise.all(
-        value.items.map(({ id, sortOrder }) =>
-          tx.update(productCards).set({ sortOrder, updatedAt: now }).where(eq(productCards.id, id)),
-        ),
-      );
+    for (const { id, sortOrder } of [...value.items].sort((left, right) => left.id - right.id)) {
+      const [updated] = await tx
+        .update(table)
+        .set({ sortOrder, updatedAt: new Date() })
+        .where(eq(table.id, id))
+        .returning({ id: table.id });
+      if (!updated) throw new Error(`Asset ${id} was not found.`);
     }
   });
   await revalidateStorefrontAssets();

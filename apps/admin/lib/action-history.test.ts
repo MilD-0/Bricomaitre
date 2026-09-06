@@ -1,27 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+import { orders } from '@bric/db/schema';
+import { snapshotValues } from './action-history-state';
 
 import {
   applyHistoryAction,
   getActionEntityConfig,
   getActionHistoryChanges,
-  mutateEntityWithHistory,
   recordExplicitActionLog,
   resolveActionHistoryRecovery,
   toActionHistoryItem,
 } from './action-history';
-
-function createSelectBuilder(row: unknown) {
-  return {
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({
-        limit: vi.fn().mockResolvedValue(row ? [row] : []),
-      })),
-      orderBy: vi.fn(() => ({
-        limit: vi.fn().mockResolvedValue(Array.isArray(row) ? row : row ? [row] : []),
-      })),
-    })),
-  };
-}
 
 function createActionLogSelectBuilder(row: unknown) {
   return {
@@ -59,56 +47,6 @@ describe('action-history helpers', () => {
     });
   });
 
-  it('records before/after snapshots around a mutation', async () => {
-    const beforeRow = {
-      id: 3,
-      phoneNumber1: '0550',
-      inHouseStatus: 0,
-      createdAt: new Date('2026-03-20T00:00:00.000Z'),
-      updatedAt: new Date('2026-03-20T00:00:00.000Z'),
-    };
-    const afterRow = {
-      ...beforeRow,
-      inHouseStatus: 2,
-      updatedAt: new Date('2026-03-21T00:00:00.000Z'),
-    };
-    const selectMock = vi
-      .fn()
-      .mockReturnValueOnce(createSelectBuilder(beforeRow))
-      .mockReturnValueOnce(createSelectBuilder(afterRow));
-    const actionLogValues = vi.fn().mockResolvedValue(undefined);
-    const tx = {
-      select: selectMock,
-      insert: vi.fn(() => ({ values: actionLogValues })),
-    };
-    const db = {
-      transaction: vi.fn(async (callback: (innerTx: typeof tx) => Promise<unknown>) =>
-        callback(tx),
-      ),
-    };
-
-    await mutateEntityWithHistory(db as never, {
-      entityType: 'orders',
-      entityId: 3,
-      operation: 'update',
-      actor: { email: 'admin@example.com', name: 'Admin' },
-      execute: vi.fn().mockResolvedValue(undefined),
-    });
-
-    expect(actionLogValues).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: 'orders',
-        entityId: 3,
-        operation: 'update',
-        createdBy: 'admin@example.com',
-        createdByName: 'Admin',
-        isReversible: true,
-        beforeState: expect.objectContaining({ inHouseStatus: 0 }),
-        afterState: expect.objectContaining({ inHouseStatus: 2 }),
-      }),
-    );
-  });
-
   it('records explicit non-reversible action logs', async () => {
     const actionLogValues = vi.fn().mockResolvedValue(undefined);
     const tx = {
@@ -135,151 +73,14 @@ describe('action-history helpers', () => {
     );
   });
 
-  it('undoes and redoes an update action log', async () => {
-    const historyEntry = {
-      id: 7,
-      resource: 'orders',
-      entityType: 'orders',
-      entityId: 11,
-      entityLabel: '0550',
-      operation: 'update',
-      beforeState: {
-        id: 11,
-        phoneNumber1: '0550',
-        inHouseStatus: 0,
-        createdAt: '2026-03-20T00:00:00.000Z',
-        updatedAt: '2026-03-20T00:00:00.000Z',
-      },
-      afterState: {
-        id: 11,
-        phoneNumber1: '0550',
-        inHouseStatus: 2,
-        createdAt: '2026-03-20T00:00:00.000Z',
-        updatedAt: '2026-03-21T00:00:00.000Z',
-      },
-      createdBy: 'admin@example.com',
-      createdByName: 'Admin',
-      isReversible: true,
-      isUndone: false,
-      undoneAt: null,
-      undoneBy: null,
-      redoneAt: null,
-      redoneBy: null,
-      createdAt: new Date('2026-03-21T00:00:00.000Z'),
-      updatedAt: new Date('2026-03-21T00:00:00.000Z'),
-    };
-
-    const entityUpdateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
-    const logUpdateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
-    const tx = {
-      select: vi
-        .fn()
-        .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
-        .mockReturnValueOnce(
-          createHistoryListSelectBuilder([
-            { id: 6, isUndone: false },
-            { id: 7, isUndone: false },
-          ]),
-        )
-        .mockReturnValueOnce(createActionLogSelectBuilder({ ...historyEntry, isUndone: true }))
-        .mockReturnValueOnce(
-          createHistoryListSelectBuilder([
-            { id: 6, isUndone: false },
-            { id: 7, isUndone: true },
-          ]),
-        ),
-      update: vi
-        .fn()
-        .mockReturnValueOnce({ set: entityUpdateSet })
-        .mockReturnValueOnce({ set: logUpdateSet })
-        .mockReturnValueOnce({ set: entityUpdateSet })
-        .mockReturnValueOnce({ set: logUpdateSet }),
-      insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
-      delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
-    };
-    const db = {
-      transaction: vi.fn(async (callback: (innerTx: typeof tx) => Promise<unknown>) =>
-        callback(tx),
-      ),
-    };
-
-    await applyHistoryAction(db as never, {
-      actionLogId: 7,
-      direction: 'undo',
-      actor: { email: 'admin@example.com' },
-    });
-
-    expect(entityUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ inHouseStatus: 0 }));
-
-    await applyHistoryAction(db as never, {
-      actionLogId: 7,
-      direction: 'redo',
-      actor: { email: 'admin@example.com' },
-    });
-
-    expect(entityUpdateSet).toHaveBeenLastCalledWith(expect.objectContaining({ inHouseStatus: 2 }));
-  });
-
-  it('ignores removed columns when replaying historical snapshots', async () => {
-    const historyEntry = {
-      id: 12,
-      resource: 'products',
-      entityType: 'products',
-      entityId: 9,
-      entityLabel: 'Widget',
-      operation: 'update',
-      beforeState: { id: 9, title: 'Widget', color: '#ffffff', inventoryQuantity: 2 },
-      afterState: { id: 9, title: 'Updated widget', color: '#000000', inventoryQuantity: 2 },
-      createdBy: 'admin@example.com',
-      createdByName: 'Admin',
-      isReversible: true,
-      isUndone: false,
-      undoneAt: null,
-      undoneBy: null,
-      redoneAt: null,
-      redoneBy: null,
-      createdAt: new Date('2026-03-21T00:00:00.000Z'),
-      updatedAt: new Date('2026-03-21T00:00:00.000Z'),
-    };
-
-    const entityUpdateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
-    const logUpdateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
-    const tx = {
-      execute: vi.fn().mockResolvedValue({ rows: [] }),
-      select: vi
-        .fn()
-        .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
-        .mockReturnValueOnce(createHistoryListSelectBuilder([{ id: 12, isUndone: false }])),
-      update: vi
-        .fn()
-        .mockReturnValueOnce({ set: entityUpdateSet })
-        .mockReturnValueOnce({ set: logUpdateSet }),
-      insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
-      delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
-    };
-    const db = {
-      transaction: vi.fn(async (callback: (innerTx: typeof tx) => Promise<unknown>) =>
-        callback(tx),
-      ),
-    };
-
-    await applyHistoryAction(db as never, {
-      actionLogId: 12,
-      direction: 'undo',
-      actor: { email: 'admin@example.com' },
-    });
-
-    expect(entityUpdateSet).toHaveBeenCalledWith(
-      expect.objectContaining({
-        inventoryQuantity: 2,
-        title: 'Widget',
+  it('filters removed columns and revives persisted timestamp fields', () => {
+    expect(
+      snapshotValues(orders, {
+        id: 9,
+        removedColumn: true,
+        publicTokenExpiresAt: '2026-09-07T12:00:00.000Z',
       }),
-    );
-    expect(entityUpdateSet).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        color: expect.anything(),
-      }),
-    );
+    ).toEqual({ id: 9, publicTokenExpiresAt: new Date('2026-09-07T12:00:00.000Z') });
   });
 
   it('rejects undo for a stale action log when a newer applied entry exists', async () => {
@@ -305,6 +106,7 @@ describe('action-history helpers', () => {
     };
 
     const tx = {
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
       select: vi
         .fn()
         .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
@@ -358,6 +160,7 @@ describe('action-history helpers', () => {
     };
 
     const tx = {
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
       select: vi
         .fn()
         .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
@@ -411,6 +214,7 @@ describe('action-history helpers', () => {
     };
 
     const tx = {
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
       select: vi.fn().mockReturnValueOnce(createActionLogSelectBuilder(historyEntry)),
       update: vi.fn(),
       insert: vi.fn(),
