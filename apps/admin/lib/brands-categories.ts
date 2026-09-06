@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 import { paginationMetaSchema, paginationQuerySchema } from './pagination';
 
-export { paginationQuerySchema };
+export const taxonomyListQuerySchema = paginationQuerySchema.extend({
+  sort: z.enum(['updated', 'name', 'products']).default('updated'),
+});
+export type TaxonomySort = z.infer<typeof taxonomyListQuerySchema>['sort'];
 
 const auditFieldsSchema = z.object({
   createdAt: z.string(),

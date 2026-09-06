@@ -103,7 +103,10 @@ describe('app/api/categories/route', () => {
       new NextRequest('http://localhost/api/categories?includeParentOptions=1'),
     );
 
-    expect(readCategoriesPageMock).toHaveBeenCalledWith({ page: 1, limit: 50, search: '' }, true);
+    expect(readCategoriesPageMock).toHaveBeenCalledWith(
+      { page: 1, limit: 50, search: '', sort: 'updated' },
+      true,
+    );
     await expect(response.json()).resolves.toEqual({
       writable: true,
       items: [

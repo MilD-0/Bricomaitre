@@ -11,6 +11,7 @@ import { requestJson } from '../../lib/admin-api';
 import { taxonomyAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
 import {
   type BrandRow,
+  type TaxonomySort,
   type BrandsListResponse,
   type CategoriesListResponse,
   type CategoryRow,
@@ -46,7 +47,6 @@ import { getTaxonomyCopy, type TaxonomyView } from './taxonomy-workspace-copy';
 
 type TaxonomyRow = BrandRow | CategoryRow;
 type TaxonomyResponse = BrandsListResponse | CategoriesListResponse;
-type SortMode = 'updated' | 'name' | 'products';
 
 function emptyResponse(view: TaxonomyView): TaxonomyResponse {
   const pagination = {
@@ -60,14 +60,6 @@ function emptyResponse(view: TaxonomyView): TaxonomyResponse {
   return view === 'brands'
     ? { writable: false, items: [], pagination }
     : { writable: false, items: [], parentOptions: [], pagination };
-}
-
-function sortRows(items: TaxonomyRow[], mode: SortMode) {
-  return [...items].sort((left, right) => {
-    if (mode === 'name') return left.name.localeCompare(right.name);
-    if (mode === 'products') return right.productCount - left.productCount;
-    return Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
-  });
 }
 
 function isCategory(row: TaxonomyRow): row is CategoryRow {
@@ -98,7 +90,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState('');
   const deferredSearch = React.useDeferredValue(search.trim());
-  const [sort, setSort] = React.useState<SortMode>('updated');
+  const [sort, setSort] = React.useState<TaxonomySort>('updated');
   const [selected, setSelected] = React.useState<string[]>([]);
   const [editor, setEditor] = React.useState<TaxonomyEditorState | null>(null);
   const [deleteIds, setDeleteIds] = React.useState<string[]>([]);
@@ -116,6 +108,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
         page: String(page),
         limit: '50',
         search: deferredSearch,
+        sort,
       });
       if (view === 'categories') query.set('includeParentOptions', '1');
 
@@ -130,7 +123,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [deferredSearch, endpoint, page, responseSchema, t.loadFailed, view],
+    [deferredSearch, endpoint, page, responseSchema, sort, t.loadFailed, view],
   );
 
   React.useEffect(() => {
@@ -142,7 +135,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
     };
   }, [load]);
 
-  const items = sortRows(data.items as TaxonomyRow[], sort);
+  const items = data.items;
   const allVisibleSelected = items.length > 0 && items.every((item) => selected.includes(item.id));
   const parentOptions = 'parentOptions' in data ? data.parentOptions : [];
   const viewTitle = view === 'brands' ? t.brands : t.categories;
@@ -376,7 +369,11 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
           <NativeSelect
             aria-label={t.sort}
             value={sort}
-            onChange={(event) => setSort(event.target.value as SortMode)}
+            onChange={(event) => {
+              setSort(event.target.value as TaxonomySort);
+              setPage(1);
+              setSelected([]);
+            }}
             className="min-w-44"
           >
             <NativeSelectOption value="updated">{t.recentlyModified}</NativeSelectOption>

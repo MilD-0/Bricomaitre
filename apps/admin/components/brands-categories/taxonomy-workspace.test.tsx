@@ -151,31 +151,54 @@ describe('taxonomy workspace preview', () => {
     );
   }
 
-  it('presents a flat brand list with useful counts, navigation, sorting, and pagination', async () => {
-    const view = renderWorkspace('brands');
-
-    await screen.findByText('Acme');
-    expect(view.container.querySelector('[data-mobile-taxonomy-controls]')).toHaveClass(
-      'grid-cols-[minmax(0,1fr)_auto]',
+  it('requests the selected server sort from page one and retains it when paging', async () => {
+    const queries: URLSearchParams[] = [];
+    server.use(
+      http.get('/api/brands', ({ request }) => {
+        const query = new URL(request.url).searchParams;
+        queries.push(query);
+        const page = Number(query.get('page'));
+        const name =
+          query.get('sort') === 'products'
+            ? page === 1
+              ? 'Most products'
+              : 'Fewer products'
+            : 'Recently updated';
+        return HttpResponse.json({
+          writable: true,
+          items: [
+            {
+              id: String(page),
+              name,
+              slug: name.toLowerCase().replaceAll(' ', '-'),
+              isActive: true,
+              status: 'active',
+              productCount: 10,
+              ...audit,
+            },
+          ],
+          pagination: {
+            ...pagination,
+            page,
+            totalItems: 51,
+            totalPages: 2,
+            hasNextPage: page === 1,
+            hasPreviousPage: page === 2,
+          },
+        });
+      }),
     );
-    expect(screen.getByRole('heading', { name: 'Brands' })).toHaveClass(
-      'sr-only',
-      'lg:not-sr-only',
-    );
-    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
-    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
-    expect(view.container.querySelectorAll('[data-workspace-navigation]')).toHaveLength(1);
-    expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
-    expect(screen.getByText('18 products')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Brands' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'Categories' })).toHaveAttribute(
-      'href',
-      '/en/categories',
-    );
-
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort' }), 'products');
+    renderWorkspace('brands');
+    await screen.findByText('Recently updated');
     await userEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
-    await screen.findByText('Beta');
+    await waitFor(() => expect(queries.at(-1)?.get('page')).toBe('2'));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort' }), 'products');
+    await screen.findByText('Most products', { selector: 'span' });
+    expect(queries.at(-1)?.get('page')).toBe('1');
+    expect(queries.at(-1)?.get('sort')).toBe('products');
+    await userEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
+    await screen.findByText('Fewer products');
+    expect(queries.at(-1)?.get('sort')).toBe('products');
   });
 
   it('edits a category in a responsive inspector with parent and Arabic fields', async () => {

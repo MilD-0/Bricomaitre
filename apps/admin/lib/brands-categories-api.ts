@@ -1,4 +1,17 @@
-import { and, asc, count, desc, eq, ilike, inArray, isNull, ne } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+  getTableColumns,
+} from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { brands, categories, products } from '@bric/db/schema';
@@ -7,11 +20,11 @@ import {
   type BrandsListResponse,
   type CategoryRow,
   type CategoriesListResponse,
-  paginationQuerySchema,
+  taxonomyListQuerySchema,
 } from './brands-categories';
 import { resolveUniqueSlug } from './slug';
 
-type PaginationQuery = ReturnType<typeof paginationQuerySchema.parse>;
+type TaxonomyQuery = ReturnType<typeof taxonomyListQuerySchema.parse>;
 type TaxonomyQueryClient = Pick<ReturnType<typeof getDb>, 'select'>;
 
 type BrandRecord = typeof brands.$inferSelect;
@@ -103,34 +116,44 @@ export function resolveCategorySlug(
 }
 
 export async function readBrandsPage(
-  query: PaginationQuery,
+  query: TaxonomyQuery,
 ): Promise<Pick<BrandsListResponse, 'items' | 'pagination'>> {
-  const searchFilter = query.search ? ilike(brands.name, `%${query.search}%`) : undefined;
+  const searchFilter = query.search
+    ? or(ilike(brands.name, `%${query.search}%`), ilike(brands.slug, `%${query.search}%`))
+    : undefined;
+  const counts = getDb()
+    .select({
+      id: products.brandId,
+      value: count().as('value'),
+    })
+    .from(products)
+    .where(isNull(products.archivedAt))
+    .groupBy(products.brandId)
+    .as('product_counts');
+  const productCount = sql<number>`coalesce(${counts.value}, 0)`.mapWith(Number);
   const [{ value: totalItems }] = await getDb()
     .select({ value: count() })
     .from(brands)
     .where(searchFilter);
   const rows = await getDb()
-    .select()
+    .select({ ...getTableColumns(brands), productCount })
     .from(brands)
+    .leftJoin(counts, eq(counts.id, brands.id))
     .where(searchFilter)
-    .orderBy(desc(brands.updatedAt))
+    .orderBy(
+      query.sort === 'name'
+        ? asc(brands.name)
+        : query.sort === 'products'
+          ? desc(productCount)
+          : desc(brands.updatedAt),
+      asc(brands.id),
+    )
     .limit(query.limit)
     .offset((query.page - 1) * query.limit);
-  const ids = rows.map((row) => row.id);
-  const productCounts =
-    ids.length === 0
-      ? []
-      : await getDb()
-          .select({ id: products.brandId, value: count() })
-          .from(products)
-          .where(and(inArray(products.brandId, ids), isNull(products.archivedAt)))
-          .groupBy(products.brandId);
-  const countsById = new Map(productCounts.map((row) => [row.id, Number(row.value)]));
   const totalPages = Math.max(1, Math.ceil(totalItems / query.limit));
 
   return {
-    items: rows.map((row) => toBrandRow(row, countsById.get(row.id) ?? 0)),
+    items: rows.map((row) => toBrandRow(row, row.productCount)),
     pagination: {
       page: query.page,
       limit: query.limit,
@@ -149,19 +172,39 @@ export async function readBrand(id: number) {
 }
 
 export async function readCategoriesPage(
-  query: PaginationQuery,
+  query: TaxonomyQuery,
   includeParentOptions: boolean,
 ): Promise<Pick<CategoriesListResponse, 'items' | 'parentOptions' | 'pagination'>> {
-  const searchFilter = query.search ? ilike(categories.name, `%${query.search}%`) : undefined;
+  const searchFilter = query.search
+    ? or(ilike(categories.name, `%${query.search}%`), ilike(categories.slug, `%${query.search}%`))
+    : undefined;
+  const counts = getDb()
+    .select({
+      id: products.categoryId,
+      value: count().as('value'),
+    })
+    .from(products)
+    .where(isNull(products.archivedAt))
+    .groupBy(products.categoryId)
+    .as('product_counts');
+  const productCount = sql<number>`coalesce(${counts.value}, 0)`.mapWith(Number);
   const [{ value: totalItems }] = await getDb()
     .select({ value: count() })
     .from(categories)
     .where(searchFilter);
   const rows = await getDb()
-    .select()
+    .select({ ...getTableColumns(categories), productCount })
     .from(categories)
+    .leftJoin(counts, eq(counts.id, categories.id))
     .where(searchFilter)
-    .orderBy(desc(categories.updatedAt))
+    .orderBy(
+      query.sort === 'name'
+        ? asc(categories.name)
+        : query.sort === 'products'
+          ? desc(productCount)
+          : desc(categories.updatedAt),
+      asc(categories.id),
+    )
     .limit(query.limit)
     .offset((query.page - 1) * query.limit);
   const totalPages = Math.max(1, Math.ceil(totalItems / query.limit));
@@ -178,16 +221,6 @@ export async function readCategoriesPage(
           .from(categories)
           .where(inArray(categories.id, parentIds));
   const parentNames = new Map(parentRows.map((row) => [row.id, row.name]));
-  const ids = rows.map((row) => row.id);
-  const productCounts =
-    ids.length === 0
-      ? []
-      : await getDb()
-          .select({ id: products.categoryId, value: count() })
-          .from(products)
-          .where(and(inArray(products.categoryId, ids), isNull(products.archivedAt)))
-          .groupBy(products.categoryId);
-  const countsById = new Map(productCounts.map((row) => [row.id, Number(row.value)]));
   const parentOptions: ParentOption[] = includeParentOptions
     ? await getDb()
         .select({ id: categories.id, name: categories.name })
@@ -201,7 +234,7 @@ export async function readCategoriesPage(
       toCategoryRow(
         row,
         row.parentId ? (parentNames.get(row.parentId) ?? null) : null,
-        countsById.get(row.id) ?? 0,
+        row.productCount,
       ),
     ),
     parentOptions,

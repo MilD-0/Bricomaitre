@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { auth } from '../../../lib/auth';
 import { readBrandsPage } from '../../../lib/brands-categories-api';
-import { brandFormSchema, paginationQuerySchema } from '../../../lib/brands-categories';
+import { brandFormSchema, taxonomyListQuerySchema } from '../../../lib/brands-categories';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
 import { revalidateStorefrontProductMeta } from '../../../lib/storefront-revalidate';
@@ -26,10 +26,11 @@ export async function GET(request: NextRequest) {
     return denied;
   }
 
-  const parsed = paginationQuerySchema.safeParse({
+  const parsed = taxonomyListQuerySchema.safeParse({
     page: request.nextUrl.searchParams.get('page') ?? undefined,
     limit: request.nextUrl.searchParams.get('limit') ?? undefined,
     search: request.nextUrl.searchParams.get('search') ?? undefined,
+    sort: request.nextUrl.searchParams.get('sort') ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

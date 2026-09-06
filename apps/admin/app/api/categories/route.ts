@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { auth } from '../../../lib/auth';
 import { readCategoriesPage } from '../../../lib/brands-categories-api';
-import { categoryFormSchema, paginationQuerySchema } from '../../../lib/brands-categories';
+import { categoryFormSchema, taxonomyListQuerySchema } from '../../../lib/brands-categories';
 import { CategoryHierarchyError } from '../../../lib/category-hierarchy';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
@@ -27,10 +27,11 @@ export async function GET(request: NextRequest) {
     return denied;
   }
 
-  const parsed = paginationQuerySchema.safeParse({
+  const parsed = taxonomyListQuerySchema.safeParse({
     page: request.nextUrl.searchParams.get('page') ?? undefined,
     limit: request.nextUrl.searchParams.get('limit') ?? undefined,
     search: request.nextUrl.searchParams.get('search') ?? undefined,
+    sort: request.nextUrl.searchParams.get('sort') ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

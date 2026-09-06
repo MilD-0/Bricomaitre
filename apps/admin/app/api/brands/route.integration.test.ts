@@ -108,7 +108,12 @@ describe('app/api/brands/route', () => {
 
     const response = await GET(new NextRequest('http://localhost/api/brands?page=2&search=ac'));
 
-    expect(readBrandsPageMock).toHaveBeenCalledWith({ page: 2, limit: 50, search: 'ac' });
+    expect(readBrandsPageMock).toHaveBeenCalledWith({
+      page: 2,
+      limit: 50,
+      search: 'ac',
+      sort: 'updated',
+    });
     await expect(response.json()).resolves.toEqual({
       writable: true,
       items: [
