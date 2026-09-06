@@ -1,4 +1,4 @@
-export { createServerCache, revalidateServerTags } from '@bric/storefront-core/server-cache';
+export { revalidateServerTags } from '@bric/storefront-core/server-cache';
 
 export const CACHE_TAGS = {
   products: 'products',

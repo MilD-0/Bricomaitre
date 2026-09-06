@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import { getDb, hasDb } from '@bric/db/client';
 import { verifyInternalRequestSignature } from '@bric/runtime/internal-signing';
 import {
@@ -11,7 +12,7 @@ import {
   landingPageSlugSchema,
   storefrontLandingPageResponseSchema,
 } from '@bric/storefront-core/landing-pages';
-import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
+import { CACHE_TAGS } from '@bric/storefront-core/server-cache';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -65,10 +66,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       : undefined,
   });
 }
-const loadLandingPage = createServerCache({
-  keyParts: ['storefront-landing-page'],
-  revalidate: 120,
-  tags: [CACHE_TAGS.landingPages, CACHE_TAGS.products],
-  load: async (slug: string, locale: string) =>
+const loadLandingPage = unstable_cache(
+  async (slug: string, locale: string) =>
     readPublishedStorefrontLandingPage(getDb(), { slug, locale }),
-});
+  ['storefront-landing-page'],
+  { revalidate: 120, tags: [CACHE_TAGS.landingPages, CACHE_TAGS.products] },
+);

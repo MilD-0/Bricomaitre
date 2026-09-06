@@ -1,3 +1,5 @@
+vi.mock('next/cache', () => ({ unstable_cache: (load: (...args: unknown[]) => unknown) => load }));
+
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +28,6 @@ vi.mock('@bric/storefront-core/server-cache', () => ({
     assets: 'assets',
     products: 'products',
   },
-  createServerCache: ({ load }: { load: (...args: unknown[]) => unknown }) => load,
 }));
 
 describe('app/storefront/products/route', () => {

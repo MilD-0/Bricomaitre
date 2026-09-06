@@ -1,15 +1,15 @@
+import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { readStorefrontAssets } from '@bric/storefront-core/assets';
-import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
+import { CACHE_TAGS } from '@bric/storefront-core/server-cache';
 
-const loadAssets = createServerCache({
-  keyParts: ['storefront-assets'],
-  revalidate: 120,
-  tags: [CACHE_TAGS.assets],
-  load: async () => readStorefrontAssets(getDb()),
-});
+const loadAssets = unstable_cache(
+  async () => readStorefrontAssets(getDb()),
+  ['storefront-assets'],
+  { revalidate: 120, tags: [CACHE_TAGS.assets] },
+);
 
 export async function GET() {
   if (!hasDb()) {

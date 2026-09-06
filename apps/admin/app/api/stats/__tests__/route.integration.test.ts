@@ -62,7 +62,6 @@ vi.mock('../../../../lib/server-cache', () => ({
     stats: 'stats',
     statsHistory: 'stats-history',
   },
-  createServerCache: ({ load }: { load: (...args: unknown[]) => unknown }) => load,
   revalidateServerTags: revalidateServerTagsMock,
 }));
 

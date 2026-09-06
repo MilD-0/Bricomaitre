@@ -1,3 +1,5 @@
+vi.mock('next/cache', () => ({ unstable_cache: (load: (...args: unknown[]) => unknown) => load }));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from './route';
@@ -18,7 +20,6 @@ vi.mock('@bric/db/client', () => ({
 
 vi.mock('@bric/storefront-core/server-cache', () => ({
   CACHE_TAGS: { storefrontSettings: 'storefront-settings' },
-  createServerCache: ({ load }: { load: (...args: unknown[]) => unknown }) => load,
 }));
 
 describe('app/storefront/settings/route', () => {

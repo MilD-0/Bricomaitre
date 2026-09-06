@@ -1,3 +1,5 @@
+vi.mock('next/cache', () => ({ unstable_cache: (load: (...args: unknown[]) => unknown) => load }));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -25,7 +27,6 @@ vi.mock('@bric/storefront-core/ecotrack-catalog', () => ({
 }));
 vi.mock('@bric/storefront-core/server-cache', async (original) => ({
   ...(await original<typeof import('@bric/storefront-core/server-cache')>()),
-  createServerCache: ({ load }: { load: () => unknown }) => load,
 }));
 
 import { GET as assets } from './assets/route';

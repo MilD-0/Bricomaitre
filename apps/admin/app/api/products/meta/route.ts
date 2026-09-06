@@ -1,16 +1,14 @@
+import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 import { asc } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { brands, categories } from '@bric/db/schema';
 import { requireAppAccess } from '../../../../lib/rbac';
-import { CACHE_TAGS, createServerCache } from '../../../../lib/server-cache';
+import { CACHE_TAGS } from '../../../../lib/server-cache';
 
-const getCachedProductsMeta = createServerCache({
-  keyParts: ['admin-products-meta'],
-  revalidate: 3600,
-  tags: [CACHE_TAGS.productsMeta],
-  load: async () =>
+const getCachedProductsMeta = unstable_cache(
+  async () =>
     Promise.all([
       getDb().select({ id: brands.id, name: brands.name }).from(brands).orderBy(asc(brands.name)),
       getDb()
@@ -22,7 +20,9 @@ const getCachedProductsMeta = createServerCache({
         })
         .from(categories),
     ]),
-});
+  ['admin-products-meta'],
+  { revalidate: 3600, tags: [CACHE_TAGS.productsMeta] },
+);
 
 export async function GET() {
   const denied = await requireAppAccess();

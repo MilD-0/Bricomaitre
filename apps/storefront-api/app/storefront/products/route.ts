@@ -1,16 +1,14 @@
+import { unstable_cache } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { countStorefrontProducts, readStorefrontProducts } from '@bric/storefront-core/catalog';
 import { storefrontProductListQuerySchema } from '@bric/storefront-core/contracts';
-import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
+import { CACHE_TAGS } from '@bric/storefront-core/server-cache';
 
 type ProductQuery = Parameters<typeof readStorefrontProducts>[1];
-const loadProducts = createServerCache({
-  keyParts: ['storefront-products'],
-  revalidate: 300,
-  tags: [CACHE_TAGS.products, CACHE_TAGS.assets],
-  load: async (query: ProductQuery) => {
+const loadProducts = unstable_cache(
+  async (query: ProductQuery) => {
     const db = getDb();
     const [items, total] = await Promise.all([
       readStorefrontProducts(db, query),
@@ -18,7 +16,9 @@ const loadProducts = createServerCache({
     ]);
     return { items, total };
   },
-});
+  ['storefront-products'],
+  { revalidate: 300, tags: [CACHE_TAGS.products, CACHE_TAGS.assets] },
+);
 
 export async function GET(req: NextRequest) {
   if (!hasDb()) {

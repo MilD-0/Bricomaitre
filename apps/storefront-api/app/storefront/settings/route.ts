@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
@@ -7,13 +8,10 @@ import {
   storefrontSettingsInputSchema,
   toStorefrontContactSettings,
 } from '@bric/storefront-core/settings';
-import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
+import { CACHE_TAGS } from '@bric/storefront-core/server-cache';
 
-const loadSettings = createServerCache({
-  keyParts: ['storefront-settings'],
-  revalidate: 3600,
-  tags: [CACHE_TAGS.storefrontSettings],
-  load: async () => {
+const loadSettings = unstable_cache(
+  async () => {
     const [stored] = await getDb()
       .select({
         contactPhone: storefrontSettings.contactPhone,
@@ -32,7 +30,9 @@ const loadSettings = createServerCache({
       storefrontSettingsInputSchema.parse(stored ?? DEFAULT_STOREFRONT_SETTINGS),
     );
   },
-});
+  ['storefront-settings'],
+  { revalidate: 3600, tags: [CACHE_TAGS.storefrontSettings] },
+);
 
 export async function GET() {
   if (!hasDb()) {

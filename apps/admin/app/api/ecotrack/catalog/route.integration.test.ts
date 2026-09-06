@@ -1,3 +1,5 @@
+vi.mock('next/cache', () => ({ unstable_cache: (load: (...args: unknown[]) => unknown) => load }));
+
 import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,7 +29,6 @@ vi.mock('../../../../lib/ecotrack', () => ({
 
 vi.mock('../../../../lib/server-cache', () => ({
   CACHE_TAGS: { ecotrack: 'ecotrack' },
-  createServerCache: ({ load }: { load: (...args: unknown[]) => unknown }) => load,
 }));
 
 describe('app/api/ecotrack/catalog/route', () => {

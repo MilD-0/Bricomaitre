@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 
@@ -13,7 +14,7 @@ import {
 } from '../../../lib/product-update-workflow';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../lib/sentry';
-import { CACHE_TAGS, createServerCache, revalidateServerTags } from '../../../lib/server-cache';
+import { CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
 import { revalidateStorefrontProducts } from '../../../lib/storefront-revalidate';
 
 type ProductListQuery = ReturnType<typeof productListQuerySchema.parse>;
@@ -264,17 +265,13 @@ async function loadPaginatedProducts(query: ProductListQuery) {
   };
 }
 
-const getCachedAllProducts = createServerCache({
-  keyParts: ['admin-products-all'],
+const getCachedAllProducts = unstable_cache(loadAllProducts, ['admin-products-all'], {
   revalidate: 300,
   tags: [CACHE_TAGS.products],
-  load: loadAllProducts,
 });
-const getCachedPaginatedProducts = createServerCache({
-  keyParts: ['admin-products-page'],
+const getCachedPaginatedProducts = unstable_cache(loadPaginatedProducts, ['admin-products-page'], {
   revalidate: 300,
   tags: [CACHE_TAGS.products],
-  load: loadPaginatedProducts,
 });
 
 export async function GET(req: NextRequest) {

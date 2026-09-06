@@ -1,16 +1,16 @@
+import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { readEcotrackCatalog } from '../../../../lib/ecotrack';
 import { requireMutationAccess } from '../../../../lib/rbac';
-import { CACHE_TAGS, createServerCache } from '../../../../lib/server-cache';
+import { CACHE_TAGS } from '../../../../lib/server-cache';
 
-const getCachedCatalog = createServerCache({
-  keyParts: ['admin-ecotrack-catalog'],
-  revalidate: 3600,
-  tags: [CACHE_TAGS.ecotrack],
-  load: async () => readEcotrackCatalog(getDb()),
-});
+const getCachedCatalog = unstable_cache(
+  async () => readEcotrackCatalog(getDb()),
+  ['admin-ecotrack-catalog'],
+  { revalidate: 3600, tags: [CACHE_TAGS.ecotrack] },
+);
 
 export async function GET() {
   const denied = await requireMutationAccess('orders');

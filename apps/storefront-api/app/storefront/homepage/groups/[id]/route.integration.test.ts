@@ -1,3 +1,5 @@
+vi.mock('next/cache', () => ({ unstable_cache: (load: (...args: unknown[]) => unknown) => load }));
+
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,7 +12,6 @@ vi.mock('@bric/storefront-core/assets', () => ({
 }));
 vi.mock('@bric/storefront-core/server-cache', () => ({
   CACHE_TAGS: { assets: 'assets', products: 'products', productsMeta: 'productsMeta' },
-  createServerCache: ({ load }: { load: (...args: unknown[]) => unknown }) => load,
 }));
 
 const context = (id: string) => ({ params: Promise.resolve({ id }) });

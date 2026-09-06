@@ -1,18 +1,18 @@
+import { unstable_cache } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { storefrontHomepageFeaturedGroupProductsQuerySchema } from '@bric/storefront-core/contracts';
 import { readStorefrontHomepageFeaturedGroupProducts } from '@bric/storefront-core/assets';
-import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
+import { CACHE_TAGS } from '@bric/storefront-core/server-cache';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
-const loadGroup = createServerCache({
-  keyParts: ['storefront-homepage-group'],
-  revalidate: 120,
-  tags: [CACHE_TAGS.assets, CACHE_TAGS.products, CACHE_TAGS.productsMeta],
-  load: async (groupId: number, page: number, limit: number) =>
+const loadGroup = unstable_cache(
+  async (groupId: number, page: number, limit: number) =>
     readStorefrontHomepageFeaturedGroupProducts(getDb(), groupId, page, limit),
-});
+  ['storefront-homepage-group'],
+  { revalidate: 120, tags: [CACHE_TAGS.assets, CACHE_TAGS.products, CACHE_TAGS.productsMeta] },
+);
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
