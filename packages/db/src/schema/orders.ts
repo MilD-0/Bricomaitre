@@ -126,6 +126,7 @@ export const orderStatusHistory = pgTable(
   (t) => [
     index('idx_osh_order').on(t.orderId, t.changedAt),
     index('idx_osh_status_changed_order').on(t.status, t.changedAt, t.orderId),
+    index('idx_osh_status_order_changed').on(t.status, t.orderId, t.changedAt),
     check('order_status_history_status_check', sql`${t.status} between 0 and 11`),
     check('order_status_history_no_answer_count_check', sql`${t.noAnswerCount} >= 0`),
   ],

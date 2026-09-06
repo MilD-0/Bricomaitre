@@ -66,6 +66,9 @@ export async function loadOperationalGeography(
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), selected_posted as materialized (
+      select * from first_posted
+      where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     ), lifecycle as (
       select ${ecotrackOrderTrackingEvents.orderId} as order_id,
         min(
@@ -80,6 +83,7 @@ export async function loadOperationalGeography(
           + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
         ) as latest_activity_at
       from ${ecotrackOrderTrackingEvents}
+      inner join selected_posted on selected_posted.order_id = ${ecotrackOrderTrackingEvents.orderId}
       group by ${ecotrackOrderTrackingEvents.orderId}
     )
     select ${orders.state} as wilaya_id,
@@ -121,7 +125,7 @@ export async function loadOperationalGeography(
       avg(lifecycle.attempt_count) filter (
         where lifecycle.attempt_count is not null
       ) as average_attempts
-    from first_posted
+    from selected_posted as first_posted
     inner join ${orders} on ${orders.id} = first_posted.order_id
     left join ${ecotrackWilayas} on ${ecotrackWilayas.wilayaId} = ${orders.state}
     left join ${ecotrackOrderStates}
@@ -168,6 +172,9 @@ export async function loadOperationalCommunes(db: Database, filters: AnalyticsFi
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), selected_posted as materialized (
+      select * from first_posted
+      where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     ), lifecycle as (
       select ${ecotrackOrderTrackingEvents.orderId} as order_id,
         min(
@@ -178,6 +185,7 @@ export async function loadOperationalCommunes(db: Database, filters: AnalyticsFi
           where ${ecotrackOrderTrackingEvents.status} = 'attempt_delivery'
         )::int as attempt_count
       from ${ecotrackOrderTrackingEvents}
+      inner join selected_posted on selected_posted.order_id = ${ecotrackOrderTrackingEvents.orderId}
       group by ${ecotrackOrderTrackingEvents.orderId}
     )
     select ${orders.state} as wilaya_id,
@@ -197,7 +205,7 @@ export async function loadOperationalCommunes(db: Database, filters: AnalyticsFi
       avg(lifecycle.attempt_count) filter (
         where lifecycle.attempt_count is not null
       ) as average_attempts
-    from first_posted
+    from selected_posted as first_posted
     inner join ${orders} on ${orders.id} = first_posted.order_id
     left join ${ecotrackWilayas} on ${ecotrackWilayas.wilayaId} = ${orders.state}
     left join ${ecotrackOrderStates}
@@ -259,7 +267,7 @@ export async function loadMetaRegions(db: Database, filters: AnalyticsFilters) {
 }
 
 export async function loadCustomerEconomics(
-  db: Database,
+  db: Pick<Database, 'execute'>,
   filters: AnalyticsFilters,
   fallbackFxRate: number,
   profitsSuppressed = false,
@@ -280,11 +288,19 @@ export async function loadCustomerEconomics(
         ${orders.firstName}, ${orders.lastName}, ${orders.city}, ${orders.createdAt},
         ${orders.totalAmount}, ${orders.inHouseStatus}
       from ${orders}
-      inner join cohort_customers on cohort_customers.customer_key = coalesce(
-        nullif(${orders.normalizedPhone}, ''),
-        regexp_replace(${orders.phoneNumber1}, '\\D', '', 'g')
-      )
-      where ${timestampPredicate(orders.createdAt, null, filters.endDate)}
+      -- Cohort membership already proves there are no earlier orders for these
+      -- customers. Bound this second scan as well, before joining line economics.
+      where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)}
+        ${
+          filters.startDate
+            ? sql`and exists (
+          select 1 from cohort_customers where cohort_customers.customer_key = coalesce(
+            nullif(${orders.normalizedPhone}, ''),
+            regexp_replace(${orders.phoneNumber1}, '\\D', '', 'g')
+          )
+        )`
+            : sql``
+        }
     ), line_economics as (
       select ${orderLineItems.orderId} as order_id,
         bool_and(
@@ -296,7 +312,13 @@ export async function loadCustomerEconomics(
           ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
         )::double precision as product_cost
       from ${orderLineItems}
-      inner join selected_orders on selected_orders.id = ${orderLineItems.orderId}
+      ${
+        filters.startDate
+          ? sql`where exists (
+        select 1 from selected_orders where selected_orders.id = ${orderLineItems.orderId}
+      )`
+          : sql`inner join selected_orders on selected_orders.id = ${orderLineItems.orderId}`
+      }
       group by ${orderLineItems.orderId}
     ), meta_spend as (
       select ${metaAdsDailyInsights.adId} as ad_id,

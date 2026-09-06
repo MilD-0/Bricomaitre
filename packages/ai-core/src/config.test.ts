@@ -170,6 +170,58 @@ describe('AI configuration', () => {
     });
   });
 
+  it('does not retry a permanent quota rejection even when retries are enabled', async () => {
+    const fetch = vi.fn(async () =>
+      Response.json(
+        {
+          error: {
+            message: 'Account restricted',
+            type: 'insufficient_quota',
+            code: 'free_tier_requires_payment',
+          },
+        },
+        { status: 429 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const model = createAiLanguageModel(
+      getAiConfig({
+        AI_ENABLED: 'true',
+        AI_PROVIDER: 'experientiallabs',
+        EXPLABS_API_KEY: 'test',
+        AI_ADMIN_MODEL: 'test',
+      }),
+      'admin',
+    );
+    await expect(generateText({ model, prompt: 'Hello', maxRetries: 5 })).rejects.toMatchObject({
+      statusCode: 429,
+      isRetryable: false,
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('preserves transient rate limits as retryable provider errors', async () => {
+    const fetch = vi.fn(async () =>
+      Response.json(
+        { error: { message: 'Too many requests', type: 'rate_limit_error' } },
+        { status: 429 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const model = createAiLanguageModel(
+      getAiConfig({
+        AI_ENABLED: 'true',
+        OPENAI_API_KEY: 'test',
+        AI_ADMIN_MODEL: 'test',
+      }),
+      'admin',
+    );
+    await expect(generateText({ model, prompt: 'Hello', maxRetries: 0 })).rejects.toMatchObject({
+      statusCode: 429,
+      isRetryable: true,
+    });
+  });
+
   it('is disabled and credential-free by default', () => {
     expect(getAiConfig({})).toEqual({
       enabled: false,

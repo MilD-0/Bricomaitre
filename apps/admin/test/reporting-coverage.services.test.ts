@@ -13,6 +13,7 @@ import { getProfitTrackerReport, syncProfitTrackerMetaRows } from '../lib/profit
 import { loadSourceHealth } from '../lib/analytics/source-health';
 import { resolveAnalyticsFilters } from '../lib/analytics';
 import { loadCanonicalCutoffs } from '../lib/analytics/data-boundaries';
+import { loadCustomerEconomics } from '../lib/analytics/customer-commerce-data';
 const db = getDb();
 const accountId = `coverage-${randomUUID()}`;
 let orderId: number | undefined;
@@ -27,6 +28,73 @@ afterAll(async () => {
   await getPool().end();
 });
 describe('reporting coverage across inactive commerce days', () => {
+  it('keeps first-order cohort boundaries and repeat orders with legacy phone fallback', async () => {
+    const rollback = new Error('customer cohort fixture rollback');
+    await expect(
+      db.transaction(async (tx) => {
+        const marker = randomUUID();
+        await tx.insert(orders).values([
+          {
+            firstName: 'Earlier',
+            phoneNumber1: '0551 00 00 01',
+            normalizedPhone: `earlier-${marker}`,
+            createdAt: new Date('2040-08-31T22:59:59Z'),
+            totalAmount: '100',
+          },
+          {
+            firstName: 'Earlier',
+            phoneNumber1: '0551 00 00 01',
+            normalizedPhone: `earlier-${marker}`,
+            createdAt: new Date('2040-09-02T10:00:00Z'),
+            totalAmount: '200',
+          },
+          {
+            firstName: 'Included',
+            phoneNumber1: `0552 ${marker.replace(/\D/g, '')}`,
+            normalizedPhone: '',
+            createdAt: new Date('2040-08-31T23:00:00Z'),
+            totalAmount: '300',
+          },
+          {
+            firstName: 'Included',
+            phoneNumber1: `0552${marker.replace(/\D/g, '')}`,
+            normalizedPhone: '',
+            createdAt: new Date('2040-09-03T22:59:59Z'),
+            totalAmount: '400',
+          },
+          {
+            firstName: 'After',
+            phoneNumber1: '0553 00 00 03',
+            normalizedPhone: `after-${marker}`,
+            createdAt: new Date('2040-09-03T23:00:00Z'),
+            totalAmount: '500',
+          },
+        ]);
+        const result = await loadCustomerEconomics(
+          tx,
+          resolveAnalyticsFilters({
+            view: 'catalog',
+            range: 'custom',
+            startDate: '2040-09-01',
+            endDate: '2040-09-03',
+          }),
+          150,
+          false,
+        );
+        expect(result.summary).toMatchObject({
+          customers: 1,
+          repeatCustomers: 1,
+          averageOrders: 2,
+          averageOrderValue: 350,
+        });
+        expect(result.rows).toEqual([
+          expect.objectContaining({ name: 'Included', orders: 2, totalValue: 700 }),
+        ]);
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+  });
+
   it('includes spend before and after the only posted order in the canonical workspace', async () => {
     const [order] = await db
       .insert(orders)

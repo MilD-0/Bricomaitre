@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { APICallError } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   updatedValues: [] as unknown[],
   streamOptions: null as Record<string, unknown> | null,
   streamParts: [] as Array<Record<string, unknown>>,
+  streamCalls: 0,
   createLanguageModel: vi.fn(() => 'language-model'),
   generateText: vi.fn(),
 }));
@@ -31,6 +33,7 @@ vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   generateText: mocks.generateText,
   streamText: (options: Record<string, unknown>) => {
+    mocks.streamCalls += 1;
     mocks.streamOptions = options;
     return {
       stream: (async function* () {
@@ -453,6 +456,33 @@ describe('POST /api/ai/chat model-led runtime', () => {
           text: 'Analytics is unavailable right now.',
           toolResults: [failedToolOutcome],
         },
+      }),
+    );
+  });
+
+  it('reports a permanent provider refusal without repeating the empty turn', async () => {
+    mocks.streamCalls = 0;
+    mocks.streamParts = [
+      {
+        type: 'error',
+        error: new APICallError({
+          message: 'Account restricted',
+          url: 'https://provider.invalid',
+          requestBodyValues: undefined,
+          statusCode: 429,
+          isRetryable: false,
+        }),
+      },
+    ];
+    const response = await POST(request({ message: 'Hello', conversationKey }));
+    const body = events(await response.text());
+    expect(mocks.streamCalls).toBe(1);
+    expect(mocks.generateText).not.toHaveBeenCalled();
+    expect(body).toContainEqual(
+      expect.objectContaining({
+        type: 'error',
+        message:
+          'The AI service rejected the request. Check the provider configuration and account limits.',
       }),
     );
   });

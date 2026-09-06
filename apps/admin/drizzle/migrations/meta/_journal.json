@@ -729,6 +729,13 @@
       "when": 1788696401032,
       "tag": "0103_futuristic_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1788736186528,
+      "tag": "0104_slippery_chimera",
+      "breakpoints": true
     }
   ]
 }

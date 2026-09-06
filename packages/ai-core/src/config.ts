@@ -1,4 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
+import { APICallError } from 'ai';
 import { z } from 'zod';
 
 const optionalModel = z.string().trim().min(1).optional();
@@ -97,6 +98,45 @@ export function mergeAiChatRequestBody(body: string, additions: Record<string, u
   return JSON.stringify({ ...parsed, ...additions });
 }
 
+const permanentQuotaCodes = new Set([
+  'insufficient_quota',
+  'free_tier_requires_payment',
+  'billing_hard_limit_reached',
+]);
+
+export function isNonRetryableAiProviderError(error: unknown) {
+  return APICallError.isInstance(error) && !error.isRetryable;
+}
+
+async function fetchAiProvider(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+) {
+  const response = await globalThis.fetch(input, init);
+  if (response.status !== 429) return response;
+  const body = await response.clone().text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return response;
+  }
+  const error = (parsed as { error?: { code?: string; type?: string } } | null)?.error;
+  if (!permanentQuotaCodes.has(error?.code ?? '') && !permanentQuotaCodes.has(error?.type ?? ''))
+    return response;
+  // A quota/account restriction is not a transient rate limit. Keep its real
+  // status and evidence while preventing the SDK from retrying an impossible request.
+  throw new APICallError({
+    message: 'AI provider account is unavailable. Check its quota or billing configuration.',
+    url: String(input),
+    requestBodyValues: undefined,
+    statusCode: response.status,
+    responseBody: body,
+    isRetryable: false,
+    data: parsed,
+  });
+}
+
 export function createAiLanguageModel(
   config: AiConfig,
   task: AiTask,
@@ -121,14 +161,14 @@ export function createAiLanguageModel(
       headers,
       fetch: options.chatRequestBody
         ? (input, init) =>
-            globalThis.fetch(input, {
+            fetchAiProvider(input, {
               ...init,
               body:
                 typeof init?.body === 'string'
                   ? mergeAiChatRequestBody(init.body, options.chatRequestBody!)
                   : init?.body,
             })
-        : undefined,
+        : fetchAiProvider,
     });
     return provider.chat(config.provider === 'experientiallabs' ? model.split('/').at(-1)! : model);
   }
@@ -138,8 +178,9 @@ export function createAiLanguageModel(
       name: 'deepseek',
       apiKey: config.apiKey,
       baseURL: 'https://api.deepseek.com',
+      fetch: fetchAiProvider,
     }).chat(model);
   }
 
-  return createOpenAI({ apiKey: config.apiKey }).responses(model);
+  return createOpenAI({ apiKey: config.apiKey, fetch: fetchAiProvider }).responses(model);
 }

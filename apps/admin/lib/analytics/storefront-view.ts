@@ -1,4 +1,4 @@
-import { getDb } from '@bric/db/client';
+import { getReportingDb } from '../reporting-db';
 import { getLiveStorefrontAnalytics } from '../storefront-analytics';
 import { getLiveWebsiteProductMetrics } from '../stats-live-commerce';
 import {
@@ -242,7 +242,7 @@ export async function getAnalyticsStorefrontDetails(
   query: AnalyticsQuery,
   options: { db?: Database; now?: Date } = {},
 ) {
-  const db = options.db ?? getDb();
+  const db = options.db ?? getReportingDb();
   const wallNow = options.now ?? new Date();
   const reviewSetting = options.now ? undefined : process.env.STATS_REVIEW_CLOCK;
   const cutoffDate = reviewSetting ? await loadDatasetCutoffDate(db) : null;

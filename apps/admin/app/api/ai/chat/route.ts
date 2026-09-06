@@ -1,4 +1,4 @@
-import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
+import { createAiLanguageModel, getAiConfig, isNonRetryableAiProviderError } from '@bric/ai-core';
 import { generateText, streamText } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
@@ -357,6 +357,7 @@ export async function POST(request: NextRequest) {
               } catch (error) {
                 const canRetryWithoutRepeatingWork =
                   !request.signal.aborted &&
+                  !isNonRetryableAiProviderError(error) &&
                   emptyStreamRetryCount === 0 &&
                   text.length === 0 &&
                   toolTraces.size === 0;
@@ -459,7 +460,13 @@ export async function POST(request: NextRequest) {
                 ? interruptedAnswer(locale, text)
                 : hasSuccessfulMutation(toolResults)
                   ? adminAiCompletedMutationNarrationFailure(locale)
-                  : adminAiReliableAnswerFailure(locale, toolResults.length > 0);
+                  : isNonRetryableAiProviderError(error)
+                    ? locale === 'fr'
+                      ? 'Le service IA a refusé la demande. Vérifiez la configuration du fournisseur et les limites du compte.'
+                      : locale === 'ar'
+                        ? 'رفضت خدمة الذكاء الاصطناعي الطلب. تحقّق من إعدادات المزوّد وحدود الحساب.'
+                        : 'The AI service rejected the request. Check the provider configuration and account limits.'
+                    : adminAiReliableAnswerFailure(locale, toolResults.length > 0);
             let assistantMessageId: number | null = null;
             try {
               assistantMessageId = await saveAssistantMessage({

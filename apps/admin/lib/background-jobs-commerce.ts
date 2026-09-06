@@ -555,6 +555,7 @@ export async function runOrderEcotrackJob(
 export async function runStatsImportJob(
   payload: StatsImportPayload,
   helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
     updateSummary: (summary: Record<string, unknown>) => Promise<void>;
   },
 ) {
@@ -569,6 +570,8 @@ export async function runStatsImportJob(
       : []);
   const results = [];
 
+  await helpers.updateProgress({ phase: 'importing', current: 0, total: files.length });
+
   for (const [index, file] of files.entries()) {
     const result = await importStatsSpreadsheet(
       Buffer.from(file.fileBufferBase64, 'base64'),
@@ -580,6 +583,11 @@ export async function runStatsImportJob(
       newOrders: result.newOrders,
       duplicateOrders: result.duplicateOrders,
       unmatchedReferences: result.unmatchedReferences.length,
+    });
+    await helpers.updateProgress({
+      phase: 'importing',
+      current: index + 1,
+      total: files.length,
     });
     await helpers.updateSummary({
       fileName: file.fileName,
@@ -601,6 +609,8 @@ export async function runStatsImportJob(
     newOrders: results.reduce((sum, item) => sum + item.newOrders, 0),
     duplicateOrders: results.reduce((sum, item) => sum + item.duplicateOrders, 0),
   });
+
+  await helpers.updateProgress({ phase: 'completed', current: files.length, total: files.length });
 
   return {
     fileName: results.length === 1 ? results[0]?.fileName : `${results.length} spreadsheets`,

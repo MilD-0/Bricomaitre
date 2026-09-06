@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => {
     jobs,
     db: {},
     refreshFacts: vi.fn(),
+    importStats: vi.fn(),
     globalConcurrency: vi.fn(),
     redis: {
       incr: vi.fn(async (key: string) => {
@@ -34,12 +35,14 @@ vi.mock('@bric/runtime/jobs', async (importOriginal) => ({
 }));
 vi.mock('./reporting-db', () => ({ getReportingDb: () => mocks.db }));
 vi.mock('./analytics-facts', () => ({ refreshAnalyticsFacts: mocks.refreshFacts }));
+vi.mock('./stats-order-import', () => ({ importStatsSpreadsheet: mocks.importStats }));
 
 import {
   runAdminReportingRefreshJob,
+  runStatsImportJob,
   startAdminReportingRefreshJob,
 } from './background-jobs-commerce';
-import type { ReportingRefreshPayload } from './background-job-contract';
+import type { ReportingRefreshPayload, StatsImportPayload } from './background-job-contract';
 
 function queuedPayload(index: number): ReportingRefreshPayload {
   return {
@@ -58,6 +61,48 @@ describe('reporting refresh revisions', () => {
     mocks.values.clear();
     mocks.jobs.length = 0;
     mocks.refreshFacts.mockResolvedValue({ dailyFacts: 183, cohortThrough: '2026-09-05' });
+  });
+
+  it('advances import progress only for saved files and completes after reporting is scheduled', async () => {
+    const payload: StatsImportPayload = {
+      files: [
+        { fileName: 'one.xlsx', fileBufferBase64: 'YQ==' },
+        { fileName: 'two.xlsx', fileBufferBase64: 'Yg==' },
+      ],
+      __jobMeta: {
+        id: 'import',
+        queueName: 'admin-stats-import',
+        ownerKey: 'operator',
+        activeScope: 'owner',
+      },
+    };
+    const updateProgress = vi.fn();
+    const updateSummary = vi.fn();
+    mocks.importStats
+      .mockResolvedValueOnce({
+        batchId: 'one',
+        newOrders: 1,
+        duplicateOrders: 0,
+        unmatchedReferences: [],
+      })
+      .mockRejectedValueOnce(new Error('Second file invalid'));
+    await expect(runStatsImportJob(payload, { updateProgress, updateSummary })).rejects.toThrow(
+      'Second file invalid',
+    );
+    expect(updateProgress.mock.calls.map(([p]) => p)).toEqual([
+      { phase: 'importing', current: 0, total: 2 },
+      { phase: 'importing', current: 1, total: 2 },
+    ]);
+    updateProgress.mockClear();
+    mocks.importStats.mockResolvedValue({
+      batchId: 'saved',
+      newOrders: 1,
+      duplicateOrders: 0,
+      unmatchedReferences: [],
+    });
+    await runStatsImportJob(payload, { updateProgress, updateSummary });
+    expect(updateProgress).toHaveBeenLastCalledWith({ phase: 'completed', current: 2, total: 2 });
+    expect(mocks.jobs.at(-1)?.data).toMatchObject({ trigger: 'stats-import' });
   });
 
   it('coalesces queued requests while retaining successors for edits during every active pass', async () => {

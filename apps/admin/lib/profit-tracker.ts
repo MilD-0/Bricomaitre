@@ -278,6 +278,10 @@ async function loadOrderCohortDayEconomics(
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${status}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), selected_status as materialized (
+      select * from first_status
+      where ${startDate ? sql`first_status.day >= ${startDate}::date` : sql`true`}
+        and first_status.day <= ${endDate}::date
     ), lifecycle as (
       select ${ecotrackOrderTrackingEvents.orderId} as order_id,
         min(
@@ -289,6 +293,7 @@ async function loadOrderCohortDayEconomics(
           + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
         ) as latest_activity_at
       from ${ecotrackOrderTrackingEvents}
+      inner join selected_status on selected_status.order_id = ${ecotrackOrderTrackingEvents.orderId}
       group by ${ecotrackOrderTrackingEvents.orderId}
     ), line_economics as (
       select ${orderLineItems.orderId} as order_id,
@@ -304,6 +309,7 @@ async function loadOrderCohortDayEconomics(
           )
         )::double precision as gross_profit
       from ${orderLineItems}
+      inner join selected_status on selected_status.order_id = ${orderLineItems.orderId}
       group by ${orderLineItems.orderId}
     ), classified as (
       select first_status.day,
@@ -333,7 +339,7 @@ async function loadOrderCohortDayEconomics(
             or lifecycle.delivered_at is not null then 'realized'
           else 'exposed'
         end as contribution_state
-      from first_status
+      from selected_status as first_status
       inner join ${orders} on ${orders.id} = first_status.order_id
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_status.order_id

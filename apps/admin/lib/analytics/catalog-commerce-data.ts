@@ -98,6 +98,9 @@ export async function loadOperationalProducts(
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), selected_posted as materialized (
+      select * from first_posted
+      where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     ), lifecycle as (
       select ${ecotrackOrderTrackingEvents.orderId} as order_id,
         min(
@@ -113,6 +116,7 @@ export async function loadOperationalProducts(
           + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
         ) as latest_activity_at
       from ${ecotrackOrderTrackingEvents}
+      inner join selected_posted on selected_posted.order_id = ${ecotrackOrderTrackingEvents.orderId}
       group by ${ecotrackOrderTrackingEvents.orderId}
     )
     select coalesce(${orderLineItems.productId}::text, ${orderLineItems.contentId}) as product_key,
@@ -163,7 +167,7 @@ export async function loadOperationalProducts(
       count(distinct ${orderLineItems.orderId}) filter (
         where lifecycle.delivered_at is not null
       )::int as delivery_samples
-    from first_posted
+    from selected_posted as first_posted
     inner join ${orders} on ${orders.id} = first_posted.order_id
     inner join ${orderLineItems} on ${orderLineItems.orderId} = first_posted.order_id
     left join ${productCatalog} on ${productCatalog.id} = ${orderLineItems.productId}

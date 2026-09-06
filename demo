@@ -450,13 +450,14 @@ install_reset_timer() {
       "ExecStart=\"$repo_root/demo\" reset"
   } >"$user_unit_dir/bricomaitre-demo-reset.service"
 
+  # Re-enabling a timer on a long-running host must not trigger an overdue boot reset.
   {
     printf '%s\n' \
       '[Unit]' \
       'Description=Reset the Bricomaitre public demo every six hours' \
       '' \
       '[Timer]' \
-      'OnBootSec=6h' \
+      'OnActiveSec=6h' \
       'OnUnitActiveSec=6h' \
       'Persistent=true' \
       'Unit=bricomaitre-demo-reset.service' \
