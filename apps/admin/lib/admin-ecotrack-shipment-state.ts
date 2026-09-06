@@ -119,10 +119,26 @@ export async function softDeleteShipmentRow(
   } = {},
 ) {
   const now = new Date();
-  const beforeOrderState = buildEcotrackOrderActionSnapshot(row.order);
   const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
 
   return db.transaction(async (tx) => {
+    const [currentOrder] = await tx
+      .select()
+      .from(orders)
+      .where(eq(orders.id, row.order.id))
+      .for('update');
+    // The provider call happened before this transaction. Do not overwrite an
+    // operator or carrier update that arrived while that request was in flight.
+    if (
+      !currentOrder ||
+      currentOrder.ecotrackTrackingNumber !== row.trackingNumber ||
+      (options.restorePostedOrderToConfirmed &&
+        (currentOrder.updatedAt.getTime() !== row.order.updatedAt.getTime() ||
+          coerceOrderStatus(currentOrder.inHouseStatus) !==
+            coerceOrderStatus(row.order.inHouseStatus)))
+    )
+      return false;
+    const beforeOrderState = buildEcotrackOrderActionSnapshot(currentOrder);
     const [deletedShipment] = await tx
       .update(ecotrackOrderStates)
       .set({
@@ -145,9 +161,9 @@ export async function softDeleteShipmentRow(
 
     const restoreToConfirmed =
       options.restorePostedOrderToConfirmed &&
-      (coerceOrderStatus(row.order.inHouseStatus) === ORDER_STATUS.POSTED ||
-        coerceOrderStatus(row.order.inHouseStatus) === ORDER_STATUS.DISPATCHED);
-    await updateCanonicalOrder(tx, {
+      (coerceOrderStatus(currentOrder.inHouseStatus) === ORDER_STATUS.POSTED ||
+        coerceOrderStatus(currentOrder.inHouseStatus) === ORDER_STATUS.DISPATCHED);
+    const updated = await updateCanonicalOrder(tx, {
       orderId: row.order.id,
       status: restoreToConfirmed ? { value: ORDER_STATUS.CONFIRMED, noAnswerCount: 0 } : undefined,
       allowStatusCorrection: options.restorePostedOrderToConfirmed,
@@ -162,16 +178,7 @@ export async function softDeleteShipmentRow(
       now,
     });
 
-    const afterOrderState = {
-      ...beforeOrderState,
-      ...(restoreToConfirmed ? { inHouseStatus: ORDER_STATUS.CONFIRMED, noAnswerCount: 0 } : {}),
-      ecotrackStatus: null,
-      ecotrackStatusLastUpdate: null,
-      ecotrackStatusData: null,
-      ecotrackReference: null,
-      ecotrackTrackingNumber: null,
-      updatedAt: now,
-    };
+    const afterOrderState = buildEcotrackOrderActionSnapshot(updated.order);
     const afterShipmentState = {
       ...beforeShipmentState,
       deletedAt: now,

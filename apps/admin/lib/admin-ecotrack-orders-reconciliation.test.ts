@@ -110,7 +110,11 @@ function createShipmentRow(orderId = 11) {
 
 function createDbMock(
   rows: Array<ReturnType<typeof createShipmentRow>>,
-  options?: { limitSequence?: number[]; rejectShipmentWrites?: boolean },
+  options?: {
+    limitSequence?: number[];
+    rejectShipmentWrites?: boolean;
+    currentOrder?: Partial<ReturnType<typeof createShipmentRow>['order']>;
+  },
 ) {
   const updates: Array<{ target: unknown; values: Record<string, unknown> }> = [];
   const insertValues = vi.fn(() => ({
@@ -175,8 +179,12 @@ function createDbMock(
   const tx = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          for: vi.fn(async () => (rows[0] ? [rows[0].order] : [])),
+        where: vi.fn((condition: Parameters<PgDialect['sqlToQuery']>[0]) => ({
+          for: vi.fn(async () => {
+            const id = Number(new PgDialect().sqlToQuery(condition).params[0]);
+            const current = rowByOrderId.get(id);
+            return current ? [{ ...current.order, ...options?.currentOrder }] : [];
+          }),
           then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
         })),
       })),
@@ -297,6 +305,20 @@ describe('admin ecotrack shipment reconciliation', () => {
       noAnswerCount: 0,
       ecotrackTrackingNumber: null,
     });
+  });
+
+  it('rejects deletion when the order advanced while the provider request was running', async () => {
+    const row = createShipmentRow();
+    row.order.inHouseStatus = 3;
+    const { db, updates } = createDbMock([row], {
+      currentOrder: { inHouseStatus: 4, updatedAt: new Date(row.order.updatedAt.getTime() + 1000) },
+    });
+    getDbMock.mockReturnValue(db);
+    deleteEcotrackOrderMock.mockResolvedValue({});
+    await expect(deletePostedEcotrackOrder(11, {})).rejects.toThrow(
+      'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
+    );
+    expect(updates).toEqual([]);
   });
 
   it('does not report deletion after the active local shipment was replaced', async () => {

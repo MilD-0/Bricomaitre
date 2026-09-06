@@ -404,7 +404,7 @@ export async function deletePostedEcotrackOrder(
   actor: { email?: string | null; name?: string | null },
 ) {
   const db = getDb();
-  const row = await loadShipmentRowByOrderId(db, orderId);
+  let row = await loadShipmentRowByOrderId(db, orderId);
   if (!row) {
     return null;
   }
@@ -432,6 +432,20 @@ export async function deletePostedEcotrackOrder(
         ).summary,
       );
     }
+    // Freshness reconciliation may update the local order. Use that revision
+    // for the optimistic check after the provider deletion finishes.
+    const refreshedRow = await loadShipmentRowByOrderId(db, orderId);
+    if (!refreshedRow) return null;
+    if (
+      refreshedRow.id !== row.id ||
+      refreshedRow.trackingNumber !== row.trackingNumber ||
+      !getActionFlags(refreshedRow.currentStatus, refreshedRow.deletedAt).canDelete
+    ) {
+      throw new Error(
+        'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
+      );
+    }
+    row = refreshedRow;
   } else if (!getActionFlags(row.currentStatus, row.deletedAt).canDelete) {
     throw new Error(
       formatEcotrackActionError(
