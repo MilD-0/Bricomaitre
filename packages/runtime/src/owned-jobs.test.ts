@@ -155,6 +155,7 @@ describe('owned runtime jobs', () => {
       86_400,
       expect.any(Number),
       '1',
+      expect.stringMatching(/"cancelRequested":true/),
     );
   });
 
@@ -175,6 +176,7 @@ describe('owned runtime jobs', () => {
       86_400,
       Date.parse(snapshot.createdAt),
       '1',
+      expect.stringMatching(/"cancelRequested":true/),
     );
   });
 

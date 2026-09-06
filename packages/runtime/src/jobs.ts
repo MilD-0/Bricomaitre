@@ -93,10 +93,11 @@ const RELEASE_OWNED_KEY_SCRIPT = `
 `;
 const WRITE_SNAPSHOT_SCRIPT = `
   local snapshot = cjson.decode(ARGV[1])
+  -- Re-encoding through cjson changes [] to {} and can round large numbers.
+  local encoded = ARGV[1]
   if redis.call('exists', KEYS[2]) == 1 then
-    snapshot.cancelRequested = true
+    encoded = ARGV[5]
   end
-  local encoded = cjson.encode(snapshot)
   redis.call('set', KEYS[1], encoded, 'EX', ARGV[2])
   local currentOwner = redis.call('get', KEYS[3])
   local currentOwnerScore = currentOwner and redis.call('zscore', KEYS[4], currentOwner)
@@ -176,6 +177,7 @@ async function writeSnapshot(redis: IORedis, snapshot: JobSnapshot, ttlSeconds =
     ttlSeconds,
     Date.parse(snapshot.createdAt),
     snapshot.origin ? '1' : '0',
+    serializeSnapshot({ ...snapshot, cancelRequested: true }),
   );
 }
 

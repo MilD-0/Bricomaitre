@@ -557,13 +557,15 @@ export function EcotrackPostingWorkspaceDialog({
                   {t('ordersManager.ecotrack.resultTitle')}
                 </h3>
                 <div className="divide-y divide-border/40">
-                  {postingSummary.results.map((item) => (
-                    <p key={`${item.reference}-${item.status}`} className="px-4 py-3 text-sm">
-                      #{item.orderId} · {item.status}
-                      {item.tracking ? ` · ${item.tracking}` : ''}
-                      {item.message ? ` · ${item.message}` : ''}
-                    </p>
-                  ))}
+                  {(Array.isArray(postingSummary.results) ? postingSummary.results : []).map(
+                    (item) => (
+                      <p key={`${item.reference}-${item.status}`} className="px-4 py-3 text-sm">
+                        #{item.orderId} · {item.status}
+                        {item.tracking ? ` · ${item.tracking}` : ''}
+                        {item.message ? ` · ${item.message}` : ''}
+                      </p>
+                    ),
+                  )}
                 </div>
               </section>
             ) : null}

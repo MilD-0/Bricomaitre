@@ -482,6 +482,7 @@ describe('OrdersWorkspace', () => {
     const user = userEvent.setup();
     let previewBody: Record<string, unknown> | null = null;
     let postingBody: Record<string, unknown> | null = null;
+    renderWorkspace();
     server.use(
       http.post('/api/orders/ecotrack/preview', async ({ request }) => {
         previewBody = (await request.json()) as Record<string, unknown>;
@@ -518,7 +519,7 @@ describe('OrdersWorkspace', () => {
             status: 'queued',
             progress: { phase: 'loading', current: 0, total: 1, percentage: 0 },
             errorMessage: null,
-            resultSummary: null,
+            resultSummary: { results: {} },
           },
         });
       }),
@@ -529,13 +530,12 @@ describe('OrdersWorkspace', () => {
             status: 'running',
             progress: { phase: 'creating', current: 0, total: 1, percentage: 0 },
             errorMessage: null,
-            resultSummary: null,
+            resultSummary: { results: {} },
           },
         }),
       ),
     );
 
-    renderWorkspace();
     await user.click(screen.getByRole('checkbox', { name: 'Select Customer One' }));
     await user.click(screen.getByRole('button', { name: 'Post confirmed menu' }));
     await user.click(screen.getByRole('menuitem', { name: 'Post selected to Delivro' }));
@@ -546,6 +546,7 @@ describe('OrdersWorkspace', () => {
     expect(previewBody).toEqual({ mode: 'selected', orderIds: [1] });
     await user.click(screen.getByRole('button', { name: 'Post to Ecotrack' }));
     await waitFor(() => expect(postingBody).toEqual({ mode: 'selected', orderIds: [1] }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Posting results'));
   });
 
   it('shows note evidence and links directly to public tracking from each order row', () => {

@@ -2,7 +2,12 @@ import 'dotenv/config';
 
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
-import { createQueueWorker, getJobSnapshot, startOwnedJob } from '@bric/runtime/jobs';
+import {
+  createQueueWorker,
+  getJobSnapshot,
+  startOwnedJob,
+  updateJobSummary,
+} from '@bric/runtime/jobs';
 import { closeRedisConnections, getRedis } from '@bric/runtime/redis';
 
 import {
@@ -32,6 +37,38 @@ afterAll(async () => {
 });
 
 describe('EcoTrack assistant worker terminal delivery with Redis', () => {
+  it('preserves empty summary arrays and exact numbers while merging cancellation atomically', async () => {
+    const jobId = `summary-${runId}`;
+    const snapshotKey = `bric:jobs:${queueName}:${jobId}`;
+    await getRedis().set(
+      snapshotKey,
+      JSON.stringify({
+        id: jobId,
+        queue: queueName,
+        kind: 'order-ecotrack:selected',
+        ownerKey: `${ownerKey}-serialization`,
+        status: 'running',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        resultSummary: null,
+        cancelRequested: false,
+      }),
+    );
+    const summary = {
+      results: [],
+      rateLimits: [],
+      nested: { empty: [], nullable: null, number: Number.MAX_SAFE_INTEGER },
+    };
+    await updateJobSummary(queueName, jobId, summary);
+    expect((await getJobSnapshot(queueName, jobId))?.resultSummary).toEqual(summary);
+    await getRedis().set(`${snapshotKey}:cancel`, '1');
+    await updateJobSummary(queueName, jobId, summary);
+    expect(await getJobSnapshot(queueName, jobId)).toMatchObject({
+      cancelRequested: true,
+      resultSummary: summary,
+    });
+  });
+
   it('carries per-order terminal evidence from a real queued job into its conversation hook', async () => {
     const publish = vi.fn(async () => undefined);
     worker = createQueueWorker<{ conversationId: number }>(queueName, async (_payload, context) => {
