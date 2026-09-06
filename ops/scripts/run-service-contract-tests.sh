@@ -23,7 +23,7 @@ export POSTGRES_STOREFRONT_USER='bricomaitre_storefront_contract'
 # The service runner exports these container values before starting the child shell.
 # shellcheck disable=SC2016
 exec ops/scripts/run-with-ci-services.sh "$postgres_port" "$redis_port" "$database" \
-  bash -lc '
+  bash -euo pipefail -c '
     pnpm --filter @bric/admin db:migrate
     pnpm --filter @bric/admin db:verify
     ops/scripts/configure-postgres-autovacuum.sh "$BRIC_CI_POSTGRES_CONTAINER" "$BRIC_CI_POSTGRES_PORT"

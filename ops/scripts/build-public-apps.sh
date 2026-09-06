@@ -8,6 +8,8 @@ cd "$repo_root"
 # This is the deterministic source-verification build, not the official release
 # build. Force every compiled public value and prevent local .env files from
 # turning verification into a production dependency or a Sentry upload.
+export DATABASE_URL=''
+export REDIS_URL=''
 export BETTER_AUTH_SECRET='build-verification-secret-at-least-32-characters'
 export BETTER_AUTH_URL='http://127.0.0.1:3000'
 export GOOGLE_CLIENT_ID='build-verification-client'

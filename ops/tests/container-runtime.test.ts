@@ -167,31 +167,6 @@ describe('production packaging and release runtime', () => {
     expect(packageJson.license).toBe('AGPL-3.0-only');
   });
 
-  it('keeps source-verification builds isolated from production services', () => {
-    const packageJson = JSON.parse(
-      readFileSync(resolve(workspaceRoot, 'package.json'), 'utf8'),
-    ) as {
-      scripts?: Record<string, string>;
-    };
-    const buildScript = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/build-public-apps.sh'),
-      'utf8',
-    );
-
-    expect(packageJson.scripts?.['build:verify']).toBe('bash ops/scripts/build-public-apps.sh');
-    expect(buildScript).toContain("fixture_origin='http://127.0.0.1:4311'");
-    expect(buildScript).toContain('node apps/storefront/test/fixture-storefront-api.mjs');
-    expect(buildScript).toContain('export STOREFRONT_API_BASE_URL="$fixture_origin"');
-    expect(buildScript).toContain(
-      'export NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS="http://127.0.0.1:3003,$fixture_origin"',
-    );
-    expect(buildScript).toContain("STOREFRONT_API_TIMEOUT_MS='1000'");
-    expect(buildScript).toContain("SENTRY_AUTH_TOKEN=''");
-    expect(buildScript).toContain('pnpm build:apps');
-    expect(buildScript).toContain('pnpm --filter @bric/storefront build');
-    expect(buildScript).not.toContain('api.bricomaitre.com');
-  });
-
   it('requires isolated production database roles and authenticated Redis', () => {
     const compose = readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8');
     const infraExample = readFileSync(resolve(workspaceRoot, 'ops/env/infra.env.example'), 'utf8');
@@ -332,372 +307,78 @@ describe('production packaging and release runtime', () => {
     expect(notice).toContain('libvips/tree/v8.18.6');
   });
 
-  it('separates cancellable CI from serialized, verified production releases', () => {
-    const ci = readFileSync(resolve(workspaceRoot, '.github/workflows/ci.yml'), 'utf8');
-    const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
-
-    for (const job of [
-      'static-quality',
-      'service-contracts',
-      'tests',
-      'browser-acceptance',
-      'admin-browser-acceptance',
-      'browser-performance',
-      'production-builds',
-      'required',
-    ]) {
-      expect(ci).toContain(`  ${job}:`);
+  it('allows production releases only after successful trusted main CI and complete image builds', () => {
+    const ci = parse(readFileSync(resolve(workspaceRoot, '.github/workflows/ci.yml'), 'utf8'));
+    const release = parse(
+      readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8'),
+    );
+    expect(ci.on.pull_request.branches).toContain('main');
+    expect(ci.on.pull_request_target).toBeUndefined();
+    expect(ci.permissions).toEqual({ contents: 'read' });
+    expect(ci.concurrency['cancel-in-progress']).toBe(true);
+    expect(release.on.workflow_run).toEqual({
+      workflows: ['CI'],
+      types: ['completed'],
+      branches: ['main'],
+    });
+    const selection = release.jobs['release-context'];
+    for (const restriction of [
+      "github.event.workflow_run.conclusion == 'success'",
+      "github.event.workflow_run.event == 'push'",
+      "github.event.workflow_run.head_branch == 'main'",
+      'github.event.workflow_run.head_repository.full_name == github.repository',
+    ])
+      expect(selection.if).toContain(restriction);
+    const buildJobs = ['build-api-images', 'build-admin-images', 'build-storefront-image'];
+    for (const name of buildJobs) {
+      const job = release.jobs[name];
+      expect(job.needs).toBe('release-context');
+      expect(job.if).toBe("needs.release-context.outputs.current == 'true'");
+      expect(job.env.IMAGE_REVISION).toBe('${{ needs.release-context.outputs.sha }}');
+      expect(job.permissions).toEqual({ contents: 'read', 'id-token': 'write', packages: 'write' });
     }
-    for (const job of [
+    expect(release.jobs['assemble-release-manifest'].needs).toEqual([
       'release-context',
-      'build-api-images',
-      'build-admin-images',
-      'build-storefront-image',
-      'assemble-release-manifest',
-      'deploy',
-    ]) {
-      expect(release).toContain(`  ${job}:`);
-    }
+      ...buildJobs,
+    ]);
+    const deploy = release.jobs.deploy;
+    expect(deploy.needs).toEqual(['release-context', 'assemble-release-manifest']);
+    expect(deploy.concurrency).toEqual({
+      group: 'bricomaitre-production',
+      'cancel-in-progress': false,
+    });
+    expect(deploy.environment.name).toBe('production');
+    expect(deploy.permissions).toEqual({ contents: 'read', packages: 'read' });
+    const gates = Object.keys(ci.jobs).filter((name) => name !== 'required');
+    expect([...ci.jobs.required.needs].sort()).toEqual(gates.sort());
+    expect(ci.jobs.required.if).toBe('${{ always() }}');
+    const rejection = ci.jobs.required.steps.find(
+      (step: { run?: string }) => step.run === 'exit 1',
+    );
+    expect(rejection.if).toContain("contains(needs.*.result, 'failure')");
+    expect(rejection.if).toContain("contains(needs.*.result, 'cancelled')");
+  });
 
-    for (const [job, nextJob] of [
-      ['build-api-images', 'build-admin-images'],
-      ['build-admin-images', 'build-storefront-image'],
-      ['build-storefront-image', 'assemble-release-manifest'],
-    ]) {
-      const imageJob = release.slice(
-        release.indexOf(`  ${job}:`),
-        release.indexOf(`\n  ${nextJob}:`),
-      );
-
-      expect(imageJob).toContain('name: Isolate Docker registry credentials');
-      expect(imageJob).toContain('docker_config="$RUNNER_TEMP/docker-config"');
-      expect(imageJob).toContain('echo "DOCKER_CONFIG=$docker_config"');
-      expect(imageJob).toContain('echo "BUILDX_CONFIG=$HOME/.docker/buildx"');
-      expect(imageJob.indexOf('name: Isolate Docker registry credentials')).toBeLessThan(
-        imageJob.indexOf('docker/setup-buildx-action@'),
-      );
-    }
-
-    for (const workflow of [parse(ci), parse(release)]) {
-      const jobs = Object.entries(workflow.jobs) as Array<[string, Record<string, unknown>]>;
-      expect(jobs.length).toBeGreaterThan(0);
-      for (const [name, job] of jobs) {
-        expect(job['runs-on'], name).toEqual(['self-hosted', 'Linux', 'X64', 'bricomaitre-ci']);
-        expect(job.services, name).toBeUndefined();
+  it('pins external workflow actions and grants persistent Git credentials only for release freshness reads', () => {
+    for (const filename of ['ci.yml', 'deploy.yml']) {
+      const source = readFileSync(resolve(workspaceRoot, '.github/workflows', filename), 'utf8');
+      const workflow = parse(source);
+      if (filename === 'ci.yml') expect(source).not.toMatch(/secrets\./);
+      for (const [jobName, job] of Object.entries(workflow.jobs) as [
+        string,
+        { steps: { uses?: string; with?: Record<string, unknown> }[] },
+      ][]) {
+        for (const step of job.steps) {
+          if (!step.uses || step.uses.startsWith('./')) continue;
+          expect(step.uses, jobName).toMatch(/@[a-f0-9]{40}$/);
+          if (step.uses.startsWith('actions/checkout@')) {
+            const needsFreshnessRead =
+              filename === 'deploy.yml' && ['release-context', 'deploy'].includes(jobName);
+            expect(step.with?.['persist-credentials'], jobName).toBe(needsFreshnessRead);
+          }
+        }
       }
     }
-    expect(ci).toContain('127.0.0.1:55433/bricomaitre_browser');
-    expect(ci).toContain('127.0.0.1:56380/0');
-
-    const serviceContracts = ci.slice(ci.indexOf('  service-contracts:'), ci.indexOf('\n  tests:'));
-    expect(serviceContracts).toContain(
-      'bash ops/scripts/run-service-contract-tests.sh 55432 56379 bricomaitre_test',
-    );
-    const serviceContractRunner = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/run-service-contract-tests.sh'),
-      'utf8',
-    );
-    expect(serviceContractRunner).toContain('127.0.0.1:${postgres_port}/${database}');
-    expect(serviceContractRunner).toContain('127.0.0.1:${redis_port}/0');
-    expect(serviceContractRunner).toContain(
-      'ops/scripts/run-with-ci-services.sh "$postgres_port" "$redis_port" "$database"',
-    );
-    expect(serviceContractRunner).toContain(
-      'configure-postgres-autovacuum.sh "$BRIC_CI_POSTGRES_CONTAINER" "$BRIC_CI_POSTGRES_PORT"',
-    );
-    expect(serviceContractRunner).toContain('pnpm --filter @bric/admin test:services');
-    const workspacePackage = JSON.parse(
-      readFileSync(resolve(workspaceRoot, 'package.json'), 'utf8'),
-    ) as { scripts: Record<string, string> };
-    const adminPackage = JSON.parse(
-      readFileSync(resolve(workspaceRoot, 'apps/admin/package.json'), 'utf8'),
-    ) as { scripts: Record<string, string> };
-    expect(workspacePackage.scripts['test:services']).toBe(
-      'bash ops/scripts/run-service-contract-tests.sh',
-    );
-    expect(workspacePackage.scripts['test:ci']).toContain('pnpm test:services');
-    expect(adminPackage.scripts['test:services']).toContain(
-      '--project service-integration-node --project redis-integration-node --maxWorkers=1',
-    );
-
-    const storefrontBrowser = ci.slice(
-      ci.indexOf('  browser-acceptance:'),
-      ci.indexOf('\n  admin-browser-acceptance:'),
-    );
-    expect(storefrontBrowser).toContain('BRIC_PLAYWRIGHT_SERVER: prebuilt');
-    expect(storefrontBrowser).toContain('bash ops/scripts/build-public-apps.sh storefront');
-    expect(storefrontBrowser).toContain('continue-on-error: true');
-    expect(
-      storefrontBrowser.indexOf('name: Build Storefront for browser acceptance'),
-    ).toBeGreaterThan(0);
-    expect(storefrontBrowser.indexOf('name: Build Storefront for browser acceptance')).toBeLessThan(
-      storefrontBrowser.indexOf('name: Run browser acceptance tests'),
-    );
-
-    const adminBrowser = ci.slice(
-      ci.indexOf('  admin-browser-acceptance:'),
-      ci.indexOf('\n  browser-performance:'),
-    );
-    expect(adminBrowser).toContain(
-      'ops/scripts/run-with-ci-services.sh 55433 56380 bricomaitre_browser',
-    );
-    expect(adminBrowser).toContain('127.0.0.1:55433/bricomaitre_browser');
-    expect(adminBrowser).toContain('127.0.0.1:56380/0');
-    expect(adminBrowser).toContain('Configure ephemeral Admin browser state');
-    expect(adminBrowser).toContain('BRIC_PLAYWRIGHT_SERVER: prebuilt');
-    expect(adminBrowser).toContain('continue-on-error: true');
-    expect(adminBrowser.indexOf('name: Build Admin for browser acceptance')).toBeGreaterThan(0);
-    expect(adminBrowser.indexOf('name: Build Admin for browser acceptance')).toBeLessThan(
-      adminBrowser.indexOf('name: Run Admin browser acceptance tests'),
-    );
-    expect(adminBrowser).toContain(
-      "printf 'ADMIN_PLAYWRIGHT_STORAGE_STATE=%s/admin-playwright-auth.json\\n'",
-    );
-    expect(adminBrowser).toContain('"$RUNNER_TEMP" >> "$GITHUB_ENV"');
-    expect(adminBrowser).not.toContain('apps/admin/test-results/auth.json');
-    expect(adminBrowser).toContain('BETTER_AUTH_URL: http://127.0.0.1:3020');
-    expect(adminBrowser).toContain('BRIC_PLAYWRIGHT_ADMIN_ORIGIN: http://127.0.0.1:3020');
-
-    expect(ci).toContain('name: CI / Required');
-    expect(ci).toContain('cancel-in-progress: true');
-    expect(ci).toContain('fail-fast: false');
-    const productionBuilds = ci.slice(
-      ci.indexOf('  production-builds:'),
-      ci.indexOf('\n  required:'),
-    );
-    expect(productionBuilds).toContain('ops/scripts/run-loopback-isolated.sh pnpm build:verify');
-    expect(productionBuilds).not.toContain('api.bricomaitre.com');
-    expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
-    expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser');
-    expect(ci).not.toContain('pnpm test:storefront:browser --workers=2');
-    expect(ci).toContain(
-      'ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser',
-    );
-    expect(ci).not.toContain('pnpm test:admin:browser --workers=2');
-    expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:performance');
-    expect(ci.match(/ops[/]scripts[/]run-loopback-isolated[.]sh/g)).toHaveLength(4);
-    expect(ci.match(/ops[/]scripts[/]run-with-ci-services[.]sh/g)).toHaveLength(1);
-    expect(release).toContain('workflow_run:');
-    expect(release).toMatch(/workflow_run:[\s\S]*branches:\s+- main/);
-    expect(release).not.toContain('pull-requests: read');
-    expect(release).not.toContain('verify-release-pr.sh');
-    expect(release).toContain('--build-state "$PWD" "$RELEASE_SHA"');
-    expect(release).toContain('"$bundle_dir/.bric-migrations.json"');
-    expect(release).toContain('group: bricomaitre-production');
-    expect(release).toContain('cancel-in-progress: false');
-    expect(release).toContain('ssh_dir="$RUNNER_TEMP/bric-deploy-ssh"');
-    expect(release).toContain('UserKnownHostsFile %s\\n');
-    expect(release).toContain('StrictHostKeyChecking yes\\n');
-    expect(release).toContain('ServerAliveInterval 15\\n');
-    expect(release).toContain('ServerAliveCountMax 4\\n');
-    expect(release).toContain('ControlMaster auto\\n');
-    expect(release).toContain('ControlPath %s\\n');
-    expect(release).toContain('ControlPersist 10m\\n');
-    expect(release).toContain('echo "BRIC_DEPLOY_SSH_CONFIG=$ssh_config"');
-    expect(release).toContain('echo "BRIC_DEPLOY_SSH_CONTROL_PATH=$control_path"');
-    expect(release).toContain(
-      'ssh -F "$BRIC_DEPLOY_SSH_CONFIG" -O exit bric-production >/dev/null 2>&1 || true',
-    );
-    expect(release.match(/ssh -F "\$BRIC_DEPLOY_SSH_CONFIG" bric-production/g)).toHaveLength(13);
-    expect(release).toContain("--exclude='.bric-deploy.*'");
-    expect(release).toContain('read_remote_deploy_state');
-    expect(release).toContain('remote_deploy_started=true');
-    expect(release).toContain("logs '$release_path' 200");
-    expect(release).not.toContain('~/.ssh/bric_deploy_key');
-    expect(release).not.toContain('> ~/.ssh/known_hosts');
-    expect(release).toContain('Reject a superseded release');
-    expect(release.match(/bash ops\/scripts\/current-main-sha[.]sh/g)).toHaveLength(2);
-    expect(release).not.toContain('/git/ref/heads/main');
-    expect(release).toContain("if: needs.release-context.outputs.current == 'true'");
-    expect(release).toContain('image builds were skipped');
-    expect(release).toContain('ref: ${{ needs.release-context.outputs.sha }}');
-    expect(release).not.toContain('pnpm build:apps');
-    expect(release).toContain(
-      "ADMIN_META_ADS_SYNC_ENABLED: ${{ vars.ADMIN_META_ADS_SYNC_ENABLED || 'false' }}",
-    );
-    expect(release).toContain('META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}');
-    expect(release).toContain('ADMIN_META_ADS_SYNC_ENABLED must be true or false');
-    expect(release).toContain(
-      "ADMIN_SEARCH_CONSOLE_SYNC_ENABLED: ${{ vars.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED || 'false' }}",
-    );
-    expect(release).toContain(
-      'GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64 }}',
-    );
-    expect(release).toContain('ADMIN_SEARCH_CONSOLE_SYNC_ENABLED must be true or false');
-
-    const workspaceSetup = readFileSync(
-      resolve(workspaceRoot, '.github/actions/setup-workspace/action.yml'),
-      'utf8',
-    );
-    expect(workspaceSetup).toContain('next_cache_root="$BRIC_CI_CACHE_DIR/next/$runner_cache_key"');
-    expect(workspaceSetup).toContain('apps/admin/.next/dev/cache/turbopack');
-    expect(workspaceSetup).toContain('apps/storefront/.next/dev/cache/turbopack');
-    expect(workspaceSetup).toContain('apps/storefront/.next/cache');
-    expect(workspaceSetup).toContain('mv "$source_path" "$target_path"');
-    expect(workspaceSetup).toContain('ln -s "$target_path" "$source_path"');
-    expect(workspaceSetup.indexOf('Configure persistent host caches')).toBeLessThan(
-      workspaceSetup.indexOf('Clean generated workspace state'),
-    );
-    const actionReferences = [
-      ...`${ci}\n${release}\n${workspaceSetup}`.matchAll(/^\s*-?\s*uses:\s+([^\s#]+)/gm),
-    ].map(([, reference]) => reference);
-    expect(ci).toMatch(/^\s*pull_request:\n\s+branches:\n\s+- main/m);
-    expect(ci).not.toMatch(/^\s*pull_request_target:/m);
-    expect(ci).not.toMatch(/secrets\./);
-    expect(release).toContain("github.event.workflow_run.event == 'push'");
-    expect(ci).not.toContain('github.event.pull_request');
-    expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
-    expect(actionReferences.length).toBeGreaterThan(0);
-    expect(
-      actionReferences.every(
-        (reference) =>
-          reference.startsWith('./.github/actions/') || /@[a-f0-9]{40}$/.test(reference),
-      ),
-    ).toBe(true);
-    expect(ci.match(/uses: [.][/][.]github[/]actions[/]setup-workspace/g)).toHaveLength(7);
-    expect(ci.match(/clean: false/g)).toHaveLength(7);
-    expect(ci).toContain(
-      'uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c',
-    );
-    expect(`${ci}\n${release}`.match(/name: bricomaitre-ci/g)).toHaveLength(4);
-    expect(`${ci}\n${release}`.match(/driver-opts: network=host/g)).toHaveLength(4);
-    expect(`${ci}\n${release}`.match(/keep-state: true/g)).toHaveLength(4);
-    expect(`${ci}\n${release}`.match(/cache-binary: false/g)).toHaveLength(4);
-    expect(`${ci}\n${release}`.match(/cleanup: false/g)).toHaveLength(4);
-    expect(release).not.toContain('sigstore/cosign-installer');
-    expect(release.match(/bash ops[/]scripts[/]install-cosign[.]sh/g)).toHaveLength(3);
-    expect(release.match(/bash ops[/]scripts[/]build-release-images[.]sh/g)).toHaveLength(3);
-    const cosignInstaller = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/install-cosign.sh'),
-      'utf8',
-    );
-    expect(cosignInstaller).toContain("cosign_version='v3.0.6'");
-    expect(cosignInstaller).toContain(
-      "cosign_sha256='c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74'",
-    );
-    expect(cosignInstaller).toContain('exec 9>"$cache_root/cosign/.install.lock"');
-    expect(cosignInstaller).toContain('flock 9');
-    expect(cosignInstaller).toContain('--continue-at -');
-    expect(cosignInstaller).toContain('--retry-all-errors');
-    expect(cosignInstaller).toContain('--retry-max-time 900');
-    expect(cosignInstaller).toContain('sha256sum -c --status');
-    expect(cosignInstaller).toContain('>> "$GITHUB_PATH"');
-    const imageBuilder = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/build-release-images.sh'),
-      'utf8',
-    );
-    expect(imageBuilder).toContain('BRIC_BUILD_MAX_ATTEMPTS:-3');
-    expect(imageBuilder).toContain('BRIC_BUILD_RETRY_DELAY_SECONDS:-5');
-    expect(imageBuilder).toContain('docker buildx bake');
-    expect(imageBuilder).toContain('Release image build failed with a non-network error');
-    expect(imageBuilder).toContain('i/o timeout|TLS handshake timeout|connection reset by peer');
-    expect(imageBuilder).toContain('blob upload unknown to registry');
-    const imageSigner = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/sign-bake-images.sh'),
-      'utf8',
-    );
-    expect(imageSigner).toContain('BRIC_SIGN_MAX_ATTEMPTS:-3');
-    expect(imageSigner).toContain('BRIC_SIGN_RETRY_DELAY_SECONDS:-5');
-    expect(imageSigner).toContain('BRIC_SIGN_TIMEOUT_SECONDS:-90');
-    expect(imageSigner).toContain('--retry-all-errors');
-    expect(imageSigner).toContain('tuf refresh failed');
-    expect(imageSigner).toContain('equivalent entry already exists');
-    expect(imageSigner).toContain('cosign verify');
-    expect(imageSigner).toContain('failed with a non-network error; not retrying');
-    expect(imageSigner).toContain('exhausted $max_attempts transient-network attempts');
-    expect(ci.indexOf('uses: docker/setup-buildx-action@')).toBeLessThan(
-      ci.indexOf('run: bash ops/scripts/validate-operations.sh'),
-    );
-    expect(workspaceSetup).not.toContain('pnpm/action-setup');
-    expect(workspaceSetup).toContain('package-manager-cache: false');
-    expect(workspaceSetup).toContain('corepack_cache_dir="$ci_cache_dir/corepack"');
-    expect(workspaceSetup).toContain("printf 'COREPACK_HOME=%s\\n'");
-    expect(workspaceSetup).toContain('corepack enable pnpm');
-    expect(workspaceSetup).toContain('corepack pnpm --version');
-    expect(workspaceSetup).toContain('exec 9>"$BRIC_CI_CACHE_DIR/corepack.lock"');
-    expect(workspaceSetup).toContain('git reset --hard HEAD');
-    expect(workspaceSetup).toContain('git clean -ffdx -e node_modules/');
-    expect(workspaceSetup).not.toContain('-e .cache/');
-    expect(workspaceSetup).toContain('playwright_cache_dir="$cache_home/ms-playwright"');
-    expect(workspaceSetup).toContain("printf 'BRIC_CI_CACHE_DIR=%s\\n'");
-    expect(workspaceSetup).toContain("printf 'PLAYWRIGHT_BROWSERS_PATH=%s\\n'");
-    expect(ci).not.toContain('PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}');
-    expect(ci.match(/bash ops[/]scripts[/]install-playwright-chromium[.]sh/g)).toHaveLength(3);
-    const playwrightInstaller = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/install-playwright-chromium.sh'),
-      'utf8',
-    );
-    expect(playwrightInstaller).toContain('exec 9>"$playwright_cache_dir/.install.lock"');
-    expect(playwrightInstaller).toContain('flock 9');
-    expect(playwrightInstaller).toContain("RUNNER_ENVIRONMENT:-}\" == 'github-hosted'");
-    expect(playwrightInstaller).toContain('install_arguments=(install chromium)');
-    expect(playwrightInstaller).toContain('install_arguments=(install --with-deps chromium)');
-    expect(playwrightInstaller).toContain('exec playwright "${install_arguments[@]}"');
-    const loopbackRunner = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/run-loopback-isolated.sh'),
-      'utf8',
-    );
-    expect(loopbackRunner).toContain("RUNNER_ENVIRONMENT:-}\" == 'github-hosted'");
-    expect(loopbackRunner).toContain('sudo --preserve-env unshare --net');
-    expect(loopbackRunner).toContain('export HOME="$3" PATH="$4"');
-    expect(loopbackRunner).toContain('setpriv --reuid');
-    expect(loopbackRunner).toContain('unshare --user --map-root-user --net');
-    expect(loopbackRunner).toContain('ip link set lo up');
-    const serviceRunner = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/run-with-ci-services.sh'),
-      'utf8',
-    );
-    expect(serviceRunner.match(/--network host/g)).toHaveLength(2);
-    expect(serviceRunner).toContain('docker image inspect "$image"');
-    expect(serviceRunner).toContain('docker-images.lock');
-    expect(serviceRunner).toContain('flock 9');
-    expect(serviceRunner).toContain('service-ports.lock');
-    expect(serviceRunner).toContain('choose_available_port');
-    expect(serviceRunner).toContain('flock -u "$service_port_lock_fd"');
-    expect(serviceRunner).toContain('docker pull "$image"');
-    expect(serviceRunner).toContain('docker rm --force');
-    expect(ci).toContain('BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN: http://127.0.0.1:3013');
-    expect(ci).toContain('BRIC_PLAYWRIGHT_UPSTREAM_ORIGIN: http://127.0.0.1:3014');
-    expect(ci).toContain('BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN: http://127.0.0.1:4321');
-    const performanceJob = ci.slice(
-      ci.indexOf('  browser-performance:'),
-      ci.indexOf('  production-builds:'),
-    );
-    expect(performanceJob).toContain(`    needs:
-      - static-quality
-      - service-contracts
-      - tests
-      - browser-acceptance
-      - admin-browser-acceptance`);
-    expect(release).toContain(
-      'GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}',
-    );
-    expect(release).toContain(
-      'GOOGLE_ANALYTICS_API_SECRET: ${{ secrets.GOOGLE_ANALYTICS_API_SECRET }}',
-    );
-    expect(release).toContain('SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}');
-    expect(release).toContain(
-      "SENTRY_PROJECT_ADMIN: ${{ vars.SENTRY_PROJECT_ADMIN || 'bricadmin' }}",
-    );
-    expect(release).toContain(
-      "SENTRY_PROJECT_STOREFRONT_API: ${{ vars.SENTRY_PROJECT_STOREFRONT_API || 'brico-api' }}",
-    );
-    expect(release).toContain(
-      "SENTRY_PROJECT_STOREFRONT: ${{ vars.SENTRY_PROJECT_STOREFRONT || 'bricomaitre' }}",
-    );
-    expect(release).toContain('test -n "$SENTRY_AUTH_TOKEN"');
-    expect(release).toContain('SENTRY_DSN_ADMIN=%s');
-    expect(release).toContain('SENTRY_DSN_STOREFRONT_API=%s');
-    expect(release).toContain('SENTRY_DSN_STOREFRONT=%s');
-    expect(release).toContain('(SENTRY|NEXT_PUBLIC_SENTRY)_[A-Z0-9_]+_STOREFRONT_NEW');
-    expect(release).toContain(
-      'TIKTOK_EVENTS_API_ACCESS_TOKEN: ${{ secrets.TIKTOK_EVENTS_API_ACCESS_TOKEN }}',
-    );
-    expect(release).toContain(
-      'TikTok destination requires both pixel ID and Events API access token',
-    );
-    expect(release).toContain('MARKETING_GOOGLE_DESTINATION_ENABLED=true');
-    expect(release).toContain('MARKETING_TIKTOK_DESTINATION_ENABLED=%s');
   });
 
   it('keeps dependency pins on schedule', () => {

@@ -31,7 +31,8 @@
       ],
       "next": {
         "config": []
-      }
+      },
+      "ignoreDependencies": ["esbuild"]
     },
     "apps/storefront-api": {
       "entry": [
@@ -43,7 +44,8 @@
       "project": ["**/*.{ts,tsx,mjs}!", "!**/*.{test,spec}.{ts,tsx}!", "!test/**!", "!tests/**!"],
       "next": {
         "config": []
-      }
+      },
+      "ignoreDependencies": ["esbuild"]
     },
     "apps/storefront": {
       "entry": [
@@ -68,5 +70,6 @@
       "entry": ["eslint.base.mjs!"]
     }
   },
-  "ignoreExportsUsedInFile": true
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["flock"]
 }

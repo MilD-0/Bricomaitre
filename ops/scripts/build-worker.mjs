@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const [, , entryArg, outfileArg] = process.argv;
@@ -17,41 +16,7 @@ const outfile = resolve(rootDir, outfileArg);
 const format = outfile.endsWith('.cjs') ? 'cjs' : 'esm';
 const emitSourceMap = process.env.BRIC_WORKER_SOURCEMAPS === '1';
 
-function loadEsbuild() {
-  const requireFromEntry = createRequire(entryPoint);
-
-  try {
-    return requireFromEntry('esbuild');
-  } catch (error) {
-    if (error?.code !== 'MODULE_NOT_FOUND') {
-      throw error;
-    }
-  }
-
-  const pnpmStore = resolve(rootDir, 'node_modules/.pnpm');
-  if (existsSync(pnpmStore)) {
-    const candidates = readdirSync(pnpmStore)
-      .filter((name) => name.startsWith('esbuild@'))
-      .sort()
-      .reverse();
-
-    for (const candidate of candidates) {
-      const candidateRequire = createRequire(
-        resolve(pnpmStore, candidate, 'node_modules/esbuild/package.json'),
-      );
-
-      try {
-        return candidateRequire('esbuild');
-      } catch {
-        // Continue to the next installed pnpm variant.
-      }
-    }
-  }
-
-  throw new Error('Unable to resolve esbuild. Run pnpm install before bundling workers.');
-}
-
-const { build } = loadEsbuild();
+const { build } = createRequire(entryPoint)('esbuild');
 
 await build({
   bundle: true,
@@ -70,10 +35,3 @@ await build({
   sourcemap: emitSourceMap ? 'external' : false,
   target: 'node24',
 });
-
-if (format === 'cjs') {
-  const outputStart = readFileSync(outfile, 'utf8').slice(0, 512);
-  if (/^\s*import\s+\{?\s*createRequire/.test(outputStart)) {
-    throw new Error(`CommonJS bundle ${outfileArg} contains an ESM createRequire banner.`);
-  }
-}

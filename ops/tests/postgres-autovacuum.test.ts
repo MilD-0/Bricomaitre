@@ -9,7 +9,10 @@ const configurator = resolve(workspaceRoot, 'ops/scripts/configure-postgres-auto
 const migrations = resolve(workspaceRoot, 'ops/scripts/run-admin-migrations.sh');
 const temporaryDirectories: string[] = [];
 
-function runConfigurator(mode: 'verified' | 'unverified' | 'missing-container') {
+function runConfigurator(
+  mode: 'verified' | 'unverified' | 'missing-container',
+  runMigrations = false,
+) {
   const directory = mkdtempSync(join(tmpdir(), 'bric-postgres-autovacuum-'));
   temporaryDirectories.push(directory);
   const dockerLog = join(directory, 'docker.log');
@@ -20,7 +23,7 @@ function runConfigurator(mode: 'verified' | 'unverified' | 'missing-container') 
     fakeDocker,
     `#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "$*" >> "$FAKE_DOCKER_LOG"
+printf '%s|%s\n' "\${ADMIN_DB_TASK:-}" "$*" >> "$FAKE_DOCKER_LOG"
 if [[ "\${1:-}" == compose ]]; then
   if [[ "$FAKE_POSTGRES_MODE" != missing-container ]]; then
     printf 'synthetic-postgres-container\n'
@@ -42,7 +45,7 @@ exit 64
     { mode: 0o755 },
   );
 
-  const result = spawnSync('bash', [configurator], {
+  const result = spawnSync('bash', [runMigrations ? migrations : configurator], {
     cwd: workspaceRoot,
     encoding: 'utf8',
     env: {
@@ -102,12 +105,15 @@ describe('PostgreSQL high-churn autovacuum configuration', () => {
     expect(test.result.stderr).toContain('PostgreSQL container is not running');
   });
 
-  it('runs immediately after the final migration verification', () => {
-    const script = readFileSync(migrations, 'utf8');
-    const finalVerification = script.lastIndexOf('run_migration_task verify');
-    const autovacuum = script.indexOf('configure-postgres-autovacuum.sh');
-
-    expect(finalVerification).toBeGreaterThan(-1);
-    expect(autovacuum).toBeGreaterThan(finalVerification);
+  it('pulls once and runs verify, migrate, verify before configuring autovacuum', () => {
+    const test = runConfigurator('verified', true);
+    expect(test.result.status, test.result.stderr).toBe(0);
+    const commands = readFileSync(test.dockerLog, 'utf8').trim().split('\n');
+    expect(commands.filter((command) => command.includes(' pull '))).toHaveLength(1);
+    const tasks = commands.filter((command) => command.includes(' run --rm --no-deps '));
+    expect(tasks.map((command) => command.split('|')[0])).toEqual(['verify', 'migrate', 'verify']);
+    expect(commands.indexOf(tasks[2]!)).toBeLessThan(
+      commands.findIndex((command) => command.includes('exec -i')),
+    );
   });
 });

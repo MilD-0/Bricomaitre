@@ -85,27 +85,7 @@ def load_exceptions(candidate_release: Path) -> list[dict[str, str]]:
     if payload.get("version") != 1 or not isinstance(payload.get("exceptions"), list):
         raise ValueError(f"invalid rollback-safety exception manifest: {path}")
 
-    exceptions: list[dict[str, str]] = []
-    for entry in payload["exceptions"]:
-        if not isinstance(entry, dict):
-            raise ValueError("every rollback-safety exception must be an object")
-        migration = entry.get("migration")
-        digest = entry.get("sha256")
-        reason = entry.get("reason")
-        if (
-            not isinstance(migration, str)
-            or not re.fullmatch(r"[A-Za-z0-9_.-]+\.sql", migration)
-            or not isinstance(digest, str)
-            or not re.fullmatch(r"[a-f0-9]{64}", digest)
-            or not isinstance(reason, str)
-            or len(reason.strip()) < 20
-        ):
-            raise ValueError(
-                "rollback-safety exceptions require a migration filename, lowercase SHA-256, "
-                "and a review reason of at least 20 characters"
-            )
-        exceptions.append({"migration": migration, "sha256": digest, "reason": reason.strip()})
-    return exceptions
+    return validate_exceptions(payload["exceptions"])
 
 
 def strip_sql_comments(sql: str) -> str:

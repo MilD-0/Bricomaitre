@@ -1,12 +1,16 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 const generator = resolve(workspaceRoot, 'ops/scripts/generate-runtime-license-bundle.mjs');
+const fixtures: string[] = [];
+afterEach(() => {
+  for (const fixture of fixtures.splice(0)) rmSync(fixture, { recursive: true, force: true });
+});
 
 function writePackage(root: string, name: string, version: string, license?: string) {
   mkdirSync(root, { recursive: true });
@@ -20,6 +24,7 @@ function writePackage(root: string, name: string, version: string, license?: str
 describe('runtime third-party license bundle', () => {
   it('uses pnpm source packages to restore notices pruned from runtime trees', () => {
     const fixture = mkdtempSync(join(tmpdir(), 'bric-runtime-licenses-'));
+    fixtures.push(fixture);
     const runtime = join(fixture, 'runtime');
     const workspaceNodeModules = join(fixture, 'workspace-node_modules');
     const output = join(fixture, 'RUNTIME_THIRD_PARTY_LICENSES.txt');
@@ -48,6 +53,7 @@ describe('runtime third-party license bundle', () => {
 
   it('fails closed when a runtime dependency has no distributable notice', () => {
     const fixture = mkdtempSync(join(tmpdir(), 'bric-runtime-licenses-missing-'));
+    fixtures.push(fixture);
     const runtime = join(fixture, 'runtime');
     const workspaceNodeModules = join(fixture, 'workspace-node_modules');
     const output = join(fixture, 'RUNTIME_THIRD_PARTY_LICENSES.txt');

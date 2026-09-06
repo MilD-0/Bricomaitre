@@ -16,14 +16,8 @@ if [[ -f "${BRIC_ENV_DIR:-/srv/bric/env}/admin.env" ]]; then
   set +a
 fi
 
-run_migration_task() {
-  local task="${1:?migration task is required}"
-
-  compose pull "$service"
+compose pull "$service"
+for task in verify migrate verify; do
   ADMIN_DB_TASK="$task" compose run --rm --no-deps "$service"
-}
-
-run_migration_task verify
-run_migration_task migrate
-run_migration_task verify
+done
 "$script_dir/configure-postgres-autovacuum.sh"

@@ -39,11 +39,52 @@ function makeFixture({ includeTarget = true } = {}) {
 
 describe('Next standalone dependency hydration', () => {
   it('loads app-local production environment files before starting the traced server', () => {
-    const source = readFileSync(standaloneLauncher, 'utf8');
-
-    expect(source).toContain("'.env.production.local'");
-    expect(source).toContain("'.env.local'");
-    expect(source).toContain('process.loadEnvFile(envPath)');
+    const { appDirectory } = makeFixture();
+    const serverDirectory = join(appDirectory, '.next/standalone/apps/fixture');
+    mkdirSync(serverDirectory, { recursive: true });
+    mkdirSync(join(appDirectory, '.next/static'));
+    mkdirSync(join(appDirectory, 'public'));
+    writeFileSync(join(appDirectory, '.env'), 'BRIC_LAUNCHER_TEST_VALUE=base\n');
+    writeFileSync(join(appDirectory, '.env.local'), 'BRIC_LAUNCHER_TEST_VALUE=local\n');
+    writeFileSync(
+      join(appDirectory, '.env.production.local'),
+      'BRIC_LAUNCHER_TEST_VALUE=production-local\nBRIC_LAUNCHER_TEST_OVERRIDE=file\n',
+    );
+    writeFileSync(
+      join(serverDirectory, 'server.js'),
+      `
+      const { existsSync } = require('node:fs');
+      console.log(JSON.stringify({
+        value: process.env.BRIC_LAUNCHER_TEST_VALUE,
+        override: process.env.BRIC_LAUNCHER_TEST_OVERRIDE,
+        assets: existsSync(__dirname + '/public') && existsSync(__dirname + '/.next/static')
+      }));
+      process.exit(7);
+    `,
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        standaloneLauncher,
+        '--app-dir',
+        appDirectory,
+        '--nested-dir',
+        'apps/fixture',
+        '--default-port',
+        '3030',
+      ],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { ...process.env, BRIC_LAUNCHER_TEST_OVERRIDE: 'process' },
+      },
+    );
+    expect(result.status, result.stderr).toBe(7);
+    expect(JSON.parse(result.stdout)).toEqual({
+      value: 'production-local',
+      override: 'process',
+      assets: true,
+    });
   });
 
   it.each(['admin', 'storefront-api', 'storefront'])(

@@ -89,6 +89,7 @@
     "@types/react-dom": "19.2.5",
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "0.28.1",
     "jsdom": "^28.1.0",
     "msw": "^2.15.0",
     "tailwindcss": "^4.3.3",
