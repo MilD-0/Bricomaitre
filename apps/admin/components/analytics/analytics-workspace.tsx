@@ -1,6 +1,6 @@
 'use client';
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -37,6 +37,7 @@ import {
 } from './analytics-workspace-primitives';
 
 export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload }) {
+  const queryClient = useQueryClient();
   const locale = useLocale();
   const t = useTranslations();
   const copy = getAnalyticsCopy(locale);
@@ -219,6 +220,9 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
             onClick={() => {
               forceRefresh.current = true;
               void analyticsQuery.refetch();
+              if (filters.view === 'storefront') {
+                void queryClient.invalidateQueries({ queryKey: ['stats-storefront-details'] });
+              }
             }}
           >
             {analyticsQuery.isFetching ? (

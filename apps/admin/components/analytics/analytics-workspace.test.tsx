@@ -537,6 +537,35 @@ function catalogPayload(): AnalyticsPayload {
   };
 }
 
+function storefrontPayload(): AnalyticsPayload {
+  const base = commandPayload();
+  return {
+    ...base,
+    view: 'storefront',
+    filters: { ...base.filters, view: 'storefront' },
+    data: {
+      kind: 'storefront',
+      metrics: [],
+      funnel: [],
+      funnelRange: { startDate: '2026-08-13', endDate: '2026-08-19' },
+      trend: [],
+      searches: [],
+      acquisitionSources: [],
+      vitals: [],
+      paths: { coverageStartDate: '2026-08-13', coverageEndDate: '2026-08-19', rows: [] },
+      landingPages: { pages: [] },
+      aiAssistant: {
+        opens: 0,
+        messages: 0,
+        resultClicks: 0,
+        influencedOrders: 0,
+        confirmedOrders: 0,
+        paidOrders: 0,
+      },
+    } as unknown as AnalyticsPayload['data'],
+  };
+}
+
 function renderWorkspace(payload = commandPayload()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -946,5 +975,36 @@ describe('StatsWorkspace', () => {
 
     fireEvent.click(screen.getByText('Promotion correction'));
     expect(screen.getByRole('button', { name: 'Reset to automatic' })).toBeEnabled();
+  });
+  it('makes failed storefront details recoverable and refreshes them with the report', async () => {
+    let attempts = 0;
+    const base = storefrontPayload();
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      if (String(url).startsWith('/api/stats/storefront-details')) {
+        attempts += 1;
+        if (attempts === 1)
+          return new Response(JSON.stringify({ error: 'Temporary reporting failure' }), {
+            status: 503,
+          });
+        return Response.json({
+          data: {
+            ...base.data,
+            acquisitionSources: [
+              { name: `Recovered source ${attempts}`, sessions: 10, conversionRate: 20 },
+            ],
+          },
+        });
+      }
+      return Response.json({ data: base });
+    });
+    renderWorkspace(base);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Analytics request failed.');
+    fireEvent.click(within(alert).getByRole('button', { name: 'Refresh' }));
+    await screen.findByText('Recovered source 2');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await screen.findByText('Recovered source 3');
+    expect(attempts).toBe(3);
   });
 });

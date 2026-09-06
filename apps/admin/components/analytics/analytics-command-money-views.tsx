@@ -221,7 +221,7 @@ export function MoneyView({
       ? ['codDzd', 'profitDzd']
       : mode === 'cumulative'
         ? ['cumulativeNetProfitDzd', 'cumulativeTrueProfitDzd']
-        : ['grossProfitDzd', 'adjustedProfitDzd', 'netProfitDzd', 'trueProfitDzd'],
+        : ['adCostDzd', 'grossProfitDzd', 'adjustedProfitDzd', 'netProfitDzd', 'trueProfitDzd'],
   );
   return (
     <>

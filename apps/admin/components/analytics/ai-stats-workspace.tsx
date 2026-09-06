@@ -41,7 +41,7 @@ import {
   AnalyticsMetricCell,
   AnalyticsMetricStrip,
   AnalyticsResponsiveChart as ResponsiveChart,
-  AnalyticsSection,
+  AnalyticsSection as Section,
   AnalyticsTableHead,
   humanizeAnalyticsKey,
 } from './analytics-presentation';
@@ -87,26 +87,6 @@ function MetricStrip({
       ))}
     </AnalyticsMetricStrip>
   );
-}
-
-function Section({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <AnalyticsSection title={title} className={className}>
-      {children}
-    </AnalyticsSection>
-  );
-}
-
-function EmptyRows({ copy }: { copy: AiStatsCopy }) {
-  return <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>;
 }
 
 function OperationsView({
@@ -174,7 +154,7 @@ function OperationsView({
             </ResponsiveChart>
           </div>
         ) : (
-          <EmptyRows copy={copy} />
+          <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>
         )}
       </Section>
       <Section title={copy.sections.workflows} className="overflow-hidden">
@@ -222,7 +202,7 @@ function OperationsView({
             </tbody>
           </AnalyticsDenseTable>
         ) : (
-          <EmptyRows copy={copy} />
+          <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>
         )}
       </Section>
       <div className="grid min-w-0 lg:grid-cols-2">
@@ -247,7 +227,7 @@ function OperationsView({
               ))}
             </div>
           ) : (
-            <EmptyRows copy={copy} />
+            <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>
           )}
         </Section>
         <Section title={copy.sections.changes}>
@@ -271,7 +251,7 @@ function OperationsView({
               ))}
             </div>
           ) : (
-            <EmptyRows copy={copy} />
+            <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>
           )}
         </Section>
       </div>
@@ -315,7 +295,7 @@ function OperationsView({
             </tbody>
           </AnalyticsDenseTable>
         ) : (
-          <EmptyRows copy={copy} />
+          <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>
         )}
       </Section>
       {data.exceptions.length ? (
@@ -487,7 +467,7 @@ function ShoppingView({
             </ResponsiveChart>
           </div>
         ) : (
-          <EmptyRows copy={copy} />
+          <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>
         )}
       </Section>
       <Section title={copy.sections.intents} className="overflow-hidden">
@@ -525,7 +505,7 @@ function ShoppingView({
             </tbody>
           </AnalyticsDenseTable>
         ) : (
-          <EmptyRows copy={copy} />
+          <AnalyticsEmptyState>{copy.noData}</AnalyticsEmptyState>
         )}
       </Section>
     </>

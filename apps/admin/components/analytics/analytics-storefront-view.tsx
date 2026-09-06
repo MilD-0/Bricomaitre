@@ -7,6 +7,7 @@ import { Area, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from 
 import type { AnalyticsPayload } from '../../lib/analytics';
 import { requestJson as request } from '../../lib/admin-api';
 import { cn } from '../../lib/utils';
+import { Button } from '../ui/button';
 import {
   AnalyticsChartFrame as ChartFrame,
   AnalyticsResponsiveChart as ResponsiveChart,
@@ -81,6 +82,29 @@ export function StorefrontView({
   const trend = completedTrendBuckets(viewData.trend, filters.resolvedGrain, filters.endDate);
   return (
     <>
+      {detailsQuery.error ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 border-b border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:px-6"
+        >
+          <span>{copy.labels.analyticsRequestFailed}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={detailsQuery.isFetching}
+            onClick={() => void detailsQuery.refetch()}
+          >
+            {copy.refresh}
+          </Button>
+        </div>
+      ) : detailsQuery.isFetching ? (
+        <p
+          role="status"
+          className="border-b border-border/60 px-4 py-3 text-sm text-muted-foreground sm:px-6"
+        >
+          {copy.loading}
+        </p>
+      ) : null}
       <MetricStrip metrics={metrics} copy={copy} locale={locale} />
       <div className="grid xl:grid-cols-[minmax(0,1.6fr)_minmax(19rem,0.8fr)]">
         <Section title={copy.sections.siteTrend} analyticsFocus={{ dimension: 'storefront_trend' }}>
