@@ -228,7 +228,11 @@ export function OrdersWorkspace({
     onError: (error: Error) => toast.error(error.message),
   });
   const saveOrder = async (order: OrderRecord, patch: OrderPatch) => {
-    await patchMutation.mutateAsync({ id: order.id, patch });
+    try {
+      await patchMutation.mutateAsync({ id: order.id, patch });
+    } catch {
+      // The mutation reports the failure; keep the editor draft available for retry.
+    }
   };
   const bulkStatusMutation = useMutation({
     mutationFn: async () => {

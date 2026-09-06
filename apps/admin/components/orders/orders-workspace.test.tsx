@@ -722,6 +722,64 @@ describe('OrdersWorkspace', () => {
     );
   });
 
+  it('locks the complete editor while saving and preserves the draft after a failed response', async () => {
+    const user = userEvent.setup();
+    let releaseSave: (() => void) | undefined;
+    const responseHeld = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const bodies: Record<string, unknown>[] = [];
+    const revised = {
+      ...orders[0]!,
+      fullName: 'Pending draft',
+      phoneNumber1: '555000001',
+      firstName: 'Pending',
+      lastName: 'draft',
+      note: 'Keep this note',
+      updatedAt: '2026-08-18T11:00:00.000Z',
+    };
+    renderWorkspace();
+    server.use(
+      http.patch('/api/orders/1', async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        if (bodies.length === 1) {
+          await responseHeld;
+          return HttpResponse.json({ ok: false, error: 'Save failed' }, { status: 500 });
+        }
+        return HttpResponse.json({ ok: true, item: revised });
+      }),
+      http.get('/api/orders', () =>
+        HttpResponse.json({ ...initialOrders, items: [revised, orders[1]!] }),
+      ),
+    );
+    const name = await screen.findByLabelText('Customer name');
+    fireEvent.change(name, { target: { value: 'Pending draft' } });
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Keep this note' } });
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(name).toBeDisabled();
+    expect(screen.getByLabelText('Notes')).toBeDisabled();
+    expect(screen.getByLabelText('Status')).toBeDisabled();
+    expect(
+      screen.getByPlaceholderText(messages.ordersManager.products.searchPlaceholder),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Increase quantity for Cordless drill' }),
+    ).toBeDisabled();
+    await user.type(name, ' lost input');
+    expect(name).toHaveValue('Pending draft');
+    releaseSave!();
+    await waitFor(() => expect(name).toBeEnabled());
+    expect(name).toHaveValue('Pending draft');
+    expect(screen.getByLabelText('Notes')).toHaveValue('Keep this note');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toEqual(bodies[0]);
+    await waitFor(() => expect(screen.getByLabelText('Customer name')).toBeEnabled());
+    expect(screen.getByLabelText('Customer name')).toHaveValue('Pending draft');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  });
+
   it('keeps the selected order in the page workspace without opening a second overlay', async () => {
     const user = userEvent.setup();
     const { container } = renderWorkspace();
