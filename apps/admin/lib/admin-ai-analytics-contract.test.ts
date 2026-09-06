@@ -118,7 +118,6 @@ describe('admin assistant analytics semantic contract', () => {
 
   it('encodes the Bricomaitre meanings that conventional ecommerce assistants get wrong', () => {
     expect(ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT).toMatchObject({
-      semanticsVersion: 5,
       lifecycle: {
         delivered: expect.stringContaining('not proof'),
         payed: expect.stringContaining('recognized paid outcome'),

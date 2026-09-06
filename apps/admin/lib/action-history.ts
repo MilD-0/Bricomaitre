@@ -921,10 +921,7 @@ async function insertEntity(tx: Transaction, entityType: string, snapshot: Snaps
     throw new Error(`Entity type ${entityType} does not support inserts`);
   }
 
-  const allowedKeys = new Set(Object.keys(getTableColumns(config.table)));
-  await tx
-    .insert(config.table)
-    .values(snapshotValues(config.table, cleanSnapshot(snapshot, allowedKeys)!) as never);
+  await tx.insert(config.table).values(snapshotValues(config.table, snapshot) as never);
 }
 
 async function updateEntity(
@@ -958,14 +955,10 @@ async function updateEntity(
     throw new Error(`Entity type ${entityType} does not support updates`);
   }
 
-  const allowedKeys = new Set(Object.keys(getTableColumns(config.table)));
   await tx
     .update(config.table)
     .set({
-      ...snapshotValues(
-        config.table,
-        cleanSnapshot(snapshotChanges(snapshot, expected), allowedKeys)!,
-      ),
+      ...snapshotValues(config.table, snapshotChanges(snapshot, expected)),
       updatedAt: new Date(),
     } as never)
     .where(eq(config.table.id, entityId));

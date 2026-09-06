@@ -36,6 +36,7 @@ export async function loadSourceHealth(
   db: Database,
   filters: AnalyticsFilters,
   economics?: EconomicsReport,
+  throughDate = dayInTimezone(new Date()),
 ): Promise<AnalyticsSource[]> {
   const result = await db.execute(sql`
     with first_posted as (
@@ -59,7 +60,7 @@ export async function loadSourceHealth(
       (select count(*)::int from ${orders}
         where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
         as order_records,
-      least(${filters.endDate}::date, ${dayInTimezone(new Date())}::date) as orders_through_date,
+      least(${filters.endDate}::date, ${throughDate}::date) as orders_through_date,
       (select max(${orders.updatedAt}) from ${orders}) as orders_updated_at,
       (select count(*)::int from posted) as posted_records,
       (select count(tracked_order_id)::int from posted) as ecotrack_records,

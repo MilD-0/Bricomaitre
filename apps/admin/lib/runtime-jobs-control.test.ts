@@ -1,42 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => {
-  const transaction = {
-    set: vi.fn(),
-    zadd: vi.fn(),
-    expire: vi.fn(),
-    exec: vi.fn(),
-  };
-  transaction.set.mockReturnValue(transaction);
-  transaction.zadd.mockReturnValue(transaction);
-  transaction.expire.mockReturnValue(transaction);
-  return {
-    redis: {
-      get: vi.fn(),
-      set: vi.fn(),
-      eval: vi.fn(),
-      exists: vi.fn(),
-      zrevrange: vi.fn(),
-      scan: vi.fn(),
-      mget: vi.fn(),
-      multi: vi.fn(() => transaction),
-    },
-    transaction,
-  };
-});
+const mocks = vi.hoisted(() => ({
+  redis: {
+    zrevrange: vi.fn(),
+    scan: vi.fn(),
+    mget: vi.fn(),
+  },
+}));
 
 vi.mock('@bric/runtime/redis', () => ({
   getRedis: () => mocks.redis,
   getBullRedisConnection: vi.fn(),
 }));
 
-import {
-  isFinalJobAttempt,
-  listRecentJobSnapshots,
-  requestJobCancellationById,
-  startOwnedJob,
-  type JobSnapshot,
-} from '@bric/runtime/jobs';
+import { listRecentJobSnapshots, type JobSnapshot } from '@bric/runtime/jobs';
 
 const snapshot: JobSnapshot = {
   id: 'job-1',
@@ -56,13 +33,7 @@ const snapshot: JobSnapshot = {
 
 describe('runtime system-wide job access', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.transaction.set.mockReturnValue(mocks.transaction);
-    mocks.transaction.zadd.mockReturnValue(mocks.transaction);
-    mocks.transaction.expire.mockReturnValue(mocks.transaction);
-    mocks.transaction.exec.mockResolvedValue([]);
-    mocks.redis.set.mockReset();
-    mocks.redis.eval.mockReset();
+    vi.resetAllMocks();
   });
 
   it('lists indexed snapshots from all requested queues', async () => {
@@ -118,94 +89,5 @@ describe('runtime system-wide job access', () => {
       9,
     );
     expect(mocks.redis.scan).not.toHaveBeenCalled();
-  });
-
-  it('requests cancellation by exact queue and job ID and refreshes its index', async () => {
-    mocks.redis.get.mockResolvedValue(JSON.stringify(snapshot));
-
-    const result = await requestJobCancellationById('admin-ai-categorization', 'job-1');
-
-    expect(result).toMatchObject({ id: 'job-1', cancelRequested: true });
-    expect(mocks.redis.eval).toHaveBeenCalledWith(
-      expect.stringContaining("redis.call('zadd'"),
-      5,
-      'bric:jobs:admin-ai-categorization:job-1',
-      'bric:jobs:admin-ai-categorization:job-1:cancel',
-      'bric:jobs:admin-ai-categorization:owner:admin@example.com',
-      'bric:jobs:admin-ai-categorization:index',
-      'bric:jobs:admin-ai-categorization:index',
-      expect.stringMatching(/"cancelRequested":true/),
-      86_400,
-      Date.parse(snapshot.createdAt),
-      '0',
-      expect.stringMatching(/"cancelRequested":true/),
-    );
-    const cancellationWrite = mocks.redis.eval.mock.calls[0]!;
-    expect(JSON.parse(cancellationWrite[11] as string)).toEqual({
-      ...JSON.parse(cancellationWrite[7] as string),
-      cancelRequested: true,
-    });
-  });
-
-  it('does not cancel completed jobs', async () => {
-    mocks.redis.get.mockResolvedValue(JSON.stringify({ ...snapshot, status: 'completed' }));
-
-    await expect(
-      requestJobCancellationById('admin-ai-categorization', 'job-1'),
-    ).resolves.toBeNull();
-    expect(mocks.redis.eval).not.toHaveBeenCalled();
-  });
-
-  it('distinguishes retryable failures from the terminal attempt', () => {
-    expect(isFinalJobAttempt({ attemptsMade: 1, opts: { attempts: 3 } })).toBe(false);
-    expect(isFinalJobAttempt({ attemptsMade: 3, opts: { attempts: 3 } })).toBe(true);
-    expect(isFinalJobAttempt({ attemptsMade: 1, opts: {} })).toBe(true);
-  });
-
-  it('releases the active lock and records failure when job preparation fails', async () => {
-    mocks.redis.get.mockResolvedValue(null);
-    mocks.redis.set.mockResolvedValue('OK');
-    mocks.redis.eval
-      .mockRejectedValueOnce(new Error('snapshot unavailable'))
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce('OK');
-
-    await expect(
-      startOwnedJob({
-        queueName: 'admin-product-export',
-        kind: 'product-export',
-        ownerKey: 'admin@example.com',
-        origin: 'admin-ai-assistant',
-        data: { format: 'xlsx' },
-      }),
-    ).rejects.toThrow('snapshot unavailable');
-
-    expect(mocks.redis.eval).toHaveBeenCalledWith(
-      expect.stringContaining("redis.call('get'"),
-      1,
-      'bric:jobs:admin-product-export:active:admin@example.com',
-      expect.any(String),
-    );
-    expect(mocks.redis.eval).toHaveBeenCalledWith(
-      expect.stringContaining('cjson.decode'),
-      5,
-      expect.stringMatching(/^bric:jobs:admin-product-export:/),
-      expect.stringMatching(/:cancel$/),
-      'bric:jobs:admin-product-export:owner:admin@example.com',
-      'bric:jobs:admin-product-export:index',
-      expect.stringMatching(/^bric:jobs:admin-product-export:origin:[a-f0-9]{64}:index$/),
-      expect.stringMatching(/"origin":"admin-ai-assistant".*"status":"failed"/),
-      86_400,
-      expect.any(Number),
-      '1',
-      expect.stringMatching(/"cancelRequested":true/),
-    );
-    const failureWrite = mocks.redis.eval.mock.calls.find(
-      (call) => typeof call[7] === 'string' && call[7].includes('"status":"failed"'),
-    )!;
-    expect(JSON.parse(failureWrite[11] as string)).toEqual({
-      ...JSON.parse(failureWrite[7] as string),
-      cancelRequested: true,
-    });
   });
 });

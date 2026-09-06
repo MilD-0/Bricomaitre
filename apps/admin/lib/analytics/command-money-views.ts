@@ -82,7 +82,7 @@ export async function loadCommandView(
   ] = await Promise.all([
     loadEconomicsPair(db, economicsFilters, cutoffs.metaFrom).then(async (pair) => ({
       ...pair,
-      sources: await loadSourceHealth(db, filters, pair.current),
+      sources: await loadSourceHealth(db, filters, pair.current, cutoffs.orders ?? undefined),
     })),
     loadStorefrontOrderConversion(db, storefrontFilters),
     priorStorefront ? loadStorefrontOrderConversion(db, priorStorefront) : Promise.resolve(null),
@@ -243,7 +243,7 @@ export async function loadMoneyView(
   const { current, previous } = await loadEconomicsPair(db, economicsFilters, cutoffs.metaFrom);
   const [sources, automaticPaid, previousAutomaticPaid, cohorts, leadingForecast] =
     await Promise.all([
-      loadSourceHealth(db, filters, current),
+      loadSourceHealth(db, filters, current, cutoffs.orders ?? undefined),
       loadAutomaticPaidEconomics(
         db,
         fulfillmentFilters,

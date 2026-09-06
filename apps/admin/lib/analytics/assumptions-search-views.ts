@@ -1,11 +1,7 @@
 import { getProfitTrackerReport } from '../profit-tracker';
 import { loadSearchAnalytics, loadSearchThroughDate } from '../analytics-search';
 import type { AnalyticsFilters, AnalyticsSource } from './contract';
-import {
-  commonCoverageStart,
-  commonCutoff,
-  type AnalyticsCanonicalCutoffs,
-} from './data-boundaries';
+import { commonCutoff, type AnalyticsCanonicalCutoffs } from './data-boundaries';
 import { addDays, clipAnalyticsFilters, inclusiveDays } from './date-range';
 import { economicsWarnings, sourceWarnings } from './economics-data';
 import { loadReturnObservation } from './fulfillment-data';
@@ -38,7 +34,7 @@ export async function loadAssumptionsView(
   );
   const [returns, sources] = await Promise.all([
     loadReturnObservation(db, economicsFilters, economics.settings.defaultReturnRate),
-    loadSourceHealth(db, filters, economics),
+    loadSourceHealth(db, filters, economics, cutoffs.orders ?? undefined),
   ]);
   const activeMonthlyBurnDzd = economics.costs
     .filter((cost) => cost.period === 'monthly' && costIsActiveOn(cost, economicsFilters.endDate))

@@ -104,7 +104,8 @@ describe('owned job atomicity with Redis', () => {
       resultSummary: { ids: [], precise: Number.MAX_SAFE_INTEGER },
     });
     resume.resolve();
-    await cancellation;
+    await expect(cancellation).resolves.toBeNull();
+    await expect(requestJobCancellationById(input.queueName, job.id)).resolves.toBeNull();
     expect(await getJobSnapshot(input.queueName, job.id)).toMatchObject({
       status: 'completed',
       resultSummary: { ids: [], precise: Number.MAX_SAFE_INTEGER },

@@ -21,7 +21,9 @@ const {
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock, getDb: getDbMock }));
-vi.mock('@bric/db/schema', () => ({ actionLogs: { id: 'id' } }));
+vi.mock('../../../../../../lib/action-history-effects', () => ({
+  refreshActionHistoryConsumers: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../../../../../lib/auth', () => ({ auth: authMock }));
 vi.mock('../../../../../../lib/rbac', () => ({ requireMutationAccess: requireMutationAccessMock }));
 vi.mock('../../../../../../lib/action-history', () => ({

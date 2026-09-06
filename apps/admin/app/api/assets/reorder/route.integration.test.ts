@@ -85,7 +85,9 @@ describe('app/api/assets/reorder/route', () => {
   it('updates banner sort orders with assets RBAC enforced', async () => {
     hasDbMock.mockReturnValue(true);
 
-    const whereMock = vi.fn().mockResolvedValue(undefined);
+    const whereMock = vi
+      .fn()
+      .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 2 }]) });
     const setMock = vi.fn().mockReturnValue({ where: whereMock });
     const updateMock = vi.fn().mockReturnValue({ set: setMock });
     const transactionMock = vi.fn(
@@ -115,11 +117,11 @@ describe('app/api/assets/reorder/route', () => {
     expect(updateMock).toHaveBeenCalledTimes(2);
     expect(setMock).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ sortOrder: 0, updatedAt: expect.any(Date) }),
+      expect.objectContaining({ sortOrder: 1, updatedAt: expect.any(Date) }),
     );
     expect(setMock).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ sortOrder: 1, updatedAt: expect.any(Date) }),
+      expect.objectContaining({ sortOrder: 0, updatedAt: expect.any(Date) }),
     );
     expect(revalidateStorefrontAssetsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);

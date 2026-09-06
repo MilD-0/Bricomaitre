@@ -329,12 +329,15 @@ export async function requestJobCancellation(queueName: string, ownerKey: string
 }
 
 export async function requestJobCancellationById(queueName: string, jobId: string) {
-  return updateSnapshot(
+  const snapshot = await updateSnapshot(
     queueName,
     jobId,
     (snapshot) => ({ ...snapshot, cancelRequested: true, updatedAt: nowIso() }),
     { cancel: true },
   );
+  return snapshot && (snapshot.status === 'queued' || snapshot.status === 'running')
+    ? snapshot
+    : null;
 }
 
 export async function startOwnedJob<T>(options: StartJobOptions<T>): Promise<StartJobResult> {
