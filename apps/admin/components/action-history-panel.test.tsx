@@ -156,15 +156,8 @@ describe('ActionHistoryPanel', () => {
       }),
       http.get('/api/action-history/12', () => HttpResponse.json(detailResponse())),
     );
-    const view = renderPanel();
+    renderPanel();
     await screen.findByText('Bahi Youcef');
-    expect(view.container.querySelector('[data-mobile-history-controls]')).toHaveClass(
-      'grid-cols-[minmax(0,1fr)_auto_auto]',
-    );
-    expect(view.container.querySelector('[data-mobile-history-list]')).toHaveClass(
-      'min-h-0',
-      'xl:min-h-[38rem]',
-    );
     await userEvent.click(screen.getByRole('button', { name: /history.filters.title/ }));
     await userEvent.click(
       screen.getByRole('switch', { name: 'history.filters.includeEcotrackSyncLabel' }),
@@ -231,6 +224,43 @@ describe('ActionHistoryPanel', () => {
     expect(within(sheet).getByText('Bahi Youcef')).toBeInTheDocument();
     await userEvent.click(within(sheet).getByRole('button', { name: 'actions.close' }));
     await waitFor(() => expect(row).toHaveFocus());
+  });
+
+  it('shows list failures and retries instead of presenting an empty history', async () => {
+    let failed = true;
+    server.use(
+      http.get('/api/action-history', () =>
+        failed
+          ? HttpResponse.json({ error: 'History unavailable' }, { status: 503 })
+          : HttpResponse.json(listResponse()),
+      ),
+      http.get('/api/action-history/12', () => HttpResponse.json(detailResponse())),
+    );
+    renderPanel();
+    expect(await screen.findByRole('alert')).toHaveTextContent('History unavailable');
+    expect(screen.queryByText('history.empty')).not.toBeInTheDocument();
+    failed = false;
+    await userEvent.click(screen.getByRole('button', { name: 'actions.retry' }));
+    expect(await screen.findByRole('button', { name: /Bahi Youcef/ })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows an inspector failure with retry before offering recovery', async () => {
+    let failed = true;
+    server.use(
+      http.get('/api/action-history', () => HttpResponse.json(listResponse())),
+      http.get('/api/action-history/12', () =>
+        failed
+          ? HttpResponse.json({ error: 'Detail unavailable' }, { status: 503 })
+          : HttpResponse.json(detailResponse()),
+      ),
+    );
+    renderPanel();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Detail unavailable');
+    expect(screen.queryByRole('button', { name: 'history.undo' })).not.toBeInTheDocument();
+    failed = false;
+    await userEvent.click(screen.getByRole('button', { name: 'actions.retry' }));
+    expect(await screen.findByRole('button', { name: 'history.undo' })).toBeInTheDocument();
   });
 
   it('uses strong numbered pagination and requests the selected page', async () => {

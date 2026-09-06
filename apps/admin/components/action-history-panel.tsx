@@ -18,6 +18,13 @@ import { useDeferredValue, useMemo, useState } from 'react';
 
 import { requestJson as request } from '../lib/admin-api';
 import { formatRelativeTime } from '../lib/date-format';
+import type {
+  ActionHistoryPreview,
+  ActionHistoryQuery,
+  ActionHistoryRecovery,
+  toActionHistoryItem,
+  toActionHistoryListItem,
+} from '../lib/action-history';
 import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
 import type { PaginationMeta } from '../lib/pagination';
 import { toast } from '../lib/toast';
@@ -39,52 +46,14 @@ import { Switch } from './ui/switch';
 import { WorkspacePagination } from './ui/workspace-pagination';
 import { useMediaQuery } from './ui/use-media-query';
 
-type HistoryOperation = 'create' | 'update' | 'delete';
-type HistoryState = 'all' | 'applied' | 'undone';
-type HistoryOperationFilter = 'all' | HistoryOperation;
-type HistoryResourceFilter =
-  | 'all'
-  | 'products'
-  | 'orders'
-  | 'assets'
-  | 'brandsCategories'
-  | 'bulletin'
-  | 'stats'
-  | 'settings'
-  | 'ecotrack';
-type HistoryRecoveryReason =
-  'non_reversible' | 'newer_action' | 'redo_order' | 'history_out_of_sync' | 'permission_required';
-
-type HistoryPreview = { key: string; kind: 'field' | 'group'; field: string };
-type HistoryListItem = {
-  id: number;
-  resource: string;
-  entityType: string;
-  entityId: number;
-  entityLabel: string;
-  operation: HistoryOperation;
-  createdBy: string | null;
-  createdByName: string | null;
-  isReversible: boolean;
-  isUndone: boolean;
-  changeCount: number;
-  changePreview: HistoryPreview[];
-  semanticChangeCount: number;
-  createdAt: string;
-};
-type HistoryDetailItem = Omit<
-  HistoryListItem,
-  'changeCount' | 'changePreview' | 'semanticChangeCount'
-> & {
-  changes: Array<{ key: string; field: string; before: unknown; after: unknown }>;
-  undoneAt: string | null;
-  redoneAt: string | null;
-};
+type HistoryState = ActionHistoryQuery['state'];
+type HistoryOperationFilter = ActionHistoryQuery['operation'];
+type HistoryResourceFilter = ActionHistoryQuery['resource'];
+type HistoryPreview = ActionHistoryPreview;
+type HistoryListItem = ReturnType<typeof toActionHistoryListItem>;
+type HistoryDetailItem = ReturnType<typeof toActionHistoryItem>;
 type HistoryListResponse = { items: HistoryListItem[]; pagination: PaginationMeta };
-type HistoryDetailResponse = {
-  item: HistoryDetailItem;
-  recovery: { nextAction: 'undo' | 'redo' | null; blockedReason: HistoryRecoveryReason | null };
-};
+type HistoryDetailResponse = { item: HistoryDetailItem; recovery: ActionHistoryRecovery };
 
 const wideLayoutQuery = '(min-width: 1280px)';
 
@@ -130,7 +99,7 @@ function eventSummary(item: HistoryListItem, t: ReturnType<typeof useTranslation
     : t('history.summaries.fields', { fields: labels.join(', ') });
 }
 
-function operationIcon(operation: HistoryOperation) {
+function operationIcon(operation: HistoryListItem['operation']) {
   if (operation === 'create') return CirclePlus;
   if (operation === 'delete') return Trash2;
   return PencilLine;
@@ -181,16 +150,30 @@ function HistoryValue({ value }: { value: unknown }) {
 function HistoryInspector({
   detail,
   loading,
+  error,
+  onRetry,
   onRecover,
   compact = false,
 }: {
   detail: HistoryDetailResponse | undefined;
   loading: boolean;
+  error: Error | null;
+  onRetry: () => void;
   onRecover: (direction: 'undo' | 'redo', item: HistoryDetailItem) => void;
   compact?: boolean;
 }) {
   const t = useTranslations();
   const locale = useLocale();
+  if (error) {
+    return (
+      <div role="alert" className="space-y-3 p-5 text-sm">
+        <p>{error.message}</p>
+        <Button type="button" variant="outline" disabled={loading} onClick={onRetry}>
+          {t('actions.retry')}
+        </Button>
+      </div>
+    );
+  }
   if (loading && !detail) {
     return (
       <div className="animate-pulse space-y-5 p-5 sm:p-6">
@@ -338,7 +321,6 @@ export function ActionHistoryPanel({
 }: {
   invalidateQueryKeys?: Array<readonly unknown[]>;
   className?: string;
-  responsiveList?: boolean;
 }) {
   const t = useTranslations();
   const locale = useLocale();
@@ -498,6 +480,8 @@ export function ActionHistoryPanel({
     <HistoryInspector
       detail={detailQuery.data}
       loading={detailQuery.isFetching}
+      error={detailQuery.error}
+      onRetry={() => void detailQuery.refetch()}
       onRecover={(direction, item) => setPendingRecovery({ direction, item })}
     />
   );
@@ -567,6 +551,20 @@ export function ActionHistoryPanel({
           </div>
         </div>
       </header>
+
+      {historyQuery.error ? (
+        <div role="alert" className="flex items-center justify-between gap-3 p-4 text-sm">
+          <p>{historyQuery.error.message}</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={historyQuery.isFetching}
+            onClick={() => void historyQuery.refetch()}
+          >
+            {t('actions.retry')}
+          </Button>
+        </div>
+      ) : null}
 
       {filtersOpen ? (
         <div className="grid gap-3 border-b border-border/60 bg-muted/15 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-[1fr_1fr_1fr_auto_auto] lg:items-center">
@@ -657,7 +655,9 @@ export function ActionHistoryPanel({
                 {t('history.loading')}
               </div>
             ) : null}
-            {!historyQuery.isFetching && historyQuery.data.items.length === 0 ? (
+            {!historyQuery.isFetching &&
+            !historyQuery.error &&
+            historyQuery.data.items.length === 0 ? (
               <div className="px-5 py-16 text-center text-sm text-muted-foreground">
                 {t(hasActiveFilters ? 'history.emptyFiltered' : 'history.empty')}
               </div>
@@ -760,6 +760,8 @@ export function ActionHistoryPanel({
         <HistoryInspector
           detail={detailQuery.data}
           loading={detailQuery.isFetching}
+          error={detailQuery.error}
+          onRetry={() => void detailQuery.refetch()}
           onRecover={(direction, item) => setPendingRecovery({ direction, item })}
           compact
         />

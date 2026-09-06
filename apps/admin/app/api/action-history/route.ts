@@ -33,17 +33,7 @@ export async function GET(req: NextRequest) {
   const query = parsed.data;
 
   if (!hasDb()) {
-    return NextResponse.json({
-      items: [],
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        totalItems: 0,
-        totalPages: 1,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      },
-    });
+    return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
   const result = await listActionHistory(getDb(), query);
