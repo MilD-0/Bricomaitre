@@ -50,8 +50,57 @@ describe('buildAdCostEntriesFromSpreadsheetRow', () => {
 
     expect(entries).toMatchObject([
       { date: '2026-05-19', spend: 500, clicks: 3, conversions: 2 },
-      { date: '2026-05-20', spend: 500, clicks: 3, conversions: 2 },
+      { date: '2026-05-20', spend: 500, clicks: 2, conversions: 1 },
     ]);
+  });
+
+  it('preserves indivisible cents and every count, including explicit zero days', () => {
+    const entries = buildAdCostEntriesFromSpreadsheetRow(
+      {
+        'Reporting starts': '2026-05-19',
+        'Reporting ends': '2026-05-21',
+        'Amount spent': 0.01,
+        Clicks: 1,
+        Conversions: 2,
+        Impressions: 8,
+        Reach: 4,
+      },
+      1,
+    );
+    expect(entries.map((entry) => entry.spend)).toEqual([0.01, 0, 0]);
+    for (const [key, total] of Object.entries({
+      clicks: 1,
+      conversions: 2,
+      impressions: 8,
+      reach: 4,
+    })) {
+      expect(entries.reduce((sum, entry) => sum + (entry[key as 'clicks'] ?? 0), 0)).toBe(total);
+    }
+    expect(entries[2]).toMatchObject({ spend: 0, clicks: 0, conversions: 0 });
+  });
+
+  it('keeps missing optional counters distinct from explicitly reported zero', () => {
+    const [entry] = buildAdCostEntriesFromSpreadsheetRow(
+      { Date: '2026-05-19', 'Amount spent': 10, Clicks: 0 },
+      1,
+    );
+    expect(entry).toMatchObject({ clicks: 0 });
+    expect(entry?.impressions).toBeUndefined();
+    expect(entry?.conversions).toBeUndefined();
+    expect(entry?.reach).toBeUndefined();
+  });
+
+  it('rejects reversed reporting periods instead of inventing a one-day allocation', () => {
+    expect(() =>
+      buildAdCostEntriesFromSpreadsheetRow(
+        {
+          'Reporting starts': '2026-05-21',
+          'Reporting ends': '2026-05-19',
+          'Amount spent': 10,
+        },
+        230,
+      ),
+    ).toThrow('ends before');
   });
 
   it('skips rows that do not include a date and spend', () => {

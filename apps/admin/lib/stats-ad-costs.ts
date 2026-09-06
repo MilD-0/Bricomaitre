@@ -4,25 +4,30 @@ import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import { adCosts, adSpendImportBatches } from '@bric/db/schema';
-import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import {
+  mutateEntityWithHistory,
+  mutateEntityWithHistoryTransaction,
+  ActionHistoryEntityNotFoundError,
+  type ActionActor,
+} from './action-history';
+import { reportingDateSchema } from './analytics/contract';
+import { resolveAnalyticsFilters } from './analytics/date-range';
+import type { StatsFilters } from './stats-contract';
 import {
   normalizeSpreadsheetText as normalizeText,
   parseSpreadsheetDate as parseDate,
 } from './stats-spreadsheet';
-import { numberOrZero, round, toDateInput } from './stats-values';
+import { numberOrZero, toDateInput } from './stats-values';
 
 type AdCostDateFilters = {
-  startDate?: string;
+  startDate?: string | null;
   endDate?: string;
 };
 
 const LEGACY_AD_SPEND_IMPORT_BATCH_ID = '00000000-0000-4000-8000-000000000001';
 
 export const adCostEntrySchema = z.object({
-  date: z
-    .string()
-    .trim()
-    .regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: reportingDateSchema,
   platform: z.string().trim().min(1).default('facebook'),
   campaignName: z.string().trim().optional().nullable(),
   campaignId: z.string().trim().optional().nullable(),
@@ -37,7 +42,7 @@ export const adCostEntrySchema = z.object({
 
 export type AdCostEntryInput = z.infer<typeof adCostEntrySchema>;
 
-export function buildAdCostWhere(filters: AdCostDateFilters) {
+function buildAdCostWhere(filters: AdCostDateFilters) {
   const conditions = [];
 
   if (filters.startDate) {
@@ -61,9 +66,11 @@ function valueFor(row: Record<string, unknown>, names: string[]) {
   return undefined;
 }
 
-export async function listAdCosts(filters: AdCostDateFilters) {
+export async function listAdCosts(filters: StatsFilters) {
   const db = getDb();
-  const adWhere = buildAdCostWhere(filters);
+  const adWhere = buildAdCostWhere(
+    resolveAnalyticsFilters({ ...filters, view: 'money', grain: 'auto' }),
+  );
   const rows = await db
     .select()
     .from(adCosts)
@@ -179,8 +186,24 @@ async function ensureLegacyAdSpendImportBatch() {
     .where(legacyImportWhere);
 }
 
+type Transaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
+
+async function lockAdCostWrites(tx: Transaction) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('stats-ad-costs-upsert', 0))`);
+}
+
 export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionActor) {
-  const db = getDb();
+  return getDb().transaction(async (tx) => {
+    await lockAdCostWrites(tx);
+    return upsertAdCostEntryInTransaction(tx, input, actor);
+  });
+}
+
+async function upsertAdCostEntryInTransaction(
+  db: Transaction,
+  input: AdCostEntryInput,
+  actor?: ActionActor,
+) {
   const value = adCostEntrySchema.parse(input);
   const campaignName = value.campaignName?.trim() || null;
   const now = new Date();
@@ -199,7 +222,7 @@ export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionA
     .limit(1);
 
   if (existing[0]) {
-    const [updated] = await mutateEntityWithHistory(db, {
+    const [updated] = await mutateEntityWithHistoryTransaction(db, {
       entityType: 'statsAdCosts',
       entityId: existing[0].id,
       operation: 'update',
@@ -228,7 +251,7 @@ export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionA
     };
   }
 
-  const [created] = await mutateEntityWithHistory<Array<{ id: number }>>(db, {
+  const [created] = await mutateEntityWithHistoryTransaction<Array<{ id: number }>>(db, {
     entityType: 'statsAdCosts',
     operation: 'create',
     actor,
@@ -261,24 +284,20 @@ export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionA
 
 export async function deleteAdCostEntry(numericId: number, actor?: ActionActor) {
   const db = getDb();
-  const existing = await db
-    .select({ id: adCosts.id })
-    .from(adCosts)
-    .where(eq(adCosts.id, numericId))
-    .limit(1);
-  if (!existing[0]) {
-    return null;
+  try {
+    const deleted = await mutateEntityWithHistory(db, {
+      entityType: 'statsAdCosts',
+      entityId: numericId,
+      operation: 'delete',
+      actor,
+      execute: (tx) =>
+        tx.delete(adCosts).where(eq(adCosts.id, numericId)).returning({ id: adCosts.id }),
+    });
+    return deleted[0] ?? null;
+  } catch (error) {
+    if (error instanceof ActionHistoryEntityNotFoundError) return null;
+    throw error;
   }
-
-  const deleted = await mutateEntityWithHistory(db, {
-    entityType: 'statsAdCosts',
-    entityId: numericId,
-    operation: 'delete',
-    actor,
-    execute: (tx) =>
-      tx.delete(adCosts).where(eq(adCosts.id, numericId)).returning({ id: adCosts.id }),
-  });
-  return deleted[0] ?? null;
 }
 
 export async function deleteAdSpendImportBatch(batchId: string) {
@@ -326,42 +345,52 @@ export function buildAdCostEntriesFromSpreadsheetRow(row: Record<string, unknown
     return [];
   }
 
-  const spend = numberOrZero(spendRaw) * rate;
-  const days = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1);
-  const dailySpend = spend / days;
-
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 100_000)
+    throw new Error('Invalid ad spend conversion rate.');
+  if (endDate < startDate) throw new Error('Ad spend report ends before it starts.');
+  const days = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1;
+  const spendCents = Math.round(numberOrZero(spendRaw) * rate * 100);
+  const optionalCount = (names: string[]) => {
+    const value = valueFor(row, names);
+    return value === undefined ? undefined : Math.round(numberOrZero(value));
+  };
+  const totals = {
+    impressions: optionalCount(['Impressions', 'impressions']),
+    clicks: optionalCount(['Clicks (all)', 'Link clicks', 'Clicks', 'clicks']),
+    conversions: optionalCount([
+      'Results',
+      'results',
+      'Conversions',
+      'Website checkouts initiated',
+      'Website purchases',
+    ]),
+    reach: optionalCount(['Reach', 'reach']),
+  };
+  // Allocate indivisible cents and counts to the earliest report days. Independent
+  // per-day rounding would change the imported campaign totals.
+  const share = (total: number, index: number) =>
+    Math.floor(total / days) + (index < total % days ? 1 : 0);
   const entries: AdCostEntryInput[] = [];
   for (let index = 0; index < days; index += 1) {
     const date = new Date(startDate);
-    date.setDate(startDate.getDate() + index);
-    entries.push({
-      date: toDateInput(date),
-      platform: normalizeText(valueFor(row, ['platform', 'Platform'])) || 'facebook',
-      campaignName:
-        normalizeText(valueFor(row, ['Campaign name', 'Campaign Name', 'Campaign'])) || null,
-      campaignId: normalizeText(valueFor(row, ['Campaign ID', 'campaign_id'])) || null,
-      spend: round(dailySpend),
-      impressions:
-        Math.round(numberOrZero(valueFor(row, ['Impressions', 'impressions'])) / days) || undefined,
-      clicks:
-        Math.round(
-          numberOrZero(valueFor(row, ['Clicks (all)', 'Link clicks', 'Clicks', 'clicks'])) / days,
-        ) || undefined,
-      conversions:
-        Math.round(
-          numberOrZero(
-            valueFor(row, [
-              'Results',
-              'results',
-              'Conversions',
-              'Website checkouts initiated',
-              'Website purchases',
-            ]),
-          ) / days,
-        ) || undefined,
-      reach: Math.round(numberOrZero(valueFor(row, ['Reach', 'reach'])) / days) || undefined,
-      notes: `Imported at rate ${rate}`,
-    });
+    date.setUTCDate(startDate.getUTCDate() + index);
+    entries.push(
+      adCostEntrySchema.parse({
+        date: toDateInput(date),
+        platform: normalizeText(valueFor(row, ['platform', 'Platform'])) || 'facebook',
+        campaignName:
+          normalizeText(valueFor(row, ['Campaign name', 'Campaign Name', 'Campaign'])) || null,
+        campaignId: normalizeText(valueFor(row, ['Campaign ID', 'campaign_id'])) || null,
+        spend: share(spendCents, index) / 100,
+        impressions:
+          totals.impressions === undefined ? undefined : share(totals.impressions, index),
+        clicks: totals.clicks === undefined ? undefined : share(totals.clicks, index),
+        conversions:
+          totals.conversions === undefined ? undefined : share(totals.conversions, index),
+        reach: totals.reach === undefined ? undefined : share(totals.reach, index),
+        notes: `Imported at rate ${rate}`,
+      }),
+    );
   }
 
   return entries;
@@ -380,45 +409,52 @@ export async function importAdCostsSpreadsheet(
   const batchId = crypto.randomUUID();
   const now = new Date();
 
-  await db.insert(adSpendImportBatches).values({
-    batchId,
-    fileName,
-    rate: rate.toFixed(4),
-    totalRows: rows.length,
-    uploadedByEmail: actor?.email ?? null,
-    uploadedByName: actor?.name ?? null,
-    updatedAt: now,
-  });
+  return db.transaction(async (tx) => {
+    await lockAdCostWrites(tx);
+    await tx.insert(adSpendImportBatches).values({
+      batchId,
+      fileName,
+      rate: rate.toFixed(4),
+      totalRows: rows.length,
+      uploadedByEmail: actor?.email ?? null,
+      uploadedByName: actor?.name ?? null,
+      updatedAt: now,
+    });
 
-  let imported = 0;
-  let updated = 0;
-  let skipped = 0;
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
 
-  for (const row of rows) {
-    const entries = buildAdCostEntriesFromSpreadsheetRow(row, rate);
-    if (entries.length === 0) {
-      skipped += 1;
-      continue;
-    }
+    for (const row of rows) {
+      const entries = buildAdCostEntriesFromSpreadsheetRow(row, rate);
+      if (entries.length === 0) {
+        skipped += 1;
+        continue;
+      }
 
-    for (const costEntry of entries) {
-      const entry = await upsertAdCostEntry({ ...costEntry, importBatchId: batchId }, actor);
-      if (entry.created) {
-        imported += 1;
-      } else {
-        updated += 1;
+      for (const costEntry of entries) {
+        const entry = await upsertAdCostEntryInTransaction(
+          tx,
+          { ...costEntry, importBatchId: batchId },
+          actor,
+        );
+        if (entry.created) {
+          imported += 1;
+        } else {
+          updated += 1;
+        }
       }
     }
-  }
 
-  await db
-    .update(adSpendImportBatches)
-    .set({
-      importedRows: imported,
-      updatedRows: updated,
-      updatedAt: new Date(),
-    })
-    .where(eq(adSpendImportBatches.batchId, batchId));
+    await tx
+      .update(adSpendImportBatches)
+      .set({
+        importedRows: imported,
+        updatedRows: updated,
+        updatedAt: new Date(),
+      })
+      .where(eq(adSpendImportBatches.batchId, batchId));
 
-  return { batchId, fileName, imported, updated, skipped, total: rows.length };
+    return { batchId, fileName, imported, updated, skipped, total: rows.length };
+  });
 }
