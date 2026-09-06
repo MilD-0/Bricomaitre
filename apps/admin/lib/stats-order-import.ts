@@ -150,12 +150,15 @@ export async function importStatsSpreadsheet(
   const cartProductReferences = collectCartProductReferenceBuckets(candidateOrders);
 
   const productRows =
-    cartProductReferences.productIds.length === 0 && cartProductReferences.mongoIds.length === 0
+    cartProductReferences.productIds.length === 0 &&
+    cartProductReferences.mongoIds.length === 0 &&
+    cartProductReferences.slugs.length === 0
       ? []
       : await db
           .select({
             id: products.id,
             mongoId: products.mongoId,
+            slug: products.slug,
             title: products.title,
             sku: products.sku,
             price: sql<number>`coalesce(${products.price}, 0)::double precision`,
@@ -175,6 +178,9 @@ export async function importStatsSpreadsheet(
                 : []),
               ...(cartProductReferences.mongoIds.length > 0
                 ? [inArray(products.mongoId, cartProductReferences.mongoIds)]
+                : []),
+              ...(cartProductReferences.slugs.length > 0
+                ? [inArray(products.slug, cartProductReferences.slugs)]
                 : []),
             ),
           );

@@ -426,6 +426,7 @@ export const analyticsCopyFr = {
     untracked: 'Non suivies',
   },
   expectedToPost: 'devraient être publiées',
+  providerCodCoverage: 'montant à encaisser du transporteur',
   returnCopy: {
     planning: 'Taux de planification',
     mature: 'Observé mature',

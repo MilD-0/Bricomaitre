@@ -19,7 +19,11 @@ import {
 } from './orders';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import { orderProductSearchCondition } from './order-product-search';
-import { orderIdentifierSearchCondition } from './order-search';
+import {
+  orderIdentifierSearchCondition,
+  withOrderSearchTimeout,
+  type OrderSearchDatabase,
+} from './order-search';
 import { getCanonicalOrderProjectionDays } from './profit-tracker';
 import type {
   DailyOrderStatusOverview,
@@ -356,6 +360,45 @@ export async function loadOrdersPageData(
 
   const db = getDb();
   const query = orderListQuerySchema.parse(input);
+  const { rows, page, totalPages, totalItems } = await withOrderSearchTimeout(
+    db,
+    query.search,
+    (connection) => loadOrderPageRows(connection, query),
+  );
+  const orderIds = rows.map((row) => row.id);
+
+  const historyCounts =
+    orderIds.length === 0
+      ? []
+      : await db
+          .select({ orderId: orderStatusHistory.orderId })
+          .from(orderStatusHistory)
+          .where(inArray(orderStatusHistory.orderId, orderIds));
+  const historyOrderIds = new Set(historyCounts.map((entry) => entry.orderId));
+  const productLookup = await getOrderProductLookup(db, rows);
+
+  return {
+    writable,
+    items: rows.map((row) => ({
+      ...toOrderRecord(row, [], productLookup),
+      hasStatusHistory: historyOrderIds.has(row.id),
+      statusHistory: [],
+    })),
+    pagination: {
+      page,
+      limit: query.limit,
+      totalItems,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
+}
+
+async function loadOrderPageRows(
+  db: OrderSearchDatabase,
+  query: ReturnType<typeof orderListQuerySchema.parse>,
+) {
   const searchFilter = query.search
     ? ((await orderIdentifierSearchCondition(db, query.search)) ??
       or(
@@ -394,34 +437,7 @@ export async function loadOrdersPageData(
     .orderBy(...getOrderBy(query.sortRules))
     .limit(query.limit)
     .offset((page - 1) * query.limit);
-  const orderIds = rows.map((row) => row.id);
-
-  const historyCounts =
-    orderIds.length === 0
-      ? []
-      : await db
-          .select({ orderId: orderStatusHistory.orderId })
-          .from(orderStatusHistory)
-          .where(inArray(orderStatusHistory.orderId, orderIds));
-  const historyOrderIds = new Set(historyCounts.map((entry) => entry.orderId));
-  const productLookup = await getOrderProductLookup(db, rows);
-
-  return {
-    writable,
-    items: rows.map((row) => ({
-      ...toOrderRecord(row, [], productLookup),
-      hasStatusHistory: historyOrderIds.has(row.id),
-      statusHistory: [],
-    })),
-    pagination: {
-      page,
-      limit: query.limit,
-      totalItems,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
-    },
-  };
+  return { rows, page, totalPages, totalItems };
 }
 
 export async function loadOrderDetail(id: number): Promise<OrderRecord | null> {

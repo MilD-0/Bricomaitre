@@ -105,18 +105,41 @@ export function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters
   `;
 }
 
-export function buildCustomerProductQuery(filters: ExperienceStatsFilters) {
+function customerProductReferences() {
+  // Resolve reference precedence once for the catalog, rather than scanning it
+  // for every cart unit with an OR join.
+  return sql`product_references as materialized (
+    select distinct on (reference) reference, title, unit_price
+    from (
+      select ${products.id}::text as reference, ${products.title} as title,
+        ${products.price}::double precision as unit_price, 0 as priority from ${products}
+      union all
+      select ${products.mongoId}, ${products.title}, ${products.price}::double precision, 1
+        from ${products} where ${products.mongoId} is not null
+      union all
+      select ${products.slug}, ${products.title}, ${products.price}::double precision, 2
+        from ${products} where ${products.slug} is not null
+    ) references_by_kind
+    order by reference, priority
+  )`;
+}
+
+export function buildCustomerProductQuery(filters: ExperienceStatsFilters, phones?: string[]) {
   const orderWhere = and(
     dateCondition(orders.createdAt, filters),
     inArray(orders.inHouseStatus, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES]),
+    phones === undefined
+      ? undefined
+      : inArray(sql`regexp_replace(${orders.phoneNumber1}, '[^0-9]+', '', 'g')`, phones),
   );
 
   return sql`
+    with ${customerProductReferences()}
     select regexp_replace(${orders.phoneNumber1}, '[^0-9]+', '', 'g') as phone,
-      coalesce(${products.title}, product_ref) as product, count(*)::int as count
+      coalesce(product_references.title, product_ref) as product, count(*)::int as count
     from ${orders}
     cross join lateral unnest(${orders.cartProducts}) product_ref
-    left join ${products} on ${products.id}::text = product_ref or ${products.mongoId} = product_ref
+    left join product_references on product_references.reference = trim(product_ref)
     where ${orderWhere ?? sql`true`}
     group by 1, 2 order by 1, 3 desc
   `;
@@ -129,36 +152,29 @@ export function buildCustomerSummaryQuery(filters: ExperienceStatsFilters) {
   );
 
   return sql`
-    with order_values as (
+    with ${customerProductReferences()}, legacy_cart_values as (
+      select ${orders.id} as order_id,
+        coalesce(sum(product_references.unit_price), 0)::double precision as derived_subtotal
+      from ${orders}
+      cross join lateral unnest(${orders.cartProducts}) product_ref
+      left join product_references on product_references.reference = trim(product_ref)
+      where ${orderWhere ?? sql`true`}
+        and ${orders.price} is null and ${orders.productSubtotal} is null
+        and ${orders.totalAmount} is null
+      group by ${orders.id}
+    ), order_values as (
       select regexp_replace(${orders.phoneNumber1}, '[^0-9]+', '', 'g') as phone,
         nullif(trim(concat_ws(' ', ${orders.firstName}, ${orders.lastName})), '') as customer_name,
         ${orders.city} as city, ${orders.inHouseStatus} as confirmed,
-        (
-          coalesce(${orders.price}::double precision, cart.derived_subtotal, 0)
-          + coalesce(${orders.deliveryFee}::double precision, 0)
+        coalesce(
+          ${orders.price}::double precision + coalesce(${orders.deliveryFee}::double precision, 0),
+          ${orders.totalAmount}::double precision,
+          coalesce(${orders.productSubtotal}::double precision, cart.derived_subtotal, 0)
+            + coalesce(${orders.deliveryFee}::double precision, 0)
         ) as value,
         ${orders.createdAt} as created_at
       from ${orders}
-      left join lateral (
-        select coalesce(sum(matched.unit_price), 0)::double precision as derived_subtotal
-        from unnest(${orders.cartProducts}) product_ref
-        left join lateral (
-          select ${products.price}::double precision as unit_price
-          from ${products}
-          where (${products.id} = case
-              when trim(product_ref) ~ '^[0-9]+$' then trim(product_ref)::bigint
-              else null
-            end)
-            or ${products.mongoId} = trim(product_ref)
-            or ${products.slug} = trim(product_ref)
-          order by case
-            when trim(product_ref) ~ '^[0-9]+$' and ${products.id} = trim(product_ref)::bigint then 0
-            when ${products.mongoId} = trim(product_ref) then 1
-            else 2
-          end
-          limit 1
-        ) matched on true
-      ) cart on true
+      left join legacy_cart_values cart on cart.order_id = ${orders.id}
       where ${orderWhere ?? sql`true`}
     ), ranked as (
       select phone, max(customer_name) as customer_name, max(city) as city,
@@ -192,6 +208,19 @@ export async function getExperienceStats(
   const includeExtendedSurfaces = options.scope !== 'storefront';
   const includeRawSessionStats = includeExtendedSurfaces || inclusiveDateDays(filters) <= 7;
   const empty = emptyExperienceStats();
+  const customerSummaryPromise: Promise<unknown> = includeExtendedSurfaces
+    ? Promise.resolve(db.execute(buildCustomerSummaryQuery(filters)))
+    : Promise.resolve({ rows: [] });
+  const customerProductsPromise = customerSummaryPromise.then(
+    async (result): Promise<{ rows: unknown[] }> => {
+      const phones = asRows(result)
+        .map((row) => String(row.phone ?? ''))
+        .filter(Boolean);
+      // Only the displayed customer cohort consumes product details.
+      if (phones.length === 0) return { rows: [] };
+      return await db.execute(buildCustomerProductQuery(filters, phones));
+    },
+  );
   const websiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, filters);
   const rawWebsiteFilters = resolveRawWebsiteFilters(filters);
   const rawWebsiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, rawWebsiteFilters);
@@ -407,12 +436,8 @@ export async function getExperienceStats(
       ? getLiveAdminAiStats(db, filters)
       : Promise.resolve(empty.aiAssistants.admin),
     getLiveStorefrontAiStats(db, filters),
-    includeExtendedSurfaces
-      ? db.execute(buildCustomerSummaryQuery(filters))
-      : Promise.resolve({ rows: [] }),
-    includeExtendedSurfaces
-      ? db.execute(buildCustomerProductQuery(filters))
-      : Promise.resolve({ rows: [] }),
+    customerSummaryPromise,
+    customerProductsPromise,
     includeExtendedSurfaces
       ? db.execute(sql`
       select count(*)::int as visits,

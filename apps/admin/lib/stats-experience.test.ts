@@ -34,16 +34,24 @@ describe('experience stats SQL', () => {
     expect(query.sql).not.toContain('from "orders" o');
   });
 
-  it('derives customer order value from products and delivery when no override exists', () => {
+  it('uses captured order values and derives prices only for legacy orders without totals', () => {
     const query = dialect.sqlToQuery(buildCustomerSummaryQuery(filters));
 
     expect(query.sql).toContain(
-      'coalesce("orders"."price"::double precision, cart.derived_subtotal, 0)',
+      'coalesce("orders"."product_subtotal"::double precision, cart.derived_subtotal, 0)',
     );
     expect(query.sql).toContain('+ coalesce("orders"."del_pr"::double precision, 0)');
-    expect(query.sql).toContain('from unnest("orders"."cart_products") product_ref');
-    expect(query.sql).toContain('or "products"."slug" = trim(product_ref)');
+    expect(query.sql).toContain('and "orders"."total_amount" is null');
+    expect(query.sql).toContain('"orders"."total_amount"::double precision');
+    expect(query.sql).toContain('product_references.reference = trim(product_ref)');
     expect(query.sql).toContain('coalesce(sum(orders) over(), 0)::int as successful_orders');
+  });
+
+  it('restricts customer product expansion to the displayed phones', () => {
+    const query = dialect.sqlToQuery(buildCustomerProductQuery(filters, ['0555000123']));
+    expect(query.params).toContain('0555000123');
+    expect(query.sql).toContain('product_references as materialized');
+    expect(query.sql).toContain('product_references.reference = trim(product_ref)');
   });
 
   it('includes confirmed and later successful statuses while excluding negative outcomes', () => {

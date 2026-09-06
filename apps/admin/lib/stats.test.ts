@@ -321,7 +321,9 @@ describe('cart product reference matching', () => {
     expect(getCartProductLookupKey('696b80ad978cdf3fa9f5915a')).toBe(
       'mongo:696b80ad978cdf3fa9f5915a',
     );
-    expect(getCartProductLookupKey('Desk Lamp')).toBeNull();
+    expect(getCartProductLookupKey('catalog-demo-lamp')).toBe('reference:catalog-demo-lamp');
+    expect(getCartProductLookupKey('abo:B000DEMO')).toBe('reference:abo:B000DEMO');
+    expect(getCartProductLookupKey(' ')).toBeNull();
   });
 
   it('collects unique numeric ids and mongo ids from cart products', () => {
@@ -333,18 +335,32 @@ describe('cart product reference matching', () => {
       ]),
     ).toEqual({
       productIds: [12, 7],
-      mongoIds: ['696b80ad978cdf3fa9f5915a'],
+      mongoIds: ['696b80ad978cdf3fa9f5915a', 'custom text'],
+      slugs: ['custom text'],
     });
   });
 
   it('builds a product lookup that resolves by numeric id and mongo id', () => {
     const lookup = buildCartProductLookup([
       { id: 12, mongoId: '696b80ad978cdf3fa9f5915a', title: 'Legacy Lamp' },
-      { id: 7, mongoId: null, title: 'Desk' },
+      { id: 7, mongoId: null, slug: 'catalog-demo-desk', title: 'Desk' },
     ]);
 
     expect(lookup.get('id:12')).toMatchObject({ title: 'Legacy Lamp' });
     expect(lookup.get('mongo:696b80ad978cdf3fa9f5915a')).toMatchObject({ id: 12 });
     expect(lookup.get('id:7')).toMatchObject({ title: 'Desk' });
+    expect(lookup.get('reference:catalog-demo-desk')).toMatchObject({ id: 7 });
+  });
+
+  it('prefers a legacy catalog identifier over an ambiguous slug regardless of row order', () => {
+    const rows = [
+      { id: 1, mongoId: 'abo:B000DEMO', slug: 'original' },
+      { id: 2, mongoId: null, slug: 'abo:B000DEMO' },
+    ];
+    for (const ordered of [rows, [...rows].reverse()]) {
+      expect(
+        buildCartProductLookup(ordered).get(getCartProductLookupKey('abo:B000DEMO')!),
+      ).toMatchObject({ id: 1 });
+    }
   });
 });

@@ -107,7 +107,7 @@ INSERT INTO storefront_settings (
 VALUES (
   1, '0550000000', true, 'contact@demo.bricomaitre.invalid',
   'Zone commerciale de démonstration, Algérie',
-  'https://maps.example.invalid/demo', 'https://social.example.invalid/demo',
+  NULL, NULL,
   false, 'local-demo-disabled'
 );
 

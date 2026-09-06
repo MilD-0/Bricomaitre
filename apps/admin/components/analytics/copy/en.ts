@@ -425,6 +425,7 @@ export const analyticsCopyEn = {
     untracked: 'Untracked',
   },
   expectedToPost: 'expected to post',
+  providerCodCoverage: 'provider COD',
   returnCopy: {
     planning: 'Planning rate',
     mature: 'Mature observed',

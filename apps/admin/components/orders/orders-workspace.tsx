@@ -148,7 +148,7 @@ export function OrdersWorkspace({
       statusFilter,
       effectiveNoAnswerAttemptFilter,
     ],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params = new URLSearchParams({
         page: String(page),
         limit: '25',
@@ -160,7 +160,7 @@ export function OrdersWorkspace({
       } else if (effectiveNoAnswerAttemptFilter === '3-plus') {
         params.set('noAnswerCountMin', '3');
       }
-      return request<OrdersResponse>(`/api/orders?${params.toString()}`);
+      return request<OrdersResponse>(`/api/orders?${params.toString()}`, { signal });
     },
     initialData:
       page === 1 &&

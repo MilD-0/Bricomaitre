@@ -7,6 +7,22 @@ DECLARE
   historical_shipments bigint;
   unsafe_records bigint;
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM orders
+    WHERE price IS NOT NULL
+      OR total_amount <> product_subtotal + coalesce(del_pr, 0)
+  ) OR EXISTS (
+    SELECT 1 FROM order_line_items
+    WHERE raw_value <> product_id::text
+  ) OR EXISTS (
+    SELECT 1 FROM orders
+    JOIN (SELECT order_id, sum(line_total) subtotal FROM order_line_items GROUP BY order_id) lines
+      ON lines.order_id = orders.id
+    WHERE orders.product_subtotal <> lines.subtotal
+  ) THEN
+    RAISE EXCEPTION 'Seeded orders must retain canonical references and captured commercial totals';
+  END IF;
+
   SELECT count(*), sum(cardinality(images)) INTO product_count, catalog_image_count FROM products;
   IF product_count <> 3884 OR catalog_image_count <> 9065 THEN
     RAISE EXCEPTION 'Catalog invariant failed: products=%, images=%', product_count, catalog_image_count;

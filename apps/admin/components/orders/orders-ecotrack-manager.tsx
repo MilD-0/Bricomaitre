@@ -128,9 +128,10 @@ export function OrdersEcotrackManager({
       sortKey,
       sortDirection,
     ],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       requestJson<EcotrackShipmentsResponse>(
         `/api/orders/ecotrack/shipments?page=${page}&limit=25&search=${encodeURIComponent(deferredSearch)}&status=${encodeURIComponent(deferredStatusFilter)}&staleOnly=${deferredStaleOnly ? 'true' : 'false'}&sortKey=${sortKey}&sortDirection=${sortDirection}`,
+        { signal },
       ),
     initialData: initialOrders,
     initialDataUpdatedAt: initialOrdersUpdatedAt,

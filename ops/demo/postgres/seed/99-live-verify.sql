@@ -4,6 +4,17 @@ DECLARE
   line_count bigint;
   shipment_count bigint;
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM orders
+    WHERE mongo_id LIKE 'demo-live-order:%'
+      AND (price IS NOT NULL OR total_amount <> product_subtotal + coalesce(del_pr, 0))
+  ) OR EXISTS (
+    SELECT 1 FROM order_line_items
+    WHERE content_id LIKE 'live-line-%' AND raw_value <> product_id::text
+  ) THEN
+    RAISE EXCEPTION 'Live seeded orders must retain canonical references and captured commercial totals';
+  END IF;
+
   SELECT count(*) INTO order_count FROM orders;
   SELECT count(*) INTO line_count FROM order_line_items;
   SELECT count(*) INTO shipment_count FROM admin.ecotrack_order_states;

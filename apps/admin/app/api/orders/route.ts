@@ -5,6 +5,7 @@ import { loadOrdersPageData } from '../../../lib/admin-orders-data';
 import { createAdminOrder } from '../../../lib/admin-order-lifecycle';
 import { auth } from '../../../lib/auth';
 import { orderListQuerySchema } from '../../../lib/orders';
+import { OrderSearchTimeoutError } from '../../../lib/order-search';
 import { getRequestSearchParams } from '../../../lib/request';
 import { canMutateResource, requireMutationAccess } from '../../../lib/rbac';
 
@@ -55,7 +56,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  return NextResponse.json(await loadOrdersPageData(parsed.data, writable));
+  try {
+    return NextResponse.json(await loadOrdersPageData(parsed.data, writable));
+  } catch (error) {
+    if (error instanceof OrderSearchTimeoutError) {
+      return NextResponse.json({ error: error.message }, { status: 503 });
+    }
+    throw error;
+  }
 }
 
 export async function POST(req: NextRequest) {

@@ -3,7 +3,42 @@ import { orders } from '@bric/db/schema';
 import type { getDb } from '@bric/db/client';
 import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 
-export async function orderIdentifierSearchCondition(db: ReturnType<typeof getDb>, search: string) {
+export type OrderSearchDatabase = Pick<ReturnType<typeof getDb>, 'select' | 'execute'>;
+
+export class OrderSearchTimeoutError extends Error {
+  constructor() {
+    super('Order search took too long. Narrow your search and retry.');
+  }
+}
+
+export async function withOrderSearchTimeout<T>(
+  db: ReturnType<typeof getDb>,
+  search: string | undefined,
+  read: (connection: OrderSearchDatabase) => Promise<T>,
+) {
+  if (!search) return read(db);
+  return db
+    .transaction(async (connection) => {
+      // PostgreSQL stops the work even if a browser or gateway has already gone
+      // away. SET LOCAL cannot leak this interactive budget to pooled workers.
+      await connection.execute(sql`set local statement_timeout = '10s'`);
+      return read(connection);
+    })
+    .catch((error: unknown) => {
+      const cause = error instanceof Error && error.cause ? error.cause : error;
+      if (
+        typeof cause === 'object' &&
+        cause !== null &&
+        'code' in cause &&
+        cause.code === '57014'
+      ) {
+        throw new OrderSearchTimeoutError();
+      }
+      throw error;
+    });
+}
+
+export async function orderIdentifierSearchCondition(db: OrderSearchDatabase, search: string) {
   const value = search.trim();
   const phone = /^[+()\d\s.-]+$/.test(value) ? normalizeAlgeriaPhone(value) : null;
   if (phone) {

@@ -322,12 +322,15 @@ export async function computeStatsDashboard(input: StatsFilters) {
   const orderCountsByProduct = new Map<string, { total: number; confirmed: number }>();
   const cartProductReferences = collectCartProductReferenceBuckets(allOrdersRows);
   const orderLookupRows =
-    cartProductReferences.productIds.length === 0 && cartProductReferences.mongoIds.length === 0
+    cartProductReferences.productIds.length === 0 &&
+    cartProductReferences.mongoIds.length === 0 &&
+    cartProductReferences.slugs.length === 0
       ? []
       : await db
           .select({
             id: products.id,
             mongoId: products.mongoId,
+            slug: products.slug,
           })
           .from(products)
           .where(
@@ -337,6 +340,9 @@ export async function computeStatsDashboard(input: StatsFilters) {
                 : []),
               ...(cartProductReferences.mongoIds.length > 0
                 ? [inArray(products.mongoId, cartProductReferences.mongoIds)]
+                : []),
+              ...(cartProductReferences.slugs.length > 0
+                ? [inArray(products.slug, cartProductReferences.slugs)]
                 : []),
             ),
           );

@@ -6,6 +6,7 @@ import {
   loadEcotrackOrdersPageData,
 } from '../../../../../lib/admin-ecotrack-orders-data';
 import { auth } from '../../../../../lib/auth';
+import { OrderSearchTimeoutError } from '../../../../../lib/order-search';
 import { getRequestSearchParams } from '../../../../../lib/request';
 import { canMutateResource, requireMutationAccess } from '../../../../../lib/rbac';
 import {
@@ -65,6 +66,15 @@ export async function GET(request: NextRequest) {
       headers: withRequestIdHeaders(requestId),
     });
   } catch (error) {
+    if (error instanceof OrderSearchTimeoutError) {
+      return NextResponse.json(
+        { error: error.message },
+        {
+          status: 503,
+          headers: withRequestIdHeaders(requestId),
+        },
+      );
+    }
     captureAdminException(error, {
       requestId,
       operation: 'ecotrack-shipments-list',

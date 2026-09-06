@@ -535,7 +535,9 @@ export function CashPipeline({
             {formatMoney(locale, row.amountDzd, true)}
           </p>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[length:var(--type-size-label-px)] text-muted-foreground">
-            <span>{formatNumber(locale, row.orders)} orders</span>
+            <span>
+              {formatNumber(locale, row.orders)} {copy.columns.orders}
+            </span>
           </div>
           {row.confidencePct != null ? (
             <p className="mt-1 text-[length:var(--type-size-micro-px)] text-muted-foreground/75">
@@ -543,7 +545,7 @@ export function CashPipeline({
             </p>
           ) : row.providerAmountCoveragePct != null ? (
             <p className="mt-1 text-[length:var(--type-size-micro-px)] text-muted-foreground/75">
-              {formatPercent(locale, row.providerAmountCoveragePct)} provider COD
+              {formatPercent(locale, row.providerAmountCoveragePct)} {copy.providerCodCoverage}
             </p>
           ) : null}
         </div>

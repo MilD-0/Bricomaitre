@@ -24,7 +24,11 @@ import { readEcotrackCatalog } from './ecotrack';
 import type { EcotrackShipmentListQuery } from './ecotrack-shipment-list';
 import { sanitizeNullableText } from './ecotrack-shipment-status';
 import { orderProductSearchCondition } from './order-product-search';
-import { orderIdentifierSearchCondition } from './order-search';
+import {
+  orderIdentifierSearchCondition,
+  withOrderSearchTimeout,
+  type OrderSearchDatabase,
+} from './order-search';
 import type {
   EcotrackDatabase as Database,
   EcotrackShipmentRow as ShipmentRow,
@@ -193,6 +197,16 @@ export async function loadActiveShipmentPageRows(
   db: Database,
   query: EcotrackShipmentListQuery,
   now = new Date(),
+) {
+  return withOrderSearchTimeout(db, query.search, (connection) =>
+    loadActiveShipmentSearchRows(connection, query, now),
+  );
+}
+
+async function loadActiveShipmentSearchRows(
+  db: OrderSearchDatabase,
+  query: EcotrackShipmentListQuery,
+  now: Date,
 ) {
   const search = query.search ? `%${query.search}%` : null;
   const identifierSearch = await orderIdentifierSearchCondition(db, query.search);

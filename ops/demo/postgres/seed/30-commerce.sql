@@ -93,7 +93,7 @@ INSERT INTO order_line_items (
   created_at, updated_at
 )
 SELECT orders.id, product.id, 'line-' || orders.id || '-' || position,
-  product.slug, product.title, product.price,
+  product.id::text, product.title, product.price,
   product.price - CASE WHEN mod(orders.id + position, 37) = 0 THEN 250 ELSE 0 END,
   product.purchase_price, 'order_snapshot',
   1 + mod(orders.id + position, 2),
@@ -131,7 +131,7 @@ UPDATE orders SET
   cart_products = totals.cart_products,
   product_subtotal = totals.subtotal,
   total_amount = totals.subtotal + coalesce(orders.del_pr, 0),
-  price = totals.subtotal + coalesce(orders.del_pr, 0)
+  price = NULL
 FROM (
   SELECT order_id,
     array_agg(raw_value ORDER BY id, unit) cart_products,

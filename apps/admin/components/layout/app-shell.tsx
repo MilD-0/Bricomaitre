@@ -274,7 +274,10 @@ export function AppShell({
   };
 
   const switchLocale = (nextLocale: string) => {
-    navigate(pathname.replace(`/${locale}`, `/${nextLocale}`));
+    const query = searchParams.toString();
+    navigate(
+      `${pathname.replace(`/${locale}`, `/${nextLocale}`)}${query ? `?${query}` : ''}${currentHash}`,
+    );
   };
 
   return (

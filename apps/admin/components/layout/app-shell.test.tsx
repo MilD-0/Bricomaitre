@@ -203,6 +203,25 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: 'العربية' })).toHaveTextContent(/^AR$/);
   });
 
+  it('keeps report filters and the active section when changing locale', async () => {
+    usePathnameMock.mockReturnValue('/en/stats/fulfillment');
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams('range=custom&startDate=2026-09-01&endDate=2026-09-06&grain=week'),
+    );
+    window.location.hash = '#pipeline';
+    render(
+      <AppShell initialPermissions={[]} initialRole="viewer">
+        <div>report</div>
+      </AppShell>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'العربية' }));
+
+    expect(pushMock).toHaveBeenCalledWith(
+      '/ar/stats/fulfillment?range=custom&startDate=2026-09-01&endDate=2026-09-06&grain=week#pipeline',
+    );
+  });
+
   it('associates the product archive with the Products navigation family', () => {
     usePathnameMock.mockReturnValue('/en/archive');
     const view = render(

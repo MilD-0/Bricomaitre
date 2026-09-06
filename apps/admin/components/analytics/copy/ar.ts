@@ -425,6 +425,7 @@ export const analyticsCopyAr = {
     untracked: 'غير متتبعة',
   },
   expectedToPost: 'متوقع نشرها',
+  providerCodCoverage: 'مبلغ التحصيل لدى الناقل',
   returnCopy: {
     planning: 'نسبة التخطيط',
     mature: 'المرصود الناضج',
