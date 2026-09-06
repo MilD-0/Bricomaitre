@@ -83,16 +83,6 @@ const DELIVERY_TYPE_LABEL_KEYS = {
   1: 'office',
 } as const satisfies Record<(typeof deliveryTypeValues)[number], string>;
 
-const nullableTrimmedString = (max: number) =>
-  z.union([z.string(), z.null()]).transform((value) => {
-    if (value === null) {
-      return null;
-    }
-
-    const trimmed = value.trim();
-    return trimmed.length === 0 ? null : trimmed.slice(0, max);
-  });
-
 const optionalNullableTrimmedString = (max: number) =>
   z
     .union([z.string(), z.null()])
