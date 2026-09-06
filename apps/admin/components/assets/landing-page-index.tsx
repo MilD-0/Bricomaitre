@@ -61,16 +61,20 @@ export function LandingPageIndex({
   const [query, setQuery] = React.useState('');
   const [creating, setCreating] = React.useState(false);
   const [pending, setPending] = React.useState(false);
+  const [pendingIds, setPendingIds] = React.useState<number[]>([]);
+  const mutationVersion = React.useRef(0);
   const [productIds, setProductIds] = React.useState<number[]>([]);
   const [contentLocale, setContentLocale] = React.useState<'fr' | 'ar'>('fr');
 
   React.useEffect(() => {
     const controller = new AbortController();
+    const version = mutationVersion.current;
     void requestJson<{ items: LandingPageSummary[] }>('/api/landing-pages?view=index', {
       signal: controller.signal,
     })
       .then((result) => {
-        if (!controller.signal.aborted) setItems(result.items);
+        if (!controller.signal.aborted && mutationVersion.current === version)
+          setItems(result.items);
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted)
@@ -95,7 +99,9 @@ export function LandingPageIndex({
   ];
 
   const toggle = async (item: LandingPageSummary, active: boolean) => {
-    const snapshot = items;
+    if (pendingIds.includes(item.id)) return;
+    mutationVersion.current += 1;
+    setPendingIds((current) => [...current, item.id]);
     setItems((current) => current.map((row) => (row.id === item.id ? { ...row, active } : row)));
     try {
       await requestJson(`/api/landing-pages/${item.id}`, {
@@ -107,8 +113,10 @@ export function LandingPageIndex({
         }),
       });
     } catch (error) {
-      setItems(snapshot);
+      setItems((current) => current.map((row) => (row.id === item.id ? item : row)));
       toast.error(error instanceof Error ? error.message : t.validation);
+    } finally {
+      setPendingIds((current) => current.filter((id) => id !== item.id));
     }
   };
 
@@ -217,6 +225,7 @@ export function LandingPageIndex({
               <Switch
                 aria-label={`${item.active ? t.active : t.inactive} · ${item.productTitle}`}
                 checked={item.active}
+                disabled={pendingIds.includes(item.id)}
                 onCheckedChange={(active) => void toggle(item, active)}
               />
             </div>

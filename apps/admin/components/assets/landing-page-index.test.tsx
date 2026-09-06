@@ -136,16 +136,33 @@ describe('LandingPageIndex', () => {
     expect(navigation.push).toHaveBeenCalledWith('/en/assets/landing-pages/12');
   });
 
-  it('rolls an active toggle back when the revision-aware mutation fails', async () => {
+  it('rolls back only a failed page while another page activation succeeds', async () => {
     const user = userEvent.setup();
+    let rejectFirst!: () => void;
+    const firstResult = new Promise<void>((resolve) => {
+      rejectFirst = resolve;
+    });
     server.use(
-      http.patch('/api/landing-pages/7', () =>
-        HttpResponse.json({ error: 'Stale revision.' }, { status: 409 }),
+      http.patch('/api/landing-pages/7', async () => {
+        await firstResult;
+        return HttpResponse.json({ error: 'Stale revision.' }, { status: 409 });
+      }),
+      http.patch('/api/landing-pages/8', () =>
+        HttpResponse.json({ id: 8, active: true, currentRevision: 1 }),
       ),
     );
     renderIndex();
-    const toggle = screen.getByRole('switch', { name: 'Active · Cordless drill' });
-    await user.click(toggle);
-    await waitFor(() => expect(toggle).toBeChecked());
+    const first = screen.getByRole('switch', { name: 'Active · Cordless drill' });
+    await user.click(first);
+    expect(first).toBeDisabled();
+    const second = screen.getByRole('switch', { name: 'Inactive · Workshop lamp' });
+    await user.click(second);
+    await waitFor(() => expect(second).toBeEnabled());
+    expect(second).toBeChecked();
+    rejectFirst();
+    await waitFor(() => expect(first).toBeEnabled());
+    expect(first).toBeChecked();
+    expect(second).toBeChecked();
+    expect(screen.getAllByRole('link', { name: /View live page/ })).toHaveLength(2);
   });
 });

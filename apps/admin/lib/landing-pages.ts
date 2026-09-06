@@ -314,30 +314,24 @@ export async function listLandingPages() {
       draftRevision: landingPages.draftRevision,
       publishedRevision: landingPages.publishedRevision,
       updatedAt: landingPages.updatedAt,
+      document: landingPageRevisions.document,
     })
     .from(landingPages)
     .innerJoin(products, eq(landingPages.productId, products.id))
+    .leftJoin(
+      landingPageRevisions,
+      and(
+        eq(landingPageRevisions.landingPageId, landingPages.id),
+        eq(landingPageRevisions.revision, landingPages.draftRevision),
+      ),
+    )
     .orderBy(desc(landingPages.updatedAt));
 
-  return Promise.all(
-    rows.map(async (row) => {
-      const [revision] = await db
-        .select({ document: landingPageRevisions.document })
-        .from(landingPageRevisions)
-        .where(
-          and(
-            eq(landingPageRevisions.landingPageId, row.id),
-            eq(landingPageRevisions.revision, row.draftRevision),
-          ),
-        )
-        .limit(1);
-      return {
-        ...row,
-        updatedAt: row.updatedAt.toISOString(),
-        document: landingPageDocumentSchema.parse(revision?.document),
-      };
-    }),
-  );
+  return rows.map((row) => ({
+    ...row,
+    updatedAt: row.updatedAt.toISOString(),
+    document: landingPageDocumentSchema.parse(row.document),
+  }));
 }
 
 export async function createLandingPage(input: {

@@ -35,7 +35,7 @@ describe('admin landing pages route', () => {
     expect(mocks.list).not.toHaveBeenCalled();
   });
   it('uses assets permission for listing and creation', async () => {
-    expect((await GET()).status).toBe(200);
+    expect((await GET(new NextRequest('http://localhost/api/landing-pages'))).status).toBe(200);
     const response = await POST(
       new NextRequest('http://localhost/api/landing-pages', {
         method: 'POST',
@@ -64,7 +64,7 @@ describe('admin landing pages route', () => {
   });
   it('does not disclose data without access', async () => {
     mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
-    expect((await GET()).status).toBe(403);
+    expect((await GET(new NextRequest('http://localhost/api/landing-pages'))).status).toBe(403);
     expect(mocks.list).not.toHaveBeenCalled();
   });
 });

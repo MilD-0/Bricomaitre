@@ -9,10 +9,10 @@ import {
 } from '../../../lib/landing-pages';
 import { requireMutationAccess } from '../../../lib/rbac';
 
-export async function GET(request?: NextRequest) {
+export async function GET(request: NextRequest) {
   const denied = await requireMutationAccess('assets');
   if (denied) return denied;
-  const summariesOnly = request?.nextUrl.searchParams.get('view') === 'index';
+  const summariesOnly = request.nextUrl.searchParams.get('view') === 'index';
   return NextResponse.json({
     items: summariesOnly ? await listLandingPageSummaries() : await listLandingPages(),
   });
