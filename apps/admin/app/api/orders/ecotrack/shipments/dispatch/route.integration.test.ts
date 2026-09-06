@@ -3,19 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from './route';
 
-const {
-  hasDbMock,
-  authMock,
-  requireMutationAccessMock,
-  dispatchEcotrackOrdersBatchMock,
-  parseEcotrackBulkDispatchRequestMock,
-} = vi.hoisted(() => ({
-  hasDbMock: vi.fn(),
-  authMock: vi.fn(),
-  requireMutationAccessMock: vi.fn(),
-  dispatchEcotrackOrdersBatchMock: vi.fn(),
-  parseEcotrackBulkDispatchRequestMock: vi.fn(),
-}));
+const { hasDbMock, authMock, requireMutationAccessMock, dispatchEcotrackOrdersBatchMock } =
+  vi.hoisted(() => ({
+    hasDbMock: vi.fn(),
+    authMock: vi.fn(),
+    requireMutationAccessMock: vi.fn(),
+    dispatchEcotrackOrdersBatchMock: vi.fn(),
+  }));
 
 vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
@@ -29,8 +23,8 @@ vi.mock('../../../../../../lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../../lib/admin-ecotrack-orders-data', () => ({
-  parseEcotrackBulkDispatchRequest: parseEcotrackBulkDispatchRequestMock,
+vi.mock('../../../../../../lib/admin-ecotrack-orders-data', async (original) => ({
+  ...(await original<typeof import('../../../../../../lib/admin-ecotrack-orders-data')>()),
   dispatchEcotrackOrdersBatch: dispatchEcotrackOrdersBatchMock,
 }));
 
@@ -40,15 +34,10 @@ describe('app/api/orders/ecotrack/shipments/dispatch/route', () => {
     authMock.mockReset();
     requireMutationAccessMock.mockReset();
     dispatchEcotrackOrdersBatchMock.mockReset();
-    parseEcotrackBulkDispatchRequestMock.mockReset();
 
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
     requireMutationAccessMock.mockResolvedValue(null);
-    parseEcotrackBulkDispatchRequestMock.mockReturnValue({
-      orderIds: [11, 12],
-      askCollection: false,
-    });
   });
 
   it('returns RBAC denial', async () => {

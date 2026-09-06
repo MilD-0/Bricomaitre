@@ -3,19 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from './route';
 
-const {
-  hasDbMock,
-  authMock,
-  requireMutationAccessMock,
-  refreshEcotrackOrdersBatchMock,
-  parseEcotrackBulkActionMock,
-} = vi.hoisted(() => ({
-  hasDbMock: vi.fn(),
-  authMock: vi.fn(),
-  requireMutationAccessMock: vi.fn(),
-  refreshEcotrackOrdersBatchMock: vi.fn(),
-  parseEcotrackBulkActionMock: vi.fn(),
-}));
+const { hasDbMock, authMock, requireMutationAccessMock, refreshEcotrackOrdersBatchMock } =
+  vi.hoisted(() => ({
+    hasDbMock: vi.fn(),
+    authMock: vi.fn(),
+    requireMutationAccessMock: vi.fn(),
+    refreshEcotrackOrdersBatchMock: vi.fn(),
+  }));
 
 vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
@@ -29,8 +23,8 @@ vi.mock('../../../../../../lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../../lib/admin-ecotrack-orders-data', () => ({
-  parseEcotrackBulkAction: parseEcotrackBulkActionMock,
+vi.mock('../../../../../../lib/admin-ecotrack-orders-data', async (original) => ({
+  ...(await original<typeof import('../../../../../../lib/admin-ecotrack-orders-data')>()),
   refreshEcotrackOrdersBatch: refreshEcotrackOrdersBatchMock,
 }));
 
@@ -40,12 +34,10 @@ describe('app/api/orders/ecotrack/shipments/refresh/route', () => {
     authMock.mockReset();
     requireMutationAccessMock.mockReset();
     refreshEcotrackOrdersBatchMock.mockReset();
-    parseEcotrackBulkActionMock.mockReset();
 
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
     requireMutationAccessMock.mockResolvedValue(null);
-    parseEcotrackBulkActionMock.mockReturnValue({ orderIds: [11, 12] });
   });
 
   it('returns RBAC denial', async () => {
@@ -119,10 +111,6 @@ describe('app/api/orders/ecotrack/shipments/refresh/route', () => {
   });
 
   it('returns validation errors for invalid payloads', async () => {
-    parseEcotrackBulkActionMock.mockImplementation(() => {
-      throw new Error('Invalid payload');
-    });
-
     const response = await POST(
       new NextRequest('http://localhost/api/orders/ecotrack/shipments/refresh', {
         method: 'POST',
@@ -132,7 +120,8 @@ describe('app/api/orders/ecotrack/shipments/refresh/route', () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: 'Invalid payload' });
+    await expect(response.json()).resolves.toEqual({ error: expect.any(String) });
+    expect(refreshEcotrackOrdersBatchMock).not.toHaveBeenCalled();
   });
 
   it('distinguishes an operational dependency failure from invalid input', async () => {
