@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   groupedRows: [] as Array<Record<string, unknown>>,
   total: 0,
   groupedTotal: 0,
-  loadOrderDetail: vi.fn(),
+  loadOrderRecordsByIds: vi.fn(),
   loadShipment: vi.fn(),
   select: vi.fn(),
 }));
@@ -13,10 +13,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@bric/db/client', () => ({
   getDb: () => ({
     select: mocks.select,
-    query: { ecotrackOrderStates: { findFirst: mocks.loadShipment } },
+    query: { ecotrackOrderStates: { findMany: mocks.loadShipment } },
   }),
 }));
-vi.mock('./admin-orders-data', () => ({ loadOrderDetail: mocks.loadOrderDetail }));
+vi.mock('./admin-orders-data', () => ({ loadOrderRecordsByIds: mocks.loadOrderRecordsByIds }));
 
 import {
   adminAiOrderQuerySchema,
@@ -224,66 +224,72 @@ describe('admin AI order query', () => {
 describe('admin AI exact order inspection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.loadOrderDetail.mockImplementation(async (orderId: number) =>
-      orderId === 91
-        ? {
-            ...orderRow(),
-            fullName: 'Ada Lovelace',
-            publicToken: 'public-token',
-            ecotrackTrackingNumber: null,
-            cartProducts: ['12'],
-            orderProducts: [{ productId: 12, title: 'Perceuse', quantity: 1 }],
-            subtotalOverride: null,
-            productSubtotal: 15_000,
-            deliveryFee: 600,
-            totalAmount: 15_600,
-            promoCode: null,
-            promoProductId: null,
-            promoOriginalSubtotal: null,
-            promoDiscountAmount: 0,
-            promoFinalSubtotal: null,
-            email: null,
-            confirmedBy: null,
-            confirmedByName: null,
-            confirmedAt: null,
-            variant: null,
-            isDegradedCapture: false,
-            hasStatusHistory: true,
-            statusHistory: [
-              {
-                id: 1,
-                status: 2,
-                noAnswerCount: 0,
-                changedAt: '2026-08-24T08:30:00.000Z',
-                changedBy: 'ops@example.com',
-                changedByName: 'Ops',
-              },
-            ],
-          }
-        : null,
-    );
+    mocks.loadOrderRecordsByIds.mockImplementation(async () => [
+      {
+        ...orderRow(),
+        fullName: 'Ada Lovelace',
+        publicToken: 'public-token',
+        ecotrackTrackingNumber: null,
+        cartProducts: ['12'],
+        orderProducts: [{ productId: 12, title: 'Perceuse', quantity: 1 }],
+        subtotalOverride: null,
+        productSubtotal: 15_000,
+        deliveryFee: 600,
+        totalAmount: 15_600,
+        promoCode: null,
+        promoProductId: null,
+        promoOriginalSubtotal: null,
+        promoDiscountAmount: 0,
+        promoFinalSubtotal: null,
+        email: null,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        variant: null,
+        isDegradedCapture: false,
+        hasStatusHistory: true,
+        statusHistory: [
+          {
+            id: 1,
+            status: 2,
+            noAnswerCount: 0,
+            changedAt: '2026-08-24T08:30:00.000Z',
+            changedBy: 'ops@example.com',
+            changedByName: 'Ops',
+          },
+        ],
+      },
+    ]);
     mocks.loadShipment.mockImplementation(async ({ where }: { where: unknown }) => {
       void where;
-      return {
-        orderId: 91,
-        provider: 'delivro',
-        reference: '91',
-        trackingNumber: 'OLD-91',
-        currentStatus: 'prete_a_expedier',
-        currentAmount: '15600.00',
-        deliveryTariff: null,
-        returnTariff: null,
-        providerCreatedAt: new Date('2026-08-24T09:00:00.000Z'),
-        providerUpdatedAt: null,
-        lastStatusSyncedAt: null,
-        deletedAt: new Date('2026-08-24T10:00:00.000Z'),
-      };
+      return [
+        {
+          orderId: 91,
+          provider: 'delivro',
+          reference: '91',
+          trackingNumber: 'OLD-91',
+          currentStatus: 'prete_a_expedier',
+          currentAmount: '15600.00',
+          deliveryTariff: null,
+          returnTariff: null,
+          providerCreatedAt: new Date('2026-08-24T09:00:00.000Z'),
+          providerUpdatedAt: null,
+          lastStatusSyncedAt: null,
+          deletedAt: new Date('2026-08-24T10:00:00.000Z'),
+        },
+      ];
     });
   });
 
   it('includes captured order history and a deleted shipment without conflating statuses', async () => {
-    const result = await inspectAdminOrderDetails({ orderIds: [91, 404] });
+    const result = await inspectAdminOrderDetails({ orderIds: [404, 91, 91] });
 
+    expect(mocks.loadOrderRecordsByIds).toHaveBeenCalledWith([404, 91], expect.any(Object), {
+      includeHistory: true,
+    });
+    expect(mocks.loadOrderRecordsByIds).toHaveBeenCalledOnce();
+    expect(mocks.loadShipment).toHaveBeenCalledOnce();
+    expect(result.requestedIds).toEqual([404, 91]);
     expect(result.missingIds).toEqual([404]);
     expect(result.items[0]).toMatchObject({
       id: 91,

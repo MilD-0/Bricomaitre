@@ -8,7 +8,7 @@ import { brands, products } from '@bric/db/schema';
 
 import type { ActionActor } from './action-history';
 import { applyShoppingListInventory } from './shopping-list-inventory.server';
-import { loadOrderDetail, loadOrdersPageData } from './admin-orders-data';
+import { loadOrderRecordsByIds, loadOrdersPageData } from './admin-orders-data';
 import { ORDER_STATUS, parseNumericAmount, type OrderStatus } from './orders';
 import {
   buildGeneratedShoppingListDraft,
@@ -141,10 +141,11 @@ async function loadStatusOrders(status: OrderStatus) {
 async function loadShoppingListOrders(sourceMode: ShoppingListSourceMode, orderIds: number[]) {
   if (sourceMode === 'selected') {
     const uniqueIds = [...new Set(orderIds)];
-    const loaded = await Promise.all(uniqueIds.map((orderId) => loadOrderDetail(orderId)));
+    const loaded = await loadOrderRecordsByIds(uniqueIds);
+    const loadedIds = new Set(loaded.map((order) => order.id));
     return {
-      orders: loaded.flatMap((order) => (order ? [order] : [])),
-      missingOrderIds: uniqueIds.filter((_, index) => loaded[index] == null),
+      orders: loaded,
+      missingOrderIds: uniqueIds.filter((id) => !loadedIds.has(id)),
     };
   }
   const batches = await Promise.all(statusesBySource[sourceMode].map(loadStatusOrders));

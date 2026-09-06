@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   db: { marker: 'db' },
-  loadOrderDetail: vi.fn(),
+  loadOrderRecordsByIds: vi.fn(),
   loadOrdersPageData: vi.fn(),
   buildDraft: vi.fn(),
   loadDraft: vi.fn(),
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@bric/db/client', () => ({ getDb: () => mocks.db }));
 vi.mock('./admin-orders-data', () => ({
-  loadOrderDetail: mocks.loadOrderDetail,
+  loadOrderRecordsByIds: mocks.loadOrderRecordsByIds,
   loadOrdersPageData: mocks.loadOrdersPageData,
 }));
 vi.mock('./shopping-list-drafts', async (importOriginal) => ({
@@ -181,9 +181,7 @@ describe('admin AI order shopping lists', () => {
   });
 
   it('reports missing selected orders and saves through the shared draft store', async () => {
-    mocks.loadOrderDetail.mockImplementation(async (orderId: number) =>
-      orderId === 31 ? order(31) : null,
-    );
+    mocks.loadOrderRecordsByIds.mockResolvedValue([order(31)]);
     const actor = { email: 'admin@example.com', name: 'Admin' };
 
     const result = await saveAdminAiShoppingList(
@@ -192,6 +190,8 @@ describe('admin AI order shopping lists', () => {
     );
 
     expect(result.missingOrderIds).toEqual([404]);
+    expect(mocks.loadOrderRecordsByIds).toHaveBeenCalledOnce();
+    expect(mocks.loadOrderRecordsByIds).toHaveBeenCalledWith([31, 404]);
     expect(mocks.saveDraft).toHaveBeenCalledWith(mocks.db, expect.any(Object), actor);
     expect(result).toMatchObject({ ok: true, action: 'created' });
     expect(result).not.toHaveProperty('draft');

@@ -23,7 +23,7 @@ import {
   parseNumericAmount,
 } from '@bric/storefront-core/order-domain';
 
-import { loadOrderDetail } from './admin-orders-data';
+import { loadOrderRecordsByIds } from './admin-orders-data';
 import { orderProductSearchCondition } from './order-product-search';
 import {
   ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES,
@@ -478,23 +478,20 @@ export async function inspectAdminOrderDetails(raw: z.input<typeof adminAiOrderI
   const requestedIds = [...new Set(input.orderIds)];
   const db = getDb();
   const [loadedOrders, shipments] = await Promise.all([
-    Promise.all(requestedIds.map((orderId) => loadOrderDetail(orderId))),
-    Promise.all(
-      requestedIds.map((orderId) =>
-        db.query.ecotrackOrderStates.findFirst({
-          where: (state, { eq }) => eq(state.orderId, orderId),
-        }),
-      ),
-    ),
+    loadOrderRecordsByIds(requestedIds, db, { includeHistory: true }),
+    db.query.ecotrackOrderStates.findMany({
+      where: inArray(ecotrackOrderStates.orderId, requestedIds),
+    }),
   ]);
   const shipmentByOrderId = new Map(
     shipments.flatMap((shipment) => (shipment ? [[shipment.orderId, shipment] as const] : [])),
   );
 
+  const loadedIds = new Set(loadedOrders.map((order) => order.id));
   return {
     kind: 'order_details' as const,
     requestedIds,
-    missingIds: requestedIds.filter((_, index) => loadedOrders[index] === null),
+    missingIds: requestedIds.filter((id) => !loadedIds.has(id)),
     items: loadedOrders.flatMap((item) => {
       if (!item) return [];
       const {
