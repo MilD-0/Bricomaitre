@@ -19,7 +19,7 @@ import {
   shoppingAssistantModelMessages,
 } from '@/lib/shopping-assistant-runtime';
 import { buildShoppingAssistantTools } from '@/lib/shopping-assistant-tools';
-import { getStorefrontAssistantSettings, recordStorefrontAssistantRun } from '@/lib/storefront-api';
+import { getRequiredStorefrontSettings, recordStorefrontAssistantRun } from '@/lib/storefront-api';
 
 type AssistantUsage = {
   inputTokens?: number;
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     [rateLimit, settings, body] = await Promise.all([
       enforceShoppingAssistantRateLimit(request),
-      getStorefrontAssistantSettings(),
+      getRequiredStorefrontSettings(),
       request.json().catch(() => null),
     ]);
   } catch {

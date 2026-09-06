@@ -14,7 +14,6 @@ import {
   getStorefrontSettings,
   getStorefrontEcotrackCatalog,
 } from '@/lib/storefront-api';
-import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type ThankYouPageProps = {
   params: Promise<{ locale: string }>;
@@ -55,7 +54,7 @@ async function ThankYouPageContent({ params, searchParams }: ThankYouPageProps) 
   const validToken = rawToken?.trim() || null;
   const [t, contact, initialOrder, deliveryCatalog] = await Promise.all([
     getTranslations({ locale, namespace: 'ThankYou' }),
-    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+    getStorefrontSettings(),
     validToken ? fetchStorefrontOrderByToken(validToken).catch(() => null) : Promise.resolve(null),
     validToken ? getStorefrontEcotrackCatalog().catch(() => null) : Promise.resolve(null),
   ]);

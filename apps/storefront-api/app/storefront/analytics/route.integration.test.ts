@@ -20,22 +20,24 @@ vi.mock('../../../lib/request-security', () => ({
   enforceGlobalRateLimit: enforceGlobalRateLimitMock,
   enforceRequestRateLimit: enforceRequestRateLimitMock,
 }));
-vi.mock('../../../lib/meta-request', () => ({
-  hasTrustedStorefrontProxySecret: () => true,
-}));
 
 import { POST } from './route';
 
 function request(body: string, headers: Record<string, string> = {}) {
   return new NextRequest('https://api.bricomaitre.com/storefront/analytics', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: {
+      'content-type': 'application/json',
+      'x-storefront-meta-proxy-secret': 'test-proxy-secret',
+      ...headers,
+    },
     body,
   });
 }
 
 describe('POST /storefront/analytics', () => {
   beforeEach(() => {
+    vi.stubEnv('STOREFRONT_META_PROXY_SECRET', 'test-proxy-secret');
     hasDbMock.mockReset().mockReturnValue(true);
     enqueueLightweightJobMock.mockReset().mockResolvedValue({ kind: 'created' });
     enforceGlobalRateLimitMock.mockReset().mockResolvedValue({
@@ -55,7 +57,15 @@ describe('POST /storefront/analytics', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.useRealTimers();
+  });
+
+  it('requires the proxy credential before reading or queuing telemetry', async () => {
+    const response = await POST(request('{}', { 'x-storefront-meta-proxy-secret': '' }));
+    expect(response.status).toBe(403);
+    expect(enforceGlobalRateLimitMock).not.toHaveBeenCalled();
+    expect(enqueueLightweightJobMock).not.toHaveBeenCalled();
   });
 
   it('returns a controlled 400 for malformed JSON', async () => {

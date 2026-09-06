@@ -70,7 +70,7 @@ vi.mock('@/lib/shopping-assistant-tools', () => ({
 }));
 
 vi.mock('@/lib/storefront-api', () => ({
-  getStorefrontAssistantSettings: async () => mocks.settings,
+  getRequiredStorefrontSettings: async () => mocks.settings,
   recordStorefrontAssistantRun: mocks.recordRun,
 }));
 

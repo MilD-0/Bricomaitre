@@ -12,7 +12,6 @@ import {
   getStorefrontSettings,
   fetchStorefrontProductPromo,
 } from '@/lib/storefront-api';
-import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 export type CheckoutPageProps = {
   params: Promise<{ locale: string }>;
@@ -25,7 +24,7 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
   const [t, catalog, contact] = await Promise.all([
     getTranslations({ locale, namespace: 'Checkout' }),
     getStorefrontEcotrackCatalog(),
-    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+    getStorefrontSettings(),
   ]);
   const rawProduct = Array.isArray(query.product) ? query.product[0] : query.product;
   const rawQuantity = Array.isArray(query.quantity) ? query.quantity[0] : query.quantity;

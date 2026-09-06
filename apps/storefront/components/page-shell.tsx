@@ -42,7 +42,7 @@ export async function PageShell({
   const alternateLabel = alternateLocale === 'ar' ? 'العربية' : 'Français';
   const loadedContactSettings = contactSettingsProp
     ? contactSettingsProp
-    : await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
+    : await getStorefrontSettings();
   const contactSettings = { ...defaultStorefrontSettingsResponse, ...loadedContactSettings };
   const storefrontContent = await getStorefrontContent(locale).catch(() => ({
     announcement: null,

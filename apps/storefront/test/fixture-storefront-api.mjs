@@ -679,16 +679,6 @@ const server = createServer((request, response) => {
       }
     });
     return;
-  } else if (url.pathname.startsWith('/storefront/orders/track/')) {
-    const token = decodeURIComponent(url.pathname.slice('/storefront/orders/track/'.length));
-    const order = [...orders.values()].find((candidate) => candidate.publicToken === token);
-    result = order ? json({ item: order }) : json({ error: 'Not found' }, 404);
-  } else if (/^\/storefront\/orders\/\d+$/.test(url.pathname)) {
-    const order = orders.get(Number(url.pathname.split('/').at(-1)));
-    result =
-      order && request.headers['x-order-token'] === order.publicToken
-        ? json({ item: order })
-        : json({ error: 'Not found' }, 404);
   } else if (url.pathname === '/storefront/homepage') {
     result = json(homepage());
   } else if (

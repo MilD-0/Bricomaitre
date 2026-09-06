@@ -97,7 +97,10 @@ export async function recordStorefrontAssistantRun(input: {
   });
   await fetchStorefrontUpstream('/storefront/analytics', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-storefront-meta-proxy-secret': process.env.STOREFRONT_META_PROXY_SECRET ?? '',
+    },
     body,
     timeoutMs: 2_000,
     cache: 'no-store',
@@ -288,7 +291,7 @@ export async function fetchStorefrontCatalogMeta(): Promise<{
   return { brands: brands.items, categories: categories.items };
 }
 
-async function fetchStorefrontEcotrackCatalog(): Promise<StorefrontEcotrackCatalogResponse> {
+export async function getStorefrontEcotrackCatalog(): Promise<StorefrontEcotrackCatalogResponse> {
   return parseUpstreamJson(
     await fetchStorefrontUpstream('/storefront/ecotrack/catalog'),
     '/storefront/ecotrack/catalog',
@@ -334,11 +337,6 @@ export async function fetchStorefrontSettings(): Promise<StorefrontSettingsRespo
   const pathname = '/storefront/settings';
   const response = await fetchStorefrontUpstream(pathname);
 
-  // During the first blue/green promotion, the storefront image can be built
-  // against the previous API release. Public defaults keep that rolling build
-  // viable until the candidate API (which owns this route) is promoted first.
-  if (response.status === 404) return defaultStorefrontSettingsResponse;
-
   return parseUpstreamJson(response, pathname, storefrontSettingsResponseSchema);
 }
 
@@ -371,33 +369,15 @@ export async function fetchStorefrontOrderByToken(
 }
 
 export async function getStorefrontSettings() {
-  return unstable_cache(
-    async () => {
-      try {
-        return await fetchStorefrontSettings();
-      } catch {
-        return defaultStorefrontSettingsResponse;
-      }
-    },
-    ['storefront-settings', getStorefrontApiBaseUrl()],
-    {
-      revalidate: 3600,
-      tags: [STOREFRONT_CACHE_TAGS.settings],
-    },
-  )();
+  // Defaults keep browsing available, but must not enter the shared cache or
+  // override the assistant's requirement for verified settings.
+  return getRequiredStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
 }
 
-export async function getStorefrontAssistantSettings() {
+export async function getRequiredStorefrontSettings() {
   return unstable_cache(
-    async () => {
-      const pathname = '/storefront/settings';
-      return parseUpstreamJson(
-        await fetchStorefrontUpstream(pathname),
-        pathname,
-        storefrontSettingsResponseSchema,
-      );
-    },
-    ['storefront-assistant-settings', getStorefrontApiBaseUrl()],
+    fetchStorefrontSettings,
+    ['storefront-settings', getStorefrontApiBaseUrl()],
     {
       revalidate: 3600,
       tags: [STOREFRONT_CACHE_TAGS.settings],
@@ -429,13 +409,6 @@ export async function getStorefrontHomepage() {
       ],
     },
   )();
-}
-
-export async function getStorefrontEcotrackCatalog() {
-  // The canonical API caches this shared, low-churn catalog. Keeping this
-  // boundary uncached prevents a transient API outage from pinning checkout
-  // to an empty delivery selector for the storefront cache lifetime.
-  return fetchStorefrontEcotrackCatalog();
 }
 
 export async function getStorefrontCatalog(input: StorefrontProductListQueryInput) {
@@ -515,40 +488,7 @@ export async function fetchStorefrontProductDetail(
     return null;
   }
 
-  if (!response.ok) {
-    throw new StorefrontUpstreamError(
-      `Storefront API request failed: ${response.status} ${pathname}`,
-      {
-        code: response.status >= 500 ? 'unavailable' : 'unexpected_status',
-        pathname,
-        status: response.status,
-      },
-    );
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch (error) {
-    throw new StorefrontUpstreamError('Storefront API returned invalid JSON.', {
-      code: 'invalid_response',
-      pathname,
-      status: response.status,
-      cause: error,
-    });
-  }
-
-  const parsed = storefrontProductDetailResponseSchema.safeParse(payload);
-  if (!parsed.success) {
-    throw new StorefrontUpstreamError('Storefront API returned an invalid product contract.', {
-      code: 'invalid_response',
-      pathname,
-      status: response.status,
-      cause: parsed.error,
-    });
-  }
-
-  return parsed.data;
+  return parseUpstreamJson(response, pathname, storefrontProductDetailResponseSchema);
 }
 
 export async function getStorefrontProductDetail(

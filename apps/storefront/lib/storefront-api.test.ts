@@ -18,6 +18,7 @@ import {
   getStorefrontLandingPage,
   getStorefrontProductDetail,
   getStorefrontSettings,
+  getRequiredStorefrontSettings,
   recordStorefrontAssistantRun,
 } from './storefront-api';
 import {
@@ -423,29 +424,42 @@ describe('storefront API client', () => {
     );
   });
 
-  it('uses public defaults when the previous API release does not yet expose settings', async () => {
+  it('keeps missing settings unavailable to callers that require verified configuration', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 404 }));
-
-    await expect(fetchStorefrontSettings()).resolves.toMatchObject({
-      phoneDisplay: '0795 34 28 26',
-      phoneHref: 'tel:+213795342826',
-      phoneEnabled: true,
-      aiAssistantEnabled: true,
-    });
+    await expect(fetchStorefrontSettings()).rejects.toMatchObject({ status: 404 });
+    await expect(getRequiredStorefrontSettings()).rejects.toMatchObject({ status: 404 });
+    await expect(getStorefrontSettings()).resolves.toMatchObject({ phoneEnabled: true });
   });
 
-  it('keeps cached public settings available during a rolling API timeout', async () => {
+  it('recovers from an outage without caching UI defaults or enabling the assistant from them', async () => {
+    const persisted = new Map<string, unknown>();
+    vi.mocked(unstable_cache).mockImplementation((read, keyParts) => {
+      return (async (...args: Parameters<typeof read>) => {
+        const key = JSON.stringify([keyParts, args]);
+        if (persisted.has(key)) return persisted.get(key);
+        const value = await read(...args);
+        persisted.set(key, value);
+        return value;
+      }) as typeof read;
+    });
     vi.mocked(fetch).mockRejectedValue(new DOMException('timed out', 'AbortError'));
+    await expect(getStorefrontSettings()).resolves.toMatchObject({ phoneEnabled: true });
+    await expect(getRequiredStorefrontSettings()).rejects.toMatchObject({ code: 'unavailable' });
 
-    await expect(getStorefrontSettings()).resolves.toMatchObject({
-      phoneDisplay: '0795 34 28 26',
-      phoneHref: 'tel:+213795342826',
+    const restored = {
+      phoneDisplay: '0555 11 22 33',
+      phoneHref: 'tel:+213555112233',
       phoneEnabled: true,
-      aiAssistantEnabled: true,
-    });
+      aiAssistantEnabled: false,
+    };
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(restored)));
+    await expect(getStorefrontSettings()).resolves.toMatchObject(restored);
+    await expect(getRequiredStorefrontSettings()).resolves.toMatchObject(restored);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it('records structured assistant outcomes without customer conversation content', async () => {
+  it('records authenticated assistant outcomes without customer conversation content', async () => {
+    vi.stubEnv('STOREFRONT_META_PROXY_SECRET', 'test-proxy-secret');
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }));
 
     await recordStorefrontAssistantRun({
@@ -470,6 +484,9 @@ describe('storefront API client', () => {
 
     const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
     expect(url).toBe('http://localhost:3001/storefront/analytics');
+    expect(new Headers(options?.headers).get('x-storefront-meta-proxy-secret')).toBe(
+      'test-proxy-secret',
+    );
     const payload = JSON.parse(String(options?.body));
     expect(payload).toMatchObject({
       eventName: 'ai_assistant_run',

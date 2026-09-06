@@ -1,5 +1,4 @@
 import type { StorefrontLandingPageResponse } from '@bric/storefront-core/landing-pages';
-import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import { getTranslations } from 'next-intl/server';
 
 import { CheckoutForm } from '@/components/checkout-form';
@@ -18,7 +17,7 @@ export async function LandingOrderForm({
   const [translate, catalog, contact] = await Promise.all([
     getTranslations({ locale, namespace: 'Checkout' }),
     getStorefrontEcotrackCatalog().catch(() => null),
-    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+    getStorefrontSettings(),
   ]);
   const { product } = page;
   const title = locale === 'ar' && product.titleAr?.trim() ? product.titleAr : product.title;

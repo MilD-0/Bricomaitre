@@ -1,7 +1,4 @@
-import {
-  defaultStorefrontSettingsResponse,
-  type StorefrontHomepageResponse,
-} from '@bric/storefront-core/contracts';
+import { type StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 
@@ -28,7 +25,7 @@ export async function HomePageContent({ params }: HomePageProps) {
   if (!isLocale(locale)) notFound();
   const [data, contact] = await Promise.all([
     getStorefrontHomepage().catch(() => emptyHomepage),
-    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+    getStorefrontSettings(),
   ]);
 
   return (

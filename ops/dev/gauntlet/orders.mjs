@@ -562,9 +562,9 @@ export async function run(ctx) {
       const order = await create();
       await request(`/api/orders/${order.id}`, 'DELETE');
       await request(`/api/orders/${order.id}`, 'GET', undefined, [404]);
-      const response = await context.request.get(
-        `${ctx.urls.storefront}/api/orders/track/${encodeURIComponent(order.publicToken)}`,
-      );
+      const response = await context.request.post(`${ctx.urls.storefront}/api/orders/track`, {
+        data: { token: order.publicToken },
+      });
       await save('deleted-public-record.json', {
         status: response.status(),
         body: await response.text(),

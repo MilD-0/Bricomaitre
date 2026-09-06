@@ -28,7 +28,6 @@ import { createOrderMetaArtifacts, readMetaOrderLocation, type MetaRequestContex
 import {
   createPublicOrderToken,
   createPublicOrderTokenExpiry,
-  requireStorefrontOrderAccess,
   requireStorefrontOrderAccessByToken,
 } from './order-access';
 
@@ -323,20 +322,6 @@ async function hydrateStorefrontOrder(db: Database, order: typeof orders.$inferS
     productLookup,
     purchaseEventId,
   );
-}
-
-export async function readStorefrontOrder(db: Database, id: number, token: string | null) {
-  const access = await requireStorefrontOrderAccess(db, id, token);
-
-  if (access.kind !== 'ok') {
-    return access;
-  }
-
-  return {
-    kind: 'ok' as const,
-    item: await hydrateStorefrontOrder(db, access.order),
-    token: access.token,
-  };
 }
 
 export async function readStorefrontOrderByToken(db: Database, token: string | null) {

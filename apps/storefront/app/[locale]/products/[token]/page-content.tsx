@@ -32,7 +32,6 @@ import {
   getStorefrontSettings,
 } from '@/lib/storefront-api';
 import { isStorefrontUpstreamError } from '@/lib/storefront-upstream';
-import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 export type ProductPageProps = {
   params: Promise<{ locale: string; token: string }>;
@@ -73,7 +72,7 @@ export async function ProductPageContent({ params, searchParams }: ProductPagePr
   ]);
   const productPromise = getStorefrontProductDetail(token);
   const translationsPromise = getTranslations({ locale, namespace: 'ProductDetail' });
-  const settingsPromise = getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
+  const settingsPromise = getStorefrontSettings();
   const categoryMetaPromise = getStorefrontCatalogMeta()
     .then((meta) => meta.categories)
     .catch(() => []);
