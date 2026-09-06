@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -127,28 +135,73 @@ describe('production dependency audit', () => {
     }
   });
 
-  it('pins the scanner and keeps network errors fail-closed', () => {
-    const installer = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/install-osv-scanner.sh'),
-      'utf8',
-    );
-    const runner = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/check-production-dependencies.sh'),
-      'utf8',
-    );
-    const packageJson = JSON.parse(
-      readFileSync(resolve(workspaceRoot, 'package.json'), 'utf8'),
-    ) as {
-      scripts: Record<string, string>;
-    };
+  it.each([
+    { scanStatus: 0, severity: null, expectedStatus: 0 },
+    { scanStatus: 1, severity: '6.9', expectedStatus: 0 },
+    { scanStatus: 1, severity: '8.1', expectedStatus: 1 },
+    { scanStatus: 2, severity: null, expectedStatus: 2 },
+  ])(
+    'enforces the scanner result and cleans temporary files: $scanStatus / $severity',
+    ({ scanStatus, severity, expectedStatus }) => {
+      const directory = temporaryDirectory();
+      const scripts = join(directory, 'ops/scripts');
+      const bin = join(directory, 'bin');
+      const scratch = join(directory, 'scratch');
+      for (const path of [scripts, bin, scratch]) mkdirSync(path, { recursive: true });
+      for (const name of ['check-production-dependencies.sh', 'production-dependency-audit.mjs']) {
+        copyFileSync(resolve(workspaceRoot, 'ops/scripts', name), join(scripts, name));
+      }
+      writeFileSync(
+        join(bin, 'pnpm'),
+        `#!/bin/bash
+[[ "$*" == 'licenses list --prod --json' ]] || exit 64
+printf '%s\n' '{"MIT":[{"name":"dependency","versions":["1.0.0"]}]}'
+`,
+        { mode: 0o755 },
+      );
+      writeFileSync(
+        join(scripts, 'install-osv-scanner.sh'),
+        `#!/bin/bash
+printf '%s\n' "$PWD/bin/scanner"
+`,
+      );
+      const report = {
+        results:
+          severity === null
+            ? []
+            : [
+                {
+                  packages: [
+                    {
+                      package: { name: 'dependency', version: '1.0.0' },
+                      groups: [{ ids: ['GHSA-test-test-test'], max_severity: severity }],
+                    },
+                  ],
+                },
+              ],
+      };
+      writeJson(join(directory, 'report.json'), report);
+      writeFileSync(
+        join(bin, 'scanner'),
+        `#!/bin/bash
+for arg in "$@"; do
+  case "$arg" in --output-file=*) cp "$PWD/report.json" "\${arg#--output-file=}";; esac
+done
+exit ${scanStatus}
+`,
+        { mode: 0o755 },
+      );
 
-    expect(installer).toContain("osv_version='2.5.1'");
-    expect(installer.match(/binary_sha256='[a-f0-9]{64}'/g)).toHaveLength(2);
-    expect(installer).toContain('sha256sum -c --status');
-    expect(runner).toContain('pnpm licenses list --prod --json');
-    expect(runner).toContain('scan_status != 0 && scan_status != 1');
-    expect(packageJson.scripts['dependencies:check']).toBe(
-      'bash ops/scripts/check-production-dependencies.sh',
-    );
-  });
+      const result = spawnSync('bash', [join(scripts, 'check-production-dependencies.sh')], {
+        encoding: 'utf8',
+        env: { PATH: `${bin}:${process.env.PATH}`, TMPDIR: scratch },
+      });
+      expect(result.status, result.stderr).toBe(expectedStatus);
+      if (scanStatus === 2) {
+        expect(result.stderr).toContain('failed before producing an advisory result');
+        expect(result.stdout).not.toContain('No HIGH or CRITICAL advisories');
+      }
+      expect(readdirSync(scratch)).toEqual([]);
+    },
+  );
 });
