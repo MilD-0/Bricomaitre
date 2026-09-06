@@ -42,6 +42,9 @@ import ProtectedLayout from './layout';
 describe('app/[locale]/(app)/layout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    redirectMock.mockImplementation(() => {
+      throw new Error('REDIRECT');
+    });
     authMock.mockResolvedValue({
       user: {
         id: 'user-1',
@@ -111,10 +114,13 @@ describe('app/[locale]/(app)/layout', () => {
       },
     });
 
-    await ProtectedLayout({
-      children: <div>content</div>,
-      params: Promise.resolve({ locale: 'fr' }),
-    });
+    await expect(
+      ProtectedLayout({
+        children: <div>content</div>,
+        params: Promise.resolve({ locale: 'fr' }),
+      }),
+    ).rejects.toThrow('REDIRECT');
+    expect(getDbMock).not.toHaveBeenCalled();
 
     expect(redirectMock).toHaveBeenCalledWith('/fr');
   });

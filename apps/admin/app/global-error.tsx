@@ -1,7 +1,8 @@
 'use client';
 
+import './globals.css';
+
 import * as Sentry from '@sentry/nextjs';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -9,32 +10,26 @@ import { defaultLocale, isRtl, locales, type Locale } from '../lib/i18n';
 
 const COPY = {
   en: {
-    badge: 'System Error',
     title: 'The admin workspace hit an unexpected error',
-    description:
-      'The request failed before the page could finish rendering. You can retry this view or return to a stable section of the admin app.',
+    description: 'Try loading this page again or return to your workspace.',
     retry: 'Try again',
-    dashboard: 'Open dashboard',
+    dashboard: 'Return to workspace',
     products: 'Go to products',
     digest: 'Error digest',
   },
   fr: {
-    badge: 'Erreur système',
     title: "L'espace d'administration a rencontré une erreur inattendue",
-    description:
-      "La requête a échoué avant la fin du rendu. Vous pouvez réessayer cette vue ou revenir vers une section stable de l'application.",
+    description: "Réessayez de charger cette page ou revenez à l'accueil.",
     retry: 'Réessayer',
-    dashboard: 'Ouvrir le tableau de bord',
+    dashboard: "Revenir à l'accueil",
     products: 'Aller aux produits',
     digest: "Identifiant d'erreur",
   },
   ar: {
-    badge: 'خطأ بالنظام',
     title: 'حدث خطأ غير متوقع داخل لوحة الإدارة',
-    description:
-      'فشل الطلب قبل اكتمال عرض الصفحة. يمكنك إعادة المحاولة أو الرجوع إلى قسم مستقر داخل تطبيق الإدارة.',
+    description: 'أعد تحميل الصفحة أو ارجع إلى مساحة العمل.',
     retry: 'إعادة المحاولة',
-    dashboard: 'فتح لوحة الإدارة',
+    dashboard: 'العودة إلى مساحة العمل',
     products: 'الذهاب إلى المنتجات',
     digest: 'معرّف الخطأ',
   },
@@ -47,10 +42,10 @@ function resolveLocale(pathname: string | null): Locale {
 
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   const pathname = usePathname();
   const locale = resolveLocale(pathname);
@@ -63,50 +58,42 @@ export default function GlobalError({
   return (
     <html lang={locale} dir={isRtl(locale) ? 'rtl' : 'ltr'}>
       <body>
-        <main className="min-h-screen bg-[image:var(--error-page-background)] px-4 py-8 text-foreground">
-          <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center justify-center">
-            <section className="w-full overflow-hidden rounded-[var(--shape-radius-hero)] border border-white/10 bg-[var(--glass-surface)] p-6 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl md:p-10">
-              <div className="mx-auto max-w-3xl text-center">
-                <div className="inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[var(--type-tracking-p240)] text-amber-200">
-                  {copy.badge}
-                </div>
-                <h1 className="mt-5 text-balance text-4xl font-semibold tracking-[var(--type-tracking-n040)] text-white md:text-6xl">
-                  {copy.title}
-                </h1>
-                <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-7 text-slate-300 md:text-base">
-                  {copy.description}
-                </p>
+        <main className="grid min-h-screen place-items-center bg-background px-4 py-12 text-foreground">
+          <div className="mx-auto w-full max-w-xl text-center">
+            <h1 className="mt-3 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+              {copy.title}
+            </h1>
+            <p className="mt-4 text-pretty text-base leading-7 text-muted-foreground">
+              {copy.description}
+            </p>
 
-                {error.digest ? (
-                  <div className="mx-auto mt-6 max-w-xl rounded-[var(--shape-radius-panel)] border border-white/10 bg-black/20 px-4 py-3 text-left text-sm text-slate-300">
-                    <span className="font-semibold text-slate-100">{copy.digest}:</span>{' '}
-                    {error.digest}
-                  </div>
-                ) : null}
-
-                <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => reset()}
-                    className="inline-flex min-w-52 items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-vapor)] transition-transform duration-[var(--duration-standard)] hover:-translate-y-0.5"
-                  >
-                    {copy.retry}
-                  </button>
-                  <Link
-                    href={`/${locale}/administration`}
-                    className="inline-flex min-w-52 items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors duration-[var(--duration-standard)] hover:bg-white/10"
-                  >
-                    {copy.dashboard}
-                  </Link>
-                  <Link
-                    href={`/${locale}/products`}
-                    className="inline-flex min-w-52 items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors duration-[var(--duration-standard)] hover:bg-white/10"
-                  >
-                    {copy.products}
-                  </Link>
-                </div>
+            {error.digest ? (
+              <div className="mt-6 border-y border-border py-3 text-start text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{copy.digest}:</span> {error.digest}
               </div>
-            </section>
+            ) : null}
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={retry}
+                className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-3 text-sm font-medium text-primary-foreground"
+              >
+                {copy.retry}
+              </button>
+              <a
+                href={`/${locale}`}
+                className="inline-flex items-center justify-center rounded-md border border-border px-5 py-3 text-sm font-medium hover:bg-accent"
+              >
+                {copy.dashboard}
+              </a>
+              <a
+                href={`/${locale}/products`}
+                className="inline-flex items-center justify-center rounded-md border border-border px-5 py-3 text-sm font-medium hover:bg-accent"
+              >
+                {copy.products}
+              </a>
+            </div>
           </div>
         </main>
       </body>

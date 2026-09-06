@@ -78,6 +78,26 @@ describe('LocaleRootPage', () => {
     expect(redirectMock).toHaveBeenCalledWith('/en/administration');
   });
 
+  it.each([false, true])(
+    'signs in through the configured provider in the requested locale, demo=%s',
+    async (demo) => {
+      authMock.mockResolvedValue(null);
+      isDemoModeMock.mockReturnValue(demo);
+      const ui = await LocaleRootPage({ params: Promise.resolve({ locale: 'fr' }) });
+      expect(ui.props.signInLabel).toBe(demo ? 'Enter the demo' : 'Sign in with Google');
+      await ui.props.onSignIn();
+      if (demo) {
+        expect(signInDemoMock).toHaveBeenCalledExactlyOnceWith('/fr/administration');
+        expect(signInMock).not.toHaveBeenCalled();
+      } else {
+        expect(signInMock).toHaveBeenCalledExactlyOnceWith('google', {
+          redirectTo: '/fr/administration',
+        });
+        expect(signInDemoMock).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it('renders the same Google login button for authenticated but disallowed users', async () => {
     authMock.mockResolvedValue({ user: { email: 'blocked@example.com', isAllowed: false } });
 

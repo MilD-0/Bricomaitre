@@ -188,9 +188,6 @@
   --duration-slow: 320ms;
   --ease-interface: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
-  --error-page-background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 32%),
-    linear-gradient(180deg, #020617 0%, #0f172a 36%, #111827 100%);
   --background: 210 25% 98%;
   --foreground: 200 9% 11%;
   --card: 0 0% 100%;

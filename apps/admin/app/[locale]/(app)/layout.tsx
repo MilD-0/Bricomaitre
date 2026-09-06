@@ -22,7 +22,7 @@ export default async function ProtectedLayout({
   if (!session?.user?.isAllowed) {
     redirect(`/${locale}`);
   }
-  const userId = session?.user?.id ?? null;
+  const userId = session.user.id;
   const persistedUser =
     hasDb() && userId
       ? await getDb().query.users.findFirst({
@@ -39,13 +39,13 @@ export default async function ProtectedLayout({
         adminAiModelIds={getAdminAiModelOptions(process.env.AI_PROVIDER?.trim().toLowerCase()).map(
           (option) => option.id,
         )}
-        initialPermissions={session?.user?.permissions ?? []}
-        initialRole={session?.user?.role ?? 'viewer'}
-        initialIsAllowed={session?.user?.isAllowed ?? false}
-        initialRoleLabel={session?.user?.roleLabel ?? null}
-        initialUserEmail={session?.user?.email ?? null}
-        initialUserImage={persistedUser?.image ?? session?.user?.image ?? null}
-        initialUserName={session?.user?.name ?? null}
+        initialPermissions={session.user.permissions}
+        initialRole={session.user.role}
+        initialIsAllowed={session.user.isAllowed}
+        initialRoleLabel={session.user.roleLabel}
+        initialUserEmail={session.user.email}
+        initialUserImage={persistedUser?.image ?? session.user.image}
+        initialUserName={session.user.name}
       >
         {children}
       </AppShell>

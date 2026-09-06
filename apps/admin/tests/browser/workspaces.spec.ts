@@ -52,18 +52,6 @@ const screenshotRoutes = new Set([
   '/en/stats/shopping-assistant',
 ]);
 
-const retiredUiRoutes = [
-  '/en/landing-pages',
-  '/en/brands-categories',
-  '/en/storefront-settings',
-  '/en/stats/customers',
-  '/en/stats/geography',
-  '/en/stats/import-history',
-  '/en/stats/landing-pages',
-  '/en/stats/manual-orders',
-  '/en/stats/profit-tracker',
-] as const;
-
 async function openWorkspace(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'load', timeout: 120_000 });
   await expect(page).toHaveURL(new RegExp(`${path.replaceAll('/', '\\/')}$`));
@@ -75,6 +63,33 @@ async function openWorkspace(page: Page, path: string) {
 test.beforeEach(async ({ isMobile, page }) => {
   if (isMobile) await page.setViewportSize({ width: 360, height: 800 });
 });
+
+for (const locale of ['fr', 'ar']) {
+  test(`recovers from an unknown ${locale} page through the authorized home route`, async ({
+    page,
+  }, testInfo) => {
+    for (const path of ['missing-audit-page', 'assets/landing-pages/not-an-id']) {
+      await page.goto(`/${locale}/${path}`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        locale === 'fr'
+          ? "Cette page d'administration n'existe pas"
+          : 'هذه الصفحة الإدارية غير موجودة',
+      );
+      await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+      ).toBeLessThanOrEqual(1);
+      await page.screenshot({
+        path: testInfo.outputPath(
+          `not-found-${locale}-${path.includes('/') ? 'entity' : 'route'}.png`,
+        ),
+      });
+      await page.locator(`a[href="/${locale}"]`).click();
+      await expect(page).toHaveURL(new RegExp(`/${locale}/administration$`));
+      await expect(page.locator('[data-workspace-frame]')).toBeVisible();
+    }
+  });
+}
 
 test.describe('workspace checks', () => {
   test.describe.configure({ mode: 'parallel' });
@@ -136,15 +151,6 @@ test('keeps default Stats routes canonical without hydration navigation', async 
     await page.goto(path, { waitUntil: 'load' });
     await expect(page.locator('[data-workspace-frame]')).toHaveCount(1, { timeout: 30_000 });
     await page.waitForTimeout(500);
-    await expect(page).toHaveURL(`${baseURL}${path}`);
-  }
-});
-
-test('does not retain compatibility routes for the retired admin UI', async ({ baseURL, page }) => {
-  expect(baseURL).toBeTruthy();
-  for (const path of retiredUiRoutes) {
-    const response = await page.goto(path, { waitUntil: 'load' });
-    expect(response?.status(), `${path} should be removed`).toBe(404);
     await expect(page).toHaveURL(`${baseURL}${path}`);
   }
 });

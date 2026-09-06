@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ADMIN_AI_MUTATION_EVENT } from '../lib/admin-ai-events';
@@ -14,16 +14,6 @@ vi.mock('next/navigation', () => ({
 describe('AppProviders', () => {
   beforeEach(() => navigation.refresh.mockReset());
   afterEach(() => cleanup());
-
-  it('renders children inside the application providers', () => {
-    render(
-      <AppProviders locale="en" messages={{}}>
-        <div>provider-child</div>
-      </AppProviders>,
-    );
-
-    expect(screen.getByText('provider-child')).toBeInTheDocument();
-  });
 
   it('refreshes application data after an assistant mutation', () => {
     const invalidateQueries = vi

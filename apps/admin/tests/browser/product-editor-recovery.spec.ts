@@ -99,10 +99,7 @@ for (const [locale, messages] of [
     await detailResponse;
     await expect(title).toHaveValue('Mon brouillon · مسودتي');
     await expect(page.getByText(messages.adminWorkspace.products.changedElsewhere)).toBeVisible();
-    await testInfo.attach(`${locale}-product-draft-conflict`, {
-      body: await page.screenshot(),
-      contentType: 'image/png',
-    });
+    await page.screenshot({ path: testInfo.outputPath(`${locale}-product-draft-conflict.png`) });
     await page.getByRole('button', { name: messages.adminWorkspace.products.loadLatest }).click();
     await expect(title).toHaveValue('Modification distante');
     await page.locator('input[type="file"]').setInputFiles({
@@ -114,15 +111,46 @@ for (const [locale, messages] of [
     await page
       .getByRole('button', { name: messages.uploadFields.retry, exact: true })
       .scrollIntoViewIfNeeded();
-    await testInfo.attach(`${locale}-upload-retry`, {
-      body: await page.screenshot(),
-      contentType: 'image/png',
-    });
+    await page.screenshot({ path: testInfo.outputPath(`${locale}-upload-retry.png`) });
     await page.getByRole('button', { name: messages.uploadFields.retry, exact: true }).click();
     await expect(
       page.getByRole('button', { name: messages.uploadFields.retry, exact: true }),
     ).toHaveCount(0);
     expect(uploadAttempts).toBe(2);
+    const deleteImage = page.getByRole('button', {
+      name: messages.uploadFields.deleteImage.replace('{number}', '1'),
+      exact: true,
+    });
+    await deleteImage.click();
+    const confirmation = page.getByRole('dialog', { name: messages.uploadFields.deleteImageTitle });
+    await expect(confirmation).toBeVisible();
+    await page.keyboard.press('Tab');
+    expect(await confirmation.evaluate((element) => element.contains(document.activeElement))).toBe(
+      true,
+    );
+    await expect
+      .poll(() =>
+        confirmation.evaluate((element) => {
+          const motion = getComputedStyle(element.parentElement!);
+          const overlay = getComputedStyle(element.parentElement!.parentElement!);
+          return {
+            opacity: motion.opacity,
+            overlayOpacity: overlay.opacity,
+            transform: motion.transform,
+            filter: motion.filter,
+          };
+        }),
+      )
+      .toEqual({ opacity: '1', overlayOpacity: '1', transform: 'none', filter: 'blur(0px)' });
+    await page.screenshot({ path: testInfo.outputPath(`${locale}-nested-image-confirmation.png`) });
+    await page.keyboard.press('Escape');
+    await expect(confirmation).not.toBeVisible();
+    await expect(title).toHaveValue('Modification distante');
+    await expect(deleteImage).toBeFocused();
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
+    await page.keyboard.press('Escape');
+    await expect(title).not.toBeVisible();
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
     await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
     expect(
       await page.evaluate(
