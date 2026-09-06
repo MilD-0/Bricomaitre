@@ -32,6 +32,45 @@ function renderWorkspace(node: React.ReactNode) {
 describe('Administration workspaces', () => {
   afterEach(cleanup);
 
+  it('keeps a saving role in its editor until completion and then allows a new draft', async () => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get('/api/settings/roles', () =>
+        HttpResponse.json({ items: [], availablePermissions: ['products_write'] }),
+      ),
+      http.post('/api/settings/roles', async () => {
+        await pending;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderWorkspace(<AdministrationRolesWorkspace />);
+    await user.click(screen.getByRole('button', { name: 'settings.rolesManager.createAction' }));
+    const name = screen.getByRole('textbox', { name: 'settings.rolesManager.nameLabel' });
+    await user.type(name, 'Catalog team');
+    await user.click(
+      screen.getAllByRole('button', { name: 'settings.rolesManager.createAction' }).at(-1)!,
+    );
+    await waitFor(() => expect(name).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'actions.close' })).toBeDisabled();
+    expect(
+      screen
+        .getAllByRole('button', { name: 'settings.rolesManager.createAction' })
+        .every((button) => button.matches(':disabled')),
+    ).toBe(true);
+    await user.keyboard('{Escape}');
+    expect(name).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'settings.rolesManager.createAction' }));
+    const newName = screen.getByRole('textbox', { name: 'settings.rolesManager.nameLabel' });
+    await user.type(newName, 'New role draft');
+    expect(newName).toHaveValue('New role draft');
+  });
+
   it('uses a list-first user workflow and confirms access removal', async () => {
     const deleteHandler = vi.fn(() => HttpResponse.json({ ok: true }));
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -64,6 +103,53 @@ describe('Administration workspaces', () => {
 
     expect(confirm).toHaveBeenCalledWith('settings.accessManager.deleteConfirmation');
     await waitFor(() => expect(deleteHandler).toHaveBeenCalled());
+    confirm.mockRestore();
+  });
+
+  it('keeps an access grant locked through a failed removal and allows retry', async () => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    server.use(
+      http.get('/api/settings/access', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 4,
+              email: 'staff@example.com',
+              role: 'employee',
+              roleDefinitionId: null,
+              roleLabel: null,
+              updatedAt: '2026-08-19T00:00:00.000Z',
+            },
+          ],
+          availableBuiltInRoles: ['viewer', 'employee'],
+          availableCustomRoles: [],
+        }),
+      ),
+      http.delete('/api/settings/access/4', async () => {
+        await pending;
+        return HttpResponse.json({ error: 'Unavailable' }, { status: 503 });
+      }),
+    );
+    renderWorkspace(<AdministrationUsersWorkspace />);
+    await user.click(await screen.findByRole('button', { name: /staff@example.com/i }));
+    const email = screen.getByRole('textbox', { name: 'settings.accessManager.emailLabel' });
+    await user.click(screen.getByRole('button', { name: 'actions.delete' }));
+    await waitFor(() => expect(email).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'actions.close' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'settings.accessManager.createAction' }),
+    ).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(email).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(email).toBeEnabled());
+    expect(email).toHaveValue('staff@example.com');
+    expect(screen.getByRole('button', { name: 'actions.delete' })).toBeEnabled();
     confirm.mockRestore();
   });
 

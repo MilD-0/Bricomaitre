@@ -74,11 +74,13 @@ export function AdministrationRolesWorkspace() {
   });
 
   function beginCreate() {
+    if (saveMutation.isPending) return;
     form.reset(defaults);
     setSelectedId('new');
   }
 
   function beginEdit(role: RoleDefinitionItem) {
+    if (saveMutation.isPending) return;
     form.reset({
       name: role.name,
       description: role.description ?? '',
@@ -125,58 +127,66 @@ export function AdministrationRolesWorkspace() {
 
   const editor = (
     <form
-      className="space-y-5 p-4 sm:p-6"
-      onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
+      className="p-4 sm:p-6"
+      onSubmit={form.handleSubmit((values) => {
+        if (!saveMutation.isPending) saveMutation.mutate(values);
+      })}
     >
-      <label className="grid gap-2 text-sm font-medium">
-        <span>{t('settings.rolesManager.nameLabel')}</span>
-        <Input
-          {...form.register('name')}
-          placeholder={t('settings.rolesManager.namePlaceholder')}
-        />
-        {form.formState.errors.name ? (
-          <span className="text-xs text-destructive">{form.formState.errors.name.message}</span>
-        ) : null}
-      </label>
-      <label className="grid gap-2 text-sm font-medium">
-        <span>{t('settings.rolesManager.descriptionLabel')}</span>
-        <Input
-          {...form.register('description')}
-          placeholder={t('settings.rolesManager.descriptionPlaceholder')}
-        />
-      </label>
-      <div className="space-y-5 border-t border-border/60 pt-5">
-        {permissionGroups.map((group) => {
-          const keys = group.keys.filter((key) => query.data.availablePermissions.includes(key));
-          if (keys.length === 0) return null;
-          return (
-            <fieldset key={group.label} className="space-y-2">
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-[var(--type-tracking-p150)] text-muted-foreground">
-                {t(`settings.permissionGroups.${group.label}`)}
-              </legend>
-              <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
-                {keys.map((permission) => (
-                  <label
-                    key={permission}
-                    className="flex min-h-10 items-center gap-3 border-b border-border/40 py-2 text-sm"
-                  >
-                    <Checkbox value={permission} {...form.register('permissions')} />
-                    <span>{t(`settings.permissionLabels.${permission}`)}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          );
-        })}
-        {form.formState.errors.permissions ? (
-          <p className="text-xs text-destructive">{form.formState.errors.permissions.message}</p>
-        ) : null}
-      </div>
-      <Button type="submit" disabled={saveMutation.isPending}>
-        {selectedId === 'new'
-          ? t('settings.rolesManager.createAction')
-          : t('settings.rolesManager.updateAction')}
-      </Button>
+      <fieldset
+        disabled={saveMutation.isPending}
+        aria-busy={saveMutation.isPending}
+        className="space-y-5"
+      >
+        <label className="grid gap-2 text-sm font-medium">
+          <span>{t('settings.rolesManager.nameLabel')}</span>
+          <Input
+            {...form.register('name')}
+            placeholder={t('settings.rolesManager.namePlaceholder')}
+          />
+          {form.formState.errors.name ? (
+            <span className="text-xs text-destructive">{form.formState.errors.name.message}</span>
+          ) : null}
+        </label>
+        <label className="grid gap-2 text-sm font-medium">
+          <span>{t('settings.rolesManager.descriptionLabel')}</span>
+          <Input
+            {...form.register('description')}
+            placeholder={t('settings.rolesManager.descriptionPlaceholder')}
+          />
+        </label>
+        <div className="space-y-5 border-t border-border/60 pt-5">
+          {permissionGroups.map((group) => {
+            const keys = group.keys.filter((key) => query.data.availablePermissions.includes(key));
+            if (keys.length === 0) return null;
+            return (
+              <fieldset key={group.label} className="space-y-2">
+                <legend className="mb-2 text-xs font-semibold uppercase tracking-[var(--type-tracking-p150)] text-muted-foreground">
+                  {t(`settings.permissionGroups.${group.label}`)}
+                </legend>
+                <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
+                  {keys.map((permission) => (
+                    <label
+                      key={permission}
+                      className="flex min-h-10 items-center gap-3 border-b border-border/40 py-2 text-sm"
+                    >
+                      <Checkbox value={permission} {...form.register('permissions')} />
+                      <span>{t(`settings.permissionLabels.${permission}`)}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            );
+          })}
+          {form.formState.errors.permissions ? (
+            <p className="text-xs text-destructive">{form.formState.errors.permissions.message}</p>
+          ) : null}
+        </div>
+        <Button type="submit" disabled={saveMutation.isPending}>
+          {selectedId === 'new'
+            ? t('settings.rolesManager.createAction')
+            : t('settings.rolesManager.updateAction')}
+        </Button>
+      </fieldset>
     </form>
   );
 
@@ -188,6 +198,7 @@ export function AdministrationRolesWorkspace() {
           type="button"
           className={`w-full px-4 py-4 text-start transition-colors hover:bg-muted/35 ${selectedId === role.id ? 'bg-primary/6' : ''}`}
           onClick={() => beginEdit(role)}
+          disabled={saveMutation.isPending}
         >
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{role.name}</span>
@@ -223,7 +234,7 @@ export function AdministrationRolesWorkspace() {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={beginCreate}>
+        <Button size="sm" onClick={beginCreate} disabled={saveMutation.isPending}>
           <Plus className="size-4" />
           {t('settings.rolesManager.createAction')}
         </Button>
@@ -231,6 +242,7 @@ export function AdministrationRolesWorkspace() {
       {list}
       <SidePanel
         open={selectedId !== null}
+        dismissible={!saveMutation.isPending}
         onOpenChange={(open) => {
           if (!open) setSelectedId(null);
         }}

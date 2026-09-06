@@ -5,7 +5,7 @@ import { Package, ShoppingBasket } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 
-import { requestJson as request } from '../../lib/admin-api';
+import { AdminApiError, requestJson as request } from '../../lib/admin-api';
 import type { OrdersResponse } from '../../lib/order-admin-contracts';
 import { ORDER_STATUS, parseNumericAmount, type OrderRecord } from '../../lib/orders';
 import {
@@ -102,6 +102,7 @@ export function OrdersWorkflows({
   const [shoppingListState, setShoppingListState] = useState<ShoppingListState>(null);
   const [shoppingListOpen, setShoppingListOpen] = useState(false);
   const [stockReviewOpen, setStockReviewOpen] = useState(false);
+  const [inventoryBusy, setInventoryBusy] = useState(false);
   const [shoppingListSaveStatus, setShoppingListSaveStatus] =
     useState<ShoppingListSaveStatus>('idle');
   const [ecotrackPreviewState, setEcotrackPreviewState] =
@@ -175,7 +176,27 @@ export function OrdersWorkflows({
       return { product: detail.item, brandName };
     },
   });
-  const inventoryRequestRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  type InventoryRequest = {
+    sourceMode: ShoppingListSourceMode;
+    orderIds: number[];
+    revision: number;
+    draftIds: string[];
+  };
+  const inventoryEdits = (items: ShoppingListDraftItem[]) =>
+    JSON.stringify(
+      items.map(({ draftId, quantity, inventoryDecreaseQuantity, checked }) => ({
+        draftId,
+        quantity,
+        inventoryDecreaseQuantity,
+        checked,
+      })),
+    );
+  const inventoryRequestRef = useRef<{
+    fingerprint: string;
+    requestId: string;
+    payload: InventoryRequest;
+    draftFingerprint: string;
+  } | null>(null);
   const applyInventoryMutation = useMutation({
     mutationFn: (payload: {
       sourceMode: ShoppingListSourceMode;
@@ -185,7 +206,12 @@ export function OrdersWorkflows({
     }) => {
       const fingerprint = JSON.stringify(payload);
       if (inventoryRequestRef.current?.fingerprint !== fingerprint) {
-        inventoryRequestRef.current = { fingerprint, requestId: crypto.randomUUID() };
+        inventoryRequestRef.current = {
+          fingerprint,
+          requestId: crypto.randomUUID(),
+          payload,
+          draftFingerprint: inventoryEdits(shoppingListState?.draftItems ?? []),
+        };
       }
       return request<InventoryApplyResponse & { draft: ShoppingListDraftRecord }>(
         '/api/orders/shopping-list-draft/apply',
@@ -194,6 +220,10 @@ export function OrdersWorkflows({
           body: JSON.stringify({ ...payload, requestId: inventoryRequestRef.current.requestId }),
         },
       );
+    },
+    onError: (error) => {
+      if (error instanceof AdminApiError && error.status >= 400 && error.status < 500)
+        inventoryRequestRef.current = null;
     },
     onSuccess: async () => {
       inventoryRequestRef.current = null;
@@ -530,23 +560,66 @@ export function OrdersWorkflows({
         item.inventoryActionEligible &&
         (!checkedOnly || item.checked),
     );
-    if (candidates.length === 0) {
+    const previousRequest = inventoryRequestRef.current?.payload;
+    const retryRequest =
+      previousRequest &&
+      previousRequest.sourceMode === shoppingListState.sourceMode &&
+      JSON.stringify(previousRequest.orderIds) === JSON.stringify(shoppingListState.orderIds)
+        ? previousRequest
+        : null;
+    if (candidates.length === 0 && !retryRequest) {
       toast.error(t('ordersManager.shoppingList.noInventoryChanges'));
       return;
     }
+    const retainedEdits =
+      retryRequest &&
+      inventoryEdits(shoppingListState.draftItems) !==
+        inventoryRequestRef.current?.draftFingerprint;
+    setInventoryBusy(true);
+    if (shoppingListSaveTimeoutRef.current) clearTimeout(shoppingListSaveTimeoutRef.current);
     const toastId = toast.loading(
       t('ordersManager.shoppingList.inventoryApplyLoading', { count: candidates.length }),
     );
     try {
-      const saved = await saveShoppingListNow(shoppingListState);
-      const response = await applyInventoryMutation.mutateAsync({
-        sourceMode: saved.draft.sourceMode,
-        orderIds: saved.draft.orderIds,
-        revision: saved.draft.revision,
-        draftIds: candidates.map((item) => item.draftId),
-      });
-      setShoppingListState(buildShoppingListStateFromDraft(response.draft));
-      setShoppingListSaveStatus('saved');
+      // An accepted response may have been lost. Replay its exact request before
+      // saving another revision; the server returns the original allocation result.
+      const saved = retryRequest ? null : await saveShoppingListNow(shoppingListState);
+      const response = await applyInventoryMutation.mutateAsync(
+        retryRequest ?? {
+          sourceMode: saved!.draft.sourceMode,
+          orderIds: saved!.draft.orderIds,
+          revision: saved!.draft.revision,
+          draftIds: candidates.map((item) => item.draftId),
+        },
+      );
+      let nextState = buildShoppingListStateFromDraft(response.draft);
+      if (retainedEdits) {
+        nextState = reconcileShoppingListAllocations(
+          {
+            ...nextState,
+            draftItems: shoppingListState.draftItems.map((item) => ({
+              ...item,
+              inventoryQuantity:
+                response.draft.draftItems.find(
+                  (savedItem) => savedItem.productId === item.productId,
+                )?.inventoryQuantity ?? item.inventoryQuantity,
+            })),
+          },
+          response.draft,
+        );
+      }
+      setShoppingListState((current) =>
+        current?.scopeKey === nextState.scopeKey ? nextState : current,
+      );
+      if (retainedEdits) {
+        try {
+          await saveShoppingListNow(nextState);
+        } catch {
+          toast.error(t('ordersManager.shoppingList.saveError'));
+        }
+      } else {
+        setShoppingListSaveStatus('saved');
+      }
       toast.success(
         t('ordersManager.shoppingList.inventoryApplySuccess', { count: response.items.length }),
         { id: toastId },
@@ -563,6 +636,8 @@ export function OrdersWorkflows({
         t('ordersManager.shoppingList.inventoryApplyError', { count: candidates.length }),
         { id: toastId },
       );
+    } finally {
+      setInventoryBusy(false);
     }
   }
 
@@ -741,7 +816,7 @@ export function OrdersWorkflows({
           open
           state={shoppingListState}
           pending={addShoppingListProductMutation.isPending}
-          inventoryPending={applyInventoryMutation.isPending}
+          inventoryPending={inventoryBusy}
           saveStatus={shoppingListSaveStatus}
           onOpenChange={(open) => {
             if (!open && shoppingListState && shoppingListSaveTimeoutRef.current) {

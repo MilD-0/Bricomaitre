@@ -248,6 +248,17 @@ export function buildShoppingListPrintHtml(
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
 
+  const productIdsByImage = new Map(
+    [...state.generatedItems, ...state.draftItems]
+      .filter((item) => item.productId != null && item.thumbnailUrl)
+      .map((item) => [item.thumbnailUrl!, item.productId!]),
+  );
+  const printImage = (source: string | null) => {
+    const id = source ? productIdsByImage.get(source) : undefined;
+    return id === undefined
+      ? null
+      : `/api/orders/shopping-list-thumbnail/${id}?v=${encodeURIComponent(source!)}`;
+  };
   const generationGroups = groupShoppingListGenerations(state, locale, previousGenerationLabel);
 
   const brandsHtml = generationGroups
@@ -271,7 +282,7 @@ export function buildShoppingListPrintHtml(
                   : ''
             }">
               <div style="display: flex; align-items: flex-start; gap: 10px;">
-                ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
+                ${printImage(product.thumbnailUrl) ? `<img src="${escapeHtml(printImage(product.thumbnailUrl)!)}" alt="${escapeHtml(product.title)}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
                 <div>
                   <strong>${product.checked ? '&#10003; ' : ''}${escapeHtml(product.title)}</strong> x${product.quantity}
                   ${product.unitPrice == null ? '' : `<div>${escapeHtml(labels.unitPrice)}: ${escapeHtml(formatCurrency(locale, product.unitPrice))}${product.purchasePrice == null ? '' : ` | ${escapeHtml(labels.purchasePrice)}: ${escapeHtml(formatCurrency(locale, product.purchasePrice))}`}</div>`}
@@ -310,7 +321,7 @@ export function buildShoppingListPrintHtml(
                   (product) => `
                 <li>
                   <div style="display: flex; align-items: center; gap: 10px;">
-                    ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 32px; height: 32px; object-fit: cover; border-radius: 6px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
+                    ${printImage(product.thumbnailUrl) ? `<img src="${escapeHtml(printImage(product.thumbnailUrl)!)}" alt="${escapeHtml(product.title)}" style="width: 32px; height: 32px; object-fit: cover; border-radius: 6px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
                     <span>${escapeHtml(product.brandName)} / ${escapeHtml(product.title)} x${product.quantity}</span>
                   </div>
                 </li>
@@ -329,7 +340,7 @@ export function buildShoppingListPrintHtml(
     .join('');
 
   return `<!doctype html>
-<html>
+<html lang="${escapeHtml(locale)}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}">
   <head>
     <meta charset="utf-8" />
     <title>${escapeHtml(state.title)}</title>
@@ -339,7 +350,9 @@ export function buildShoppingListPrintHtml(
       h1 { margin-bottom: 24px; }
       h2 { margin: 0 0 8px; font-size: 18px; }
       h3 { margin: 10px 0 6px; font-size: 14px; }
-      section { margin-bottom: 20px; break-inside: avoid; }
+      section { margin-bottom: 20px; }
+      li { break-inside: avoid; }
+      img { color: transparent; font-size: 0; }
       ul { margin: 0; padding-left: 20px; }
       li { margin-bottom: 6px; }
       @media print { body { margin: 12px; } }

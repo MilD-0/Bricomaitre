@@ -91,16 +91,23 @@ export async function DELETE(req: NextRequest) {
     return denied;
   }
 
-  const parsed =
-    req.body !== null
-      ? shoppingListDraftResetRequestSchema.safeParse(await req.json().catch(() => null))
-      : shoppingListDraftResetRequestSchema.safeParse({
-          sourceMode: req.nextUrl.searchParams.get('sourceMode') ?? undefined,
-          orderIds: req.nextUrl.searchParams.getAll('orderIds'),
-          revision: z.coerce
-            .number()
-            .safeParse(req.nextUrl.searchParams.get('revision') ?? undefined).data,
-        });
+  const body = await req.text();
+  let payload: unknown = null;
+  if (body.trim()) {
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+  }
+  const parsed = body.trim()
+    ? shoppingListDraftResetRequestSchema.safeParse(payload)
+    : shoppingListDraftResetRequestSchema.safeParse({
+        sourceMode: req.nextUrl.searchParams.get('sourceMode') ?? undefined,
+        orderIds: req.nextUrl.searchParams.getAll('orderIds'),
+        revision: z.coerce.number().safeParse(req.nextUrl.searchParams.get('revision') ?? undefined)
+          .data,
+      });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }

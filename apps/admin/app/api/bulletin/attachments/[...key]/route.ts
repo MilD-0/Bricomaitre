@@ -29,9 +29,14 @@ export async function GET(
     /['()*]/g,
     (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
+  const contentType = object.ContentType ?? 'application/octet-stream';
+  const displayContentType =
+    /^text\//i.test(contentType) && !/;\s*charset\s*=/i.test(contentType)
+      ? `${contentType}; charset=utf-8`
+      : contentType;
   return new Response(object.Body.transformToWebStream(), {
     headers: {
-      'content-type': object.ContentType ?? 'application/octet-stream',
+      'content-type': displayContentType,
       'content-disposition': `inline; filename="${fallbackName}"; filename*=UTF-8''${encodedName}`,
       'cache-control': 'private, no-store',
       'x-content-type-options': 'nosniff',

@@ -107,9 +107,12 @@ export async function uploadPrivateBufferToS3({
   return key;
 }
 
-export async function readPrivateS3Object(key: string) {
+export async function readPrivateS3Object(key: string, options?: { abortSignal?: AbortSignal }) {
   const { region, bucket } = ensurePrivateS3Config();
-  return getS3UploadClient(region).send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  return getS3UploadClient(region).send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    options,
+  );
 }
 
 export function isS3ObjectNotFound(error: unknown) {

@@ -74,12 +74,14 @@ export function AdministrationUsersWorkspace() {
   });
 
   function beginCreate() {
+    if (pending) return;
     form.reset(emptyValues);
     setAssignment('built-in:viewer');
     setSelectedId('new');
   }
 
   function beginEdit(item: AccessGrantItem) {
+    if (pending) return;
     const values: UserAccessGrantFormValues = {
       email: item.email,
       role: item.roleDefinitionId ? null : (item.role as 'viewer' | 'employee'),
@@ -133,74 +135,79 @@ export function AdministrationUsersWorkspace() {
     onError: (error: Error, _id, context) => toast.error(error.message, { id: context?.toastId }),
   });
 
+  const pending = saveMutation.isPending || deleteMutation.isPending;
   const editor = (
     <form
-      className="space-y-5 p-4 sm:p-6"
-      onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
+      className="p-4 sm:p-6"
+      onSubmit={form.handleSubmit((values) => {
+        if (!pending) saveMutation.mutate(values);
+      })}
     >
-      <label className="grid gap-2 text-sm font-medium">
-        <span>{t('settings.accessManager.emailLabel')}</span>
-        <Input
-          type="email"
-          {...form.register('email')}
-          placeholder={t('settings.accessManager.emailPlaceholder')}
-        />
-        {form.formState.errors.email ? (
-          <span className="text-xs text-destructive">{form.formState.errors.email.message}</span>
-        ) : null}
-      </label>
-      <label className="grid gap-2 text-sm font-medium">
-        <span>{t('settings.accessManager.assignmentLabel')}</span>
-        <NativeSelect
-          value={assignment}
-          onChange={(event) => {
-            const value = event.target.value;
-            setAssignment(value);
-            if (value.startsWith('custom:')) {
-              form.setValue('role', null);
-              form.setValue('roleDefinitionId', Number(value.slice(7)));
-            } else {
-              form.setValue('role', value.slice(9) as 'viewer' | 'employee');
-              form.setValue('roleDefinitionId', null);
-            }
-          }}
-        >
-          <optgroup label={t('settings.accessManager.builtInGroup')}>
-            {query.data.availableBuiltInRoles.map((role) => (
-              <option key={role} value={`built-in:${role}`}>
-                {t(`roles.${role}`)}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label={t('settings.accessManager.customGroup')}>
-            {query.data.availableCustomRoles.map((role) => (
-              <option key={role.id} value={`custom:${role.id}`}>
-                {role.name}
-              </option>
-            ))}
-          </optgroup>
-        </NativeSelect>
-      </label>
-      <div className="flex flex-wrap gap-2 border-t border-border/60 pt-4">
-        <Button type="submit" disabled={saveMutation.isPending}>
-          {selectedId === 'new'
-            ? t('settings.accessManager.createAction')
-            : t('settings.accessManager.updateAction')}
-        </Button>
-        {typeof selectedId === 'number' ? (
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={deleteMutation.isPending}
-            onClick={() => {
-              if (window.confirm(t('settings.accessManager.deleteConfirmation')))
-                deleteMutation.mutate(selectedId);
+      <fieldset disabled={pending} aria-busy={pending} className="space-y-5">
+        <label className="grid gap-2 text-sm font-medium">
+          <span>{t('settings.accessManager.emailLabel')}</span>
+          <Input
+            type="email"
+            {...form.register('email')}
+            placeholder={t('settings.accessManager.emailPlaceholder')}
+          />
+          {form.formState.errors.email ? (
+            <span className="text-xs text-destructive">{form.formState.errors.email.message}</span>
+          ) : null}
+        </label>
+        <label className="grid gap-2 text-sm font-medium">
+          <span>{t('settings.accessManager.assignmentLabel')}</span>
+          <NativeSelect
+            value={assignment}
+            onChange={(event) => {
+              const value = event.target.value;
+              setAssignment(value);
+              if (value.startsWith('custom:')) {
+                form.setValue('role', null);
+                form.setValue('roleDefinitionId', Number(value.slice(7)));
+              } else {
+                form.setValue('role', value.slice(9) as 'viewer' | 'employee');
+                form.setValue('roleDefinitionId', null);
+              }
             }}
           >
-            {t('actions.delete')}
+            <optgroup label={t('settings.accessManager.builtInGroup')}>
+              {query.data.availableBuiltInRoles.map((role) => (
+                <option key={role} value={`built-in:${role}`}>
+                  {t(`roles.${role}`)}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label={t('settings.accessManager.customGroup')}>
+              {query.data.availableCustomRoles.map((role) => (
+                <option key={role.id} value={`custom:${role.id}`}>
+                  {role.name}
+                </option>
+              ))}
+            </optgroup>
+          </NativeSelect>
+        </label>
+        <div className="flex flex-wrap gap-2 border-t border-border/60 pt-4">
+          <Button type="submit" disabled={saveMutation.isPending}>
+            {selectedId === 'new'
+              ? t('settings.accessManager.createAction')
+              : t('settings.accessManager.updateAction')}
           </Button>
-        ) : null}
-      </div>
+          {typeof selectedId === 'number' ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (window.confirm(t('settings.accessManager.deleteConfirmation')))
+                  deleteMutation.mutate(selectedId);
+              }}
+            >
+              {t('actions.delete')}
+            </Button>
+          ) : null}
+        </div>
+      </fieldset>
     </form>
   );
 
@@ -212,6 +219,7 @@ export function AdministrationUsersWorkspace() {
           type="button"
           className={`grid w-full gap-2 px-4 py-4 text-start transition-colors hover:bg-muted/35 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${selectedId === item.id ? 'bg-primary/6' : ''}`}
           onClick={() => beginEdit(item)}
+          disabled={pending}
         >
           <span className="min-w-0">
             <span className="block truncate font-medium">{item.email}</span>
@@ -244,7 +252,7 @@ export function AdministrationUsersWorkspace() {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={beginCreate}>
+        <Button size="sm" onClick={beginCreate} disabled={pending}>
           <Plus className="size-4" />
           {t('settings.accessManager.createAction')}
         </Button>
@@ -252,6 +260,7 @@ export function AdministrationUsersWorkspace() {
       {list}
       <SidePanel
         open={selectedId !== null}
+        dismissible={!pending}
         onOpenChange={(open) => {
           if (!open) setSelectedId(null);
         }}

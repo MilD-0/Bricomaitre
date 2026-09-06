@@ -254,6 +254,49 @@ describe('ProductsWorkspace', () => {
     );
   });
 
+  it('locks product edits and dismissal while saving, then retains a failed draft for retry', async () => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const bodies: unknown[] = [];
+    server.use(
+      http.get('/api/products/1', () => HttpResponse.json({ item: products[0] })),
+      http.put('/api/products/1', async ({ request }) => {
+        bodies.push(await request.json());
+        if (bodies.length === 1) {
+          await pending;
+          return HttpResponse.json({ error: 'Unavailable' }, { status: 503 });
+        }
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderWorkspace();
+    await user.click(screen.getAllByRole('button', { name: 'Actions · First product' })[0]!);
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const price = await screen.findByRole('spinbutton', { name: 'Price' });
+    await user.clear(price);
+    await user.type(price, '1300');
+    await user.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(price).toBeDisabled());
+    expect(screen.getByRole('switch', { name: 'Active' })).toBeDisabled();
+    expect(
+      screen
+        .getAllByRole('button', { name: 'Cancel' })
+        .every((button) => button.matches(':disabled')),
+    ).toBe(true);
+    await user.keyboard('{Escape}');
+    expect(price).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(price).toBeEnabled());
+    expect(price).toHaveValue(1300);
+    await user.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toMatchObject({ price: 1300 });
+  });
+
   it('preserves dirty values and the mounted form during background detail refresh', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const user = userEvent.setup();

@@ -88,4 +88,32 @@ describe('bulletin attachment access', () => {
     }
     expect(readObjectMock).not.toHaveBeenCalled();
   });
+  it.each([
+    ['text/plain', 'text/plain; charset=utf-8'],
+    ['text/csv', 'text/csv; charset=utf-8'],
+    ['text/plain; charset=windows-1252', 'text/plain; charset=windows-1252'],
+    ['application/pdf', 'application/pdf'],
+  ])(
+    'serves %s with explicit text decoding while preserving bytes',
+    async (contentType, expected) => {
+      const bytes = new TextEncoder().encode('CLOPS reçu محفوظة');
+      readObjectMock.mockResolvedValue({
+        ContentType: contentType,
+        Body: {
+          transformToWebStream: () =>
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(bytes);
+                controller.close();
+              },
+            }),
+        },
+      });
+      const response = await GET(new NextRequest('http://localhost/attachment'), {
+        params: Promise.resolve({ key: ['bulletin', 'note.txt'] }),
+      });
+      expect(response.headers.get('content-type')).toBe(expected);
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    },
+  );
 });

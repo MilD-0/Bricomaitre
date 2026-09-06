@@ -9,6 +9,7 @@ import messages from '../../messages/en.json';
 import type { DailyOrderStatusOverview, OrdersResponse } from '../../lib/order-admin-contracts';
 import type { OrderRecord } from '../../lib/orders';
 import { ORDER_STATUS } from '../../lib/orders';
+import { toast } from '../../lib/toast';
 import { server } from '../../test/mocks/server';
 import { OrdersWorkspace } from './orders-workspace';
 import { OrderSalesDesk } from './order-sales-desk';
@@ -480,6 +481,110 @@ describe('OrdersWorkspace', () => {
     await screen.findByRole('dialog', { name: 'Shopping list for 1 selected orders' });
     await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
   });
+
+  it.each([false, true])(
+    'replays an accepted stock request after response loss, with subsequent edits=%s',
+    async (editAfterLoss) => {
+      const user = userEvent.setup();
+      renderWorkspace();
+      const errorToast = vi.spyOn(toast, 'error');
+      const successToast = vi.spyOn(toast, 'success');
+      const applies: Array<Record<string, unknown>> = [];
+      let saves = 0;
+      let releaseLostResponse!: () => void;
+      const lostResponse = new Promise<void>((resolve) => {
+        releaseLostResponse = resolve;
+      });
+      let draft: Record<string, unknown> = {};
+      server.use(
+        http.get('/api/orders/shopping-list-draft', () => HttpResponse.json({ draft: null })),
+        http.post('/api/orders/shopping-list-details', () =>
+          HttpResponse.json({
+            products: [{ id: 1, inventoryQuantity: 4, purchasePrice: '2800' }],
+            brands: [],
+          }),
+        ),
+        http.put('/api/orders/shopping-list-draft', async ({ request }) => {
+          saves += 1;
+          if (saves > 1 && applies.length < 2)
+            return HttpResponse.json({ error: 'stale revision' }, { status: 409 });
+          draft = {
+            ...((await request.json()) as Record<string, unknown>),
+            scopeKey: 'selected:1',
+            revision: applies.length >= 2 ? 3 : 1,
+          };
+          return HttpResponse.json({ draft });
+        }),
+        http.post('/api/orders/shopping-list-draft/apply', async ({ request }) => {
+          applies.push((await request.json()) as Record<string, unknown>);
+          const items = (draft.draftItems as Array<Record<string, unknown>>).map((item) => ({
+            ...item,
+            inventoryAppliedQuantity: 1,
+            inventoryOrderAppliedQuantity: 1,
+            inventoryDecreaseQuantity: 0,
+            inventoryQuantity: 3,
+            checked: true,
+          }));
+          draft = { ...draft, revision: 2, generatedItems: items, draftItems: items };
+          if (applies.length === 1) {
+            await lostResponse;
+            return HttpResponse.error();
+          }
+          return HttpResponse.json({
+            draft,
+            items: [{ productId: 1, previousQuantity: 4, nextQuantity: 3 }],
+            skipped: [],
+          });
+        }),
+      );
+      await user.click(screen.getByRole('checkbox', { name: 'Select Customer One' }));
+      await user.click(screen.getByRole('button', { name: 'Posted shopping list menu' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Shopping list' }));
+      await screen.findByRole('dialog');
+      await user.click(screen.getByRole('button', { name: 'Print view menu' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Accept all inventory changes' }));
+      await waitFor(() => expect(applies).toHaveLength(1));
+      expect(
+        within(screen.getByRole('dialog')).getByRole('button', {
+          name: 'Increase quantity for Cordless drill',
+        }),
+      ).toBeDisabled();
+      releaseLostResponse();
+      await waitFor(() =>
+        expect(errorToast).toHaveBeenCalledWith(
+          'Failed to apply inventory changes for 1 products.',
+          expect.any(Object),
+        ),
+      );
+      if (editAfterLoss)
+        await user.click(
+          within(screen.getByRole('dialog')).getByRole('button', {
+            name: 'Increase quantity for Cordless drill',
+          }),
+        );
+      await user.click(screen.getByRole('button', { name: 'Print view menu' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Accept all inventory changes' }));
+      await waitFor(() =>
+        expect(successToast).toHaveBeenCalledWith(
+          'Applied inventory changes for 1 products.',
+          expect.any(Object),
+        ),
+      );
+      expect(saves).toBe(editAfterLoss ? 2 : 1);
+      expect((draft.draftItems as Array<Record<string, unknown>>)[0]).toMatchObject({
+        quantity: editAfterLoss ? 2 : 1,
+        inventoryAppliedQuantity: 1,
+      });
+      expect(draft.revision).toBe(editAfterLoss ? 3 : 2);
+      expect(applies).toHaveLength(2);
+      expect(applies[1]).toEqual(applies[0]);
+      expect(applies[0]).toMatchObject({ revision: 1, requestId: expect.any(String) });
+      if (!editAfterLoss)
+        expect(
+          within(screen.getByRole('dialog')).queryByText('Inventory decrease'),
+        ).not.toBeInTheDocument();
+    },
+  );
 
   it('previews and starts selected-order Ecotrack posting through production contracts', async () => {
     const user = userEvent.setup();

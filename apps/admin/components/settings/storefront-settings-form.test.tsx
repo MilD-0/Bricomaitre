@@ -32,6 +32,52 @@ describe('StorefrontSettingsForm', () => {
     );
   });
 
+  it('locks submitted fields until the response arrives and preserves the draft for retry', async () => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        await pending;
+        return new Response('Unavailable', { status: 503 });
+      })
+      .mockImplementationOnce(
+        async (_url: string, init: RequestInit) => new Response(String(init.body), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <StorefrontSettingsForm
+        initialSettings={{
+          contactPhone: '0795342826',
+          address: 'Original',
+          phoneEnabled: true,
+          aiAssistantEnabled: true,
+        }}
+        modelOptions={['openai/gpt-4.1-mini']}
+      />,
+    );
+    const address = screen.getByRole('textbox', { name: 'addressLabel' });
+    await user.clear(address);
+    await user.type(address, 'Submitted address');
+    await user.click(screen.getByRole('button', { name: 'saveAction' }));
+    await waitFor(() => expect(address).toBeDisabled());
+    expect(screen.getByRole('switch', { name: 'assistantTitle' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'modelLabel' })).toBeDisabled();
+    await user.type(address, ' newer edit');
+    expect(address).toHaveValue('Submitted address');
+    release();
+    await waitFor(() => expect(address).toBeEnabled());
+    expect(address).toHaveValue('Submitted address');
+    expect(mocks.error).toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'saveAction' }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(address).toHaveValue('Submitted address');
+  });
+
   it('keeps contact calls enabled while saving the compact settings form once', async () => {
     const user = userEvent.setup();
     const { container } = render(

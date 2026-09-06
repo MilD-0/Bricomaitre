@@ -658,7 +658,8 @@ export function LandingPageBuilder({
                     {t.moveDown}
                   </CompactMenuItem>
                   <CompactMenuItem onClick={() => duplicate(index)}>{t.duplicate}</CompactMenuItem>
-                  {block.type !== 'product-hero' && block.type !== 'final-cta' ? (
+                  {(block.type !== 'product-hero' && block.type !== 'final-cta') ||
+                  document.blocks.filter((item) => item.type === block.type).length > 1 ? (
                     <CompactMenuItem destructive onClick={() => remove(index)}>
                       {t.delete}
                     </CompactMenuItem>

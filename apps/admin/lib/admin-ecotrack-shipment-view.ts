@@ -32,7 +32,13 @@ import {
   withOrderSearchTimeout,
   type OrderSearchDatabase,
 } from './order-search';
-import { parseNumericAmount, type DeliveryType, type OrderRecord } from './orders';
+import {
+  ORDER_STATUS,
+  coerceOrderStatus,
+  parseNumericAmount,
+  type DeliveryType,
+  type OrderRecord,
+} from './orders';
 
 type EcotrackOrderListItem = EcotrackShipmentListItem;
 type EcotrackOrderDetail = EcotrackShipmentDetail;
@@ -53,9 +59,17 @@ function mapDeliveryLabel(delivery: DeliveryType) {
   return delivery === 1 ? 'office' : 'home';
 }
 
-export function getActionFlags(currentStatus: string, deletedAt: Date | null) {
+export function getActionFlags(
+  currentStatus: string,
+  deletedAt: Date | null,
+  localStatus?: number | null,
+  lastStatusSyncedAt?: Date | null,
+) {
   const isVisible = deletedAt === null;
-  const isEditable = currentStatus === 'prete_a_expedier' && isVisible;
+  const dispatchAccepted =
+    coerceOrderStatus(localStatus) === ORDER_STATUS.DISPATCHED &&
+    isStaleAt(lastStatusSyncedAt, STATUS_STALE_MS);
+  const isEditable = currentStatus === 'prete_a_expedier' && isVisible && !dispatchAccepted;
   return {
     canEdit: isEditable,
     canDelete: isEditable,
@@ -116,7 +130,12 @@ function toListItem(
     totalAmount: record.totalAmount,
     note: row.order.note,
     status: buildStatusSummary(row),
-    ...getActionFlags(row.currentStatus, row.deletedAt),
+    ...getActionFlags(
+      row.currentStatus,
+      row.deletedAt,
+      row.order.inHouseStatus,
+      row.lastStatusSyncedAt,
+    ),
   };
 }
 

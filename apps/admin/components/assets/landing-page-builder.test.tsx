@@ -165,6 +165,29 @@ describe('LandingPageBuilder', () => {
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
     fireEvent(window, new Event('beforeunload', { cancelable: true }));
   });
+  it.each(['Product hero', 'Final action'])(
+    'can remove a saved extra %s while retaining the last required block',
+    async (label) => {
+      const user = userEvent.setup();
+      const type = label === 'Product hero' ? 'product-hero' : 'final-cta';
+      const source = page.document.blocks.find((block) => block.type === type)!;
+      renderBuilder({
+        ...page,
+        document: {
+          ...page.document,
+          blocks: [...page.document.blocks, { ...source, id: `${source.id}-saved-copy` }],
+        },
+      });
+      const menus = screen.getAllByRole('button', { name: `${label} · More` });
+      expect(menus).toHaveLength(2);
+      await user.click(menus[1]!);
+      await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+      expect(screen.getAllByRole('button', { name: `${label} · More` })).toHaveLength(1);
+      await user.click(screen.getByRole('button', { name: `${label} · More` }));
+      expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    },
+  );
+
   it('recovers incomplete edits after leaving and returning to the editor', async () => {
     const user = userEvent.setup();
     const first = renderBuilder();

@@ -359,6 +359,7 @@ export function StructuredBlockEditor({
             <select
               className="h-10 rounded-md border border-input bg-background px-3"
               value={block.variant}
+              aria-label={copy.variant}
               onChange={(event) => patch('variant', event.target.value)}
             >
               {variants[block.type].map((value) => (
@@ -371,6 +372,7 @@ export function StructuredBlockEditor({
             <select
               className="h-10 rounded-md border border-input bg-background px-3"
               value={block.surface}
+              aria-label={copy.surface}
               onChange={(event) => patch('surface', event.target.value)}
             >
               {['plain', 'white', 'soft', 'dark', 'accent'].map((value) => (
@@ -383,6 +385,7 @@ export function StructuredBlockEditor({
             <select
               className="h-10 rounded-md border border-input bg-background px-3"
               value={block.width}
+              aria-label={copy.width}
               onChange={(event) => patch('width', event.target.value)}
             >
               {['narrow', 'wide', 'full'].map((value) => (

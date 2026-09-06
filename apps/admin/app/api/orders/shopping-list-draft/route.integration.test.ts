@@ -347,24 +347,40 @@ describe('app/api/orders/shopping-list-draft/route', () => {
     );
   });
 
-  it('resets edits by scope without deleting allocation history', async () => {
-    const setMock = vi.fn(() => ({
-      where: () => ({ returning: async () => [draftRow({ revision: 1 })] }),
-    }));
-    const tx = {
-      select: () => ({ from: () => ({ where: () => ({ for: async () => [draftRow()] }) }) }),
-      update: () => ({ set: setMock }),
-    };
-    getDbMock.mockReturnValue({
-      transaction: async (callback: (value: typeof tx) => unknown) => callback(tx),
-    });
-    const response = await DELETE(
-      new NextRequest(
-        'http://localhost/api/orders/shopping-list-draft?sourceMode=selected&orderIds=32&orderIds=31&revision=0',
-      ),
-    );
-    expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ revision: 1 }));
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true, draft: { revision: 1 } });
+  it.each([undefined, ''])(
+    'resets a query-based DELETE with body %s without deleting allocation history',
+    async (body) => {
+      const setMock = vi.fn(() => ({
+        where: () => ({ returning: async () => [draftRow({ revision: 1 })] }),
+      }));
+      const tx = {
+        select: () => ({ from: () => ({ where: () => ({ for: async () => [draftRow()] }) }) }),
+        update: () => ({ set: setMock }),
+      };
+      getDbMock.mockReturnValue({
+        transaction: async (callback: (value: typeof tx) => unknown) => callback(tx),
+      });
+      const response = await DELETE(
+        new NextRequest(
+          'http://localhost/api/orders/shopping-list-draft?sourceMode=selected&orderIds=32&orderIds=31&revision=0',
+          { method: 'DELETE', body },
+        ),
+      );
+      expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ revision: 1 }));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, draft: { revision: 1 } });
+    },
+  );
+  it('does not fall back to query parameters for malformed or null JSON', async () => {
+    for (const body of ['{bad', 'null', '{}']) {
+      const response = await DELETE(
+        new NextRequest(
+          'http://localhost/api/orders/shopping-list-draft?sourceMode=selected&orderIds=31&revision=0',
+          { method: 'DELETE', body },
+        ),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(getDbMock).not.toHaveBeenCalled();
   });
 });

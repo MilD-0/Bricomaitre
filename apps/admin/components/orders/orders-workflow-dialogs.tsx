@@ -142,7 +142,7 @@ export function ShoppingListWorkspaceDialog({
         </DialogHeader>
 
         {state ? (
-          <>
+          <fieldset disabled={inventoryPending} className="contents">
             <div className="shrink-0 border-b border-border/60 px-4 py-3">
               <div className="flex items-center justify-end gap-2">
                 <SplitActionButton
@@ -155,6 +155,7 @@ export function ShoppingListWorkspaceDialog({
                       ? [
                           {
                             key: 'review-stock',
+                            disabled: inventoryPending,
                             label: reviewInventoryLabel ?? '',
                             onSelect: onReviewInventory,
                           },
@@ -162,11 +163,13 @@ export function ShoppingListWorkspaceDialog({
                       : []),
                     {
                       key: 'refresh',
+                      disabled: inventoryPending,
                       label: t('ordersManager.shoppingList.refresh'),
                       onSelect: onRefresh,
                     },
                     {
                       key: 'reset',
+                      disabled: inventoryPending,
                       label: t('ordersManager.shoppingList.reset'),
                       onSelect: onReset,
                     },
@@ -418,7 +421,7 @@ export function ShoppingListWorkspaceDialog({
                 ))}
               </section>
             </div>
-          </>
+          </fieldset>
         ) : null}
       </DialogContent>
     </Dialog>

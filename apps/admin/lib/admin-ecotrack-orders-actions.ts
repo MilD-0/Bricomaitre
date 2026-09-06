@@ -1,4 +1,5 @@
 import { getDb } from '@bric/db/client';
+import { captureAdminException } from './sentry';
 import {
   addEcotrackMaj as addEcotrackMajUpstream,
   deleteEcotrackOrder,
@@ -63,7 +64,14 @@ async function loadActionableShipment(orderId: number, flag: ActionFlag, actor: 
   await ensureFreshShipmentRow(db, row, { includeMaj: false, includeTracking: false, actor });
   const fresh = await loadShipmentRowByOrderId(db, orderId);
   if (!fresh) return null;
-  if (!getActionFlags(fresh.currentStatus, fresh.deletedAt)[flag])
+  if (
+    !getActionFlags(
+      fresh.currentStatus,
+      fresh.deletedAt,
+      fresh.order.inHouseStatus,
+      fresh.lastStatusSyncedAt,
+    )[flag]
+  )
     throw new Error('This carrier action is no longer available. Refresh the shipment.');
   return fresh;
 }
@@ -100,6 +108,23 @@ async function executeCarrierCommand(
   await applySavedEcotrackMutation(db, saved);
   if (kind === 'delete') return null;
   const current = await loadShipmentRowByOrderId(db, row.order.id);
+  if (current && (kind === 'dispatch' || kind === 'return')) {
+    try {
+      return await ensureFreshShipmentRow(db, current, {
+        includeMaj: false,
+        includeTracking: false,
+        actor,
+      });
+    } catch (error) {
+      // The mutation already succeeded. A failed status read must not invite a
+      // second carrier mutation; return the accepted local state as stale.
+      captureAdminException(error, {
+        requestId: saved.id,
+        operation: 'carrier-status-after-mutation',
+        context: { orderId: row.order.id, kind },
+      });
+    }
+  }
   return current ? buildEcotrackOrderDetailFromRow(db, current) : null;
 }
 

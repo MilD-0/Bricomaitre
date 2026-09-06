@@ -18,6 +18,7 @@ export function SidePanel({
   footer,
   className,
   closeLabel,
+  dismissible = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -27,12 +28,16 @@ export function SidePanel({
   footer?: React.ReactNode;
   className?: string;
   closeLabel: string;
+  dismissible?: boolean;
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
   const descriptionId = React.useId();
 
-  const mounted = useModal(open, contentRef, onOpenChange);
+  const changeOpen = (nextOpen: boolean) => {
+    if (nextOpen || dismissible) onOpenChange(nextOpen);
+  };
+  const mounted = useModal(open, contentRef, changeOpen);
 
   if (!mounted) return null;
 
@@ -50,7 +55,7 @@ export function SidePanel({
             className="absolute inset-0 cursor-default"
             onPointerDown={(event) => {
               event.preventDefault();
-              onOpenChange(false);
+              changeOpen(false);
             }}
           />
           <motion.div
@@ -86,8 +91,9 @@ export function SidePanel({
               </div>
               <button
                 type="button"
-                onClick={() => onOpenChange(false)}
-                className="grid size-9 shrink-0 place-items-center rounded-[var(--shape-radius-control)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/20"
+                onClick={() => changeOpen(false)}
+                disabled={!dismissible}
+                className="grid size-9 shrink-0 place-items-center rounded-[var(--shape-radius-control)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/20 disabled:pointer-events-none disabled:opacity-50"
                 aria-label={closeLabel}
               >
                 <X className="size-4" aria-hidden="true" />
