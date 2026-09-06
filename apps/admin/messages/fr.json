@@ -572,6 +572,9 @@
     "administration": "Vue d’ensemble de l’administration et historique des actions."
   },
   "aiChat": {
+    "retryLoad": "Réessayer",
+    "conversationLoadError": "Impossible de charger cette conversation. Réessayez pour retrouver ses messages.",
+    "historyLoadError": "Impossible d’actualiser les conversations ou les tâches en arrière-plan.",
     "autoAccept": "Appliquer automatiquement les propositions générées",
     "open": "Assistant IA",
     "close": "Fermer l’assistant IA",

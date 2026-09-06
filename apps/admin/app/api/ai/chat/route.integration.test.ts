@@ -44,6 +44,9 @@ vi.mock('ai', async (importOriginal) => ({
 vi.mock('@bric/db/client', () => ({
   hasDb: () => mocks.hasDb,
   getDb: () => ({
+    async transaction<T>(operation: (tx: unknown) => Promise<T>): Promise<T> {
+      return operation(this);
+    },
     select: () => {
       const rows = mocks.selectResults.shift() ?? [];
       return {

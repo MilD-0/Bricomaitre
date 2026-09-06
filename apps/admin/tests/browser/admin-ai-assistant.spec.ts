@@ -434,4 +434,59 @@ for (const [locale, messages] of [
       fullPage: true,
     });
   });
+  test(`${locale} restores a failed conversation load without losing the draft`, async ({
+    page,
+  }, testInfo) => {
+    const copy = messages.aiChat;
+    let attempts = 0;
+    const conversation = {
+      id: 44,
+      sessionKey: '0afc0dac-dc87-40b0-b659-b83170a11242',
+      title: 'Saved review',
+    };
+    await page.route('**/api/ai/conversations**', (route) => {
+      if (new URL(route.request().url()).pathname.endsWith('/44')) {
+        if (++attempts === 1)
+          return route.fulfill({ status: 503, json: { error: 'Temporarily unavailable' } });
+        return route.fulfill({
+          json: {
+            messages: [
+              {
+                role: 'assistant',
+                content: locale === 'fr' ? 'Conversation restaurée.' : 'تمت استعادة المحادثة.',
+              },
+            ],
+          },
+        });
+      }
+      return route.fulfill({ json: { conversations: [conversation] } });
+    });
+    await page.route('**/api/ai/history', (route) => route.fulfill({ json: { jobs: [] } }));
+    await page.goto(`/${locale}/orders`);
+    await openHydratedAssistant(page, copy);
+    await expect(page.getByText(copy.conversationLoadError)).toBeVisible();
+    const composer = page.getByRole('textbox', { name: copy.placeholder });
+    const draft = locale === 'fr' ? 'Vérifier les commandes en attente' : 'تحقق من الطلبات المعلقة';
+    await composer.fill(draft);
+    await expect(page.getByRole('button', { name: copy.send, exact: true })).toBeDisabled();
+    await page.screenshot({
+      path: testInfo.outputPath(`chat-load-error-${locale}.png`),
+      fullPage: true,
+    });
+    await page.getByRole('button', { name: copy.retryLoad, exact: true }).click();
+    await expect(
+      page.getByText(locale === 'fr' ? 'Conversation restaurée.' : 'تمت استعادة المحادثة.'),
+    ).toBeVisible();
+    await expect(composer).toHaveValue(draft);
+    await expect(page.getByRole('button', { name: copy.send, exact: true })).toBeEnabled();
+    expect(
+      await page
+        .getByRole('dialog')
+        .evaluate((element) => element.scrollWidth - element.clientWidth),
+    ).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath(`chat-load-recovered-${locale}.png`),
+      fullPage: true,
+    });
+  });
 }

@@ -966,6 +966,107 @@ describe('AdminAiChat', () => {
     expect(screen.queryByText('aiChat.error')).not.toBeInTheDocument();
   });
 
+  it.each(['new', 'saved'])(
+    'detaches an old stream when navigating to a %s chat',
+    async (destination) => {
+      const conversations = [
+        { id: 1, sessionKey: 'ef9498fb-5c5a-441c-99f6-0d695544cf38', title: 'First chat' },
+        { id: 2, sessionKey: 'd222fcb4-af58-47fc-867f-36cda4b815ad', title: 'Second chat' },
+      ];
+      let controller: ReadableStreamDefaultController<Uint8Array>;
+      let signal: AbortSignal | undefined;
+      let turn = 0;
+      const encode = (event: unknown) => new TextEncoder().encode(JSON.stringify(event) + '\n');
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url === '/api/ai/conversations') return Response.json({ conversations });
+        if (url === '/api/ai/conversations/1')
+          return Response.json({
+            messages: [{ role: 'assistant', content: 'First saved answer' }],
+          });
+        if (url === '/api/ai/conversations/2')
+          return Response.json({
+            messages: [{ role: 'assistant', content: 'Second saved answer' }],
+          });
+        if (url === '/api/ai/history') return Response.json({ jobs: [] });
+        if (url === '/api/ai/chat' && ++turn === 1) {
+          signal = init?.signal as AbortSignal;
+          return new Response(
+            new ReadableStream({
+              start(value) {
+                controller = value;
+                value.enqueue(encode({ type: 'text-delta', delta: 'Old partial answer' }));
+              },
+            }),
+            { headers: { 'content-type': 'application/x-ndjson' } },
+          );
+        }
+        if (url === '/api/ai/chat')
+          return chatResponse({
+            message: 'New turn answer',
+            toolResults: [],
+            conversation: conversations[1],
+          });
+        return Response.json({});
+      });
+      const user = userEvent.setup();
+      render(<AdminAiChat />);
+      await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+      await screen.findByText('First saved answer');
+      await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'First request');
+      await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+      await screen.findByText('Old partial answer');
+      await user.click(
+        screen.getByRole('button', {
+          name: destination === 'new' ? 'aiChat.newChat' : 'Second chat',
+        }),
+      );
+      if (destination === 'saved') await screen.findByText('Second saved answer');
+      expect(signal?.aborted).toBe(true);
+      await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'New draft');
+      await act(async () => {
+        controller!.enqueue(encode({ type: 'text-delta', delta: ' stale tail' }));
+        controller!.enqueue(
+          encode({ type: 'result', toolResults: [], conversation: conversations[0] }),
+        );
+        controller!.close();
+      });
+      expect(screen.queryByText(/Old partial answer|stale tail/)).not.toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'aiChat.placeholder' })).toHaveValue('New draft');
+      await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+      await screen.findByText('New turn answer');
+      const calls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url) === '/api/ai/chat');
+      const key = JSON.parse(String(calls[1]?.[1]?.body)).conversationKey;
+      if (destination === 'saved') expect(key).toBe(conversations[1]!.sessionKey);
+      else expect(key).not.toBe(conversations[0]!.sessionKey);
+    },
+  );
+
+  it('keeps a completed answer successful when sidebar refresh fails', async () => {
+    let completed = false;
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/ai/chat') completed = true;
+      if (completed && (url === '/api/ai/conversations' || url === '/api/ai/history'))
+        throw new Error('Refresh unavailable');
+      return originalFetch(input, init);
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await screen.findByText('aiChat.noChats');
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/ai/history', expect.anything()));
+    await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'Answer this');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+    await screen.findByText('A reviewable proposal is ready.');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'aiChat.send' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('aiChat.interrupted')).not.toBeInTheDocument();
+    expect(screen.queryByText('aiChat.error')).not.toBeInTheDocument();
+  });
+
   it('marks partial provider output as interrupted instead of presenting it as complete', async () => {
     const mutationListener = vi.fn();
     window.addEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
@@ -1304,6 +1405,59 @@ describe('AdminAiChat', () => {
     );
     await waitFor(() => expect(screen.queryByText('Stale first answer')).not.toBeInTheDocument());
     expect(screen.getByText('Second chat answer')).toBeInTheDocument();
+  });
+
+  it('retries a failed conversation load without losing a draft', async () => {
+    let attempts = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations')
+        return Response.json({
+          conversations: [
+            { id: 44, sessionKey: '0afc0dac-dc87-40b0-b659-b83170a11242', title: 'Saved chat' },
+          ],
+        });
+      if (url === '/api/ai/conversations/44') {
+        if (++attempts === 1) throw new Error('Network unavailable');
+        return Response.json({
+          messages: [{ role: 'assistant', content: 'Recovered saved answer' }],
+        });
+      }
+      return Response.json({ jobs: [] });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await screen.findByText('aiChat.conversationLoadError');
+    const composer = screen.getByRole('textbox', { name: 'aiChat.placeholder' });
+    await user.type(composer, 'Unsent follow-up');
+    expect(screen.getByRole('button', { name: 'aiChat.send' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'aiChat.retryLoad' }));
+    await screen.findByText('Recovered saved answer');
+    expect(composer).toHaveValue('Unsent follow-up');
+    expect(screen.getByRole('button', { name: 'aiChat.send' })).toBeEnabled();
+  });
+
+  it('offers a working sidebar retry when the saved chat list cannot load', async () => {
+    let attempts = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input) === '/api/ai/conversations') {
+        if (++attempts === 1) throw new Error('Network unavailable');
+        return Response.json({
+          conversations: [
+            { id: 44, sessionKey: '0afc0dac-dc87-40b0-b659-b83170a11242', title: 'Recovered chat' },
+          ],
+        });
+      }
+      return Response.json({ jobs: [] });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await screen.findByText('aiChat.historyLoadError');
+    await user.click(screen.getByRole('button', { name: 'aiChat.retryLoad' }));
+    await screen.findByRole('button', { name: 'Recovered chat' });
+    expect(screen.queryByText('aiChat.historyLoadError')).not.toBeInTheDocument();
   });
 
   it('shows a sidebar status while saved chats are loading', async () => {

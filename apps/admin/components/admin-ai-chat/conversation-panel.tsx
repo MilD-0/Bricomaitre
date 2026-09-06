@@ -21,6 +21,8 @@ import {
 type ConversationPanelProps = {
   visible: boolean;
   loading: boolean;
+  loadError: boolean;
+  onRetryLoad: () => void;
   messages: ChatMessage[];
   pending: boolean;
   receivingText: boolean;
@@ -51,6 +53,8 @@ type ConversationPanelProps = {
 export function ConversationPanel({
   visible,
   loading,
+  loadError,
+  onRetryLoad,
   messages,
   pending,
   receivingText,
@@ -87,6 +91,13 @@ export function ConversationPanel({
               <Spinner className="size-4" />
               {t('aiChat.loadingMessages')}
             </span>
+          </div>
+        ) : loadError ? (
+          <div className="space-y-3 py-4 text-sm" role="alert">
+            <p>{t('aiChat.conversationLoadError')}</p>
+            <Button type="button" variant="outline" onClick={onRetryLoad}>
+              {t('aiChat.retryLoad')}
+            </Button>
           </div>
         ) : messages.length === 0 ? (
           <div className="mx-auto flex min-h-full max-w-xl items-center justify-center py-8 text-center">
@@ -300,7 +311,7 @@ export function ConversationPanel({
             <Button
               type="button"
               className="relative z-10 size-10 shrink-0 rounded-[var(--shape-radius-field)] p-0"
-              disabled={loading || !input.trim()}
+              disabled={loading || loadError || !input.trim()}
               onClick={onSend}
               aria-label={t('aiChat.send')}
             >

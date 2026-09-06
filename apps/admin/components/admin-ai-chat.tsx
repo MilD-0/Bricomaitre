@@ -67,6 +67,9 @@ export function AdminAiChat({
   const [receivingText, setReceivingText] = useState(false);
   const [activity, setActivity] = useState<AdminAiChatStatus | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
+  const [conversationLoadError, setConversationLoadError] = useState(false);
+  const [listLoadError, setListLoadError] = useState(false);
+  const [jobsLoadError, setJobsLoadError] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [autoAcceptProposals, setAutoAcceptProposals] = useState(false);
   const [model, setModel] = useState<AdminAiModelId>(ADMIN_AI_DEFAULT_MODEL);
@@ -89,6 +92,7 @@ export function AdminAiChat({
   const conversationKeyRef = useRef<string | null>(null);
   const activeConversationRef = useRef<ConversationSummary | null>(null);
   const conversationRequestRef = useRef(0);
+  const conversationListRequestRef = useRef(0);
   const responseAbortRef = useRef<AbortController | null>(null);
   const terminalJobIdsRef = useRef(new Set<string>());
   const refreshedTerminalJobIdsRef = useRef(new Set<string>());
@@ -107,28 +111,43 @@ export function AdminAiChat({
     const frame = window.requestAnimationFrame(() => composerRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
-  const selectConversation = useCallback(async (conversation: ConversationSummary) => {
-    const requestId = ++conversationRequestRef.current;
-    activeConversationRef.current = conversation;
-    conversationKeyRef.current = conversation.sessionKey;
-    setSelectedConversationId(conversation.id);
-    setLoadingConversation(true);
-    setMessages([]);
-    try {
-      const response = await fetch(`/api/ai/conversations/${conversation.id}`, {
-        cache: 'no-store',
-      });
-      if (!response.ok || requestId !== conversationRequestRef.current) return;
-      const data = (await response.json()) as {
-        messages: Array<ChatMessage & { toolResults?: unknown }>;
-      };
-      if (requestId !== conversationRequestRef.current) return;
-      setMessages(data.messages.map(hydrateChatMessage));
-      setInput('');
-    } finally {
-      if (requestId === conversationRequestRef.current) setLoadingConversation(false);
-    }
+  const leaveStreamingTurn = useCallback(() => {
+    responseAbortRef.current?.abort();
+    responseAbortRef.current = null;
+    setPending(false);
+    setReceivingText(false);
+    setActivity(null);
   }, []);
+  useEffect(() => () => responseAbortRef.current?.abort(), []);
+  const selectConversation = useCallback(
+    async (conversation: ConversationSummary) => {
+      leaveStreamingTurn();
+      const requestId = ++conversationRequestRef.current;
+      activeConversationRef.current = conversation;
+      conversationKeyRef.current = conversation.sessionKey;
+      setSelectedConversationId(conversation.id);
+      setLoadingConversation(true);
+      setConversationLoadError(false);
+      setMessages([]);
+      try {
+        const response = await fetch(`/api/ai/conversations/${conversation.id}`, {
+          cache: 'no-store',
+        });
+        if (requestId !== conversationRequestRef.current) return;
+        if (!response.ok) throw new Error('Conversation load failed');
+        const data = (await response.json()) as {
+          messages: Array<ChatMessage & { toolResults?: unknown }>;
+        };
+        if (requestId !== conversationRequestRef.current) return;
+        setMessages(data.messages.map(hydrateChatMessage));
+      } catch {
+        if (requestId === conversationRequestRef.current) setConversationLoadError(true);
+      } finally {
+        if (requestId === conversationRequestRef.current) setLoadingConversation(false);
+      }
+    },
+    [leaveStreamingTurn],
+  );
   const reconcileTerminalJobs = useCallback(
     async (conversation: ConversationSummary, terminalJobIds: string[]) => {
       const delays = [0, 250, 500, 1_000, 2_000];
@@ -182,45 +201,64 @@ export function AdminAiChat({
   );
   const loadConversations = useCallback(
     async (selectLatest = false) => {
+      const requestId = ++conversationListRequestRef.current;
+      const selectionVersion = conversationRequestRef.current;
       setLoadingConversations(true);
+      setListLoadError(false);
       try {
         const query = deferredConversationSearch
           ? `?q=${encodeURIComponent(deferredConversationSearch)}`
           : '';
         const response = await fetch(`/api/ai/conversations${query}`, { cache: 'no-store' });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error('Conversation list load failed');
         const data = (await response.json()) as { conversations: ConversationSummary[] };
+        if (requestId !== conversationListRequestRef.current) return;
         setConversations(data.conversations);
-        if (selectLatest && activeConversationRef.current === null && data.conversations[0]) {
+        if (
+          selectLatest &&
+          selectionVersion === conversationRequestRef.current &&
+          activeConversationRef.current === null &&
+          data.conversations[0]
+        ) {
           void selectConversation(data.conversations[0]);
         }
+      } catch {
+        if (requestId === conversationListRequestRef.current) setListLoadError(true);
       } finally {
-        setLoadingConversations(false);
+        if (requestId === conversationListRequestRef.current) setLoadingConversations(false);
       }
     },
     [deferredConversationSearch, selectConversation],
   );
   const loadAiHistory = useCallback(async () => {
-    const response = await fetch('/api/ai/history', { cache: 'no-store' });
-    if (!response.ok) return;
-    const data = (await response.json()) as { jobs?: AiJob[] };
-    const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
-    setJobs(nextJobs);
-    const terminalJobs = nextJobs.filter((job) =>
-      ['completed', 'cancelled', 'failed'].includes(job.status),
-    );
-    const activeConversation = activeConversationRef.current;
-    const newTerminalJobIds = terminalJobs
-      .filter(
-        (job) =>
-          !terminalJobIdsRef.current.has(job.id) &&
-          activeConversation !== null &&
-          job.conversationId === activeConversation.id,
-      )
-      .map((job) => job.id);
-    terminalJobIdsRef.current = new Set(terminalJobs.map((job) => job.id));
-    if (newTerminalJobIds.length > 0 && activeConversation) {
-      void reconcileTerminalJobs(activeConversation, newTerminalJobIds);
+    try {
+      const response = await fetch('/api/ai/history', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Job history load failed');
+      setJobsLoadError(false);
+      const data = (await response.json()) as { jobs?: AiJob[] };
+      const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
+      setJobs(nextJobs);
+      const terminalJobs = nextJobs.filter((job) =>
+        ['completed', 'cancelled', 'failed'].includes(job.status),
+      );
+      const activeConversation = activeConversationRef.current;
+      const newTerminalJobIds = terminalJobs
+        .filter(
+          (job) =>
+            !terminalJobIdsRef.current.has(job.id) &&
+            activeConversation !== null &&
+            job.conversationId === activeConversation.id,
+        )
+        .map((job) => job.id);
+      terminalJobIdsRef.current = new Set(terminalJobs.map((job) => job.id));
+      if (newTerminalJobIds.length > 0 && activeConversation) {
+        void reconcileTerminalJobs(activeConversation, newTerminalJobIds).catch(() => {
+          newTerminalJobIds.forEach((id) => terminalJobIdsRef.current.delete(id));
+          setJobsLoadError(true);
+        });
+      }
+    } catch {
+      setJobsLoadError(true);
     }
   }, [reconcileTerminalJobs]);
 
@@ -269,11 +307,13 @@ export function AdminAiChat({
   }, [messages, pending]);
 
   function newChat() {
+    leaveStreamingTurn();
     conversationRequestRef.current += 1;
     activeConversationRef.current = null;
     conversationKeyRef.current = crypto.randomUUID();
     setSelectedConversationId(null);
     setLoadingConversation(false);
+    setConversationLoadError(false);
     setMessages([]);
     setInput('');
   }
@@ -414,7 +454,7 @@ export function AdminAiChat({
 
   async function send() {
     const message = input.trim();
-    if (!message || pending || loadingConversation) return;
+    if (!message || pending || loadingConversation || conversationLoadError) return;
     conversationKeyRef.current ??= crypto.randomUUID();
     setMessages((items) => [...items, { role: 'user', content: message }]);
     setInput('');
@@ -449,9 +489,11 @@ export function AdminAiChat({
       });
       await consumeAdminAiChatResponse(response, {
         onStatus(status) {
+          if (responseAbortRef.current !== abortController) return;
           setActivity(status);
         },
         onTextDelta(delta) {
+          if (responseAbortRef.current !== abortController) return;
           receivedText = true;
           setReceivingText(true);
           setMessages((items) => {
@@ -466,6 +508,7 @@ export function AdminAiChat({
         onResult(data) {
           const presentation = presentationFromUnknown(data.toolResults);
           notifyAdminAiToolMutations(presentation.results);
+          if (responseAbortRef.current !== abortController) return;
           setMessages((items) => {
             const existing = items.findIndex((item) => item.id === assistantId);
             if (existing < 0)
@@ -499,10 +542,11 @@ export function AdminAiChat({
           notifyAdminAiToolMutations(presentationFromUnknown(error.toolResults).results);
         },
       });
-      await loadConversations();
-      await loadAiHistory();
+      if (responseAbortRef.current === abortController) {
+        void Promise.allSettled([loadConversations(), loadAiHistory()]);
+      }
     } catch {
-      if (!abortController.signal.aborted) {
+      if (!abortController.signal.aborted && responseAbortRef.current === abortController) {
         const presentation = presentationFromUnknown(failedToolResults);
         if (persistedFailure) {
           const failure = persistedFailure;
@@ -532,7 +576,7 @@ export function AdminAiChat({
           conversationKeyRef.current = failure.conversation.sessionKey;
           activeConversationRef.current = failure.conversation;
           setSelectedConversationId(failure.conversation.id);
-          await loadConversations();
+          void Promise.allSettled([loadConversations()]);
         } else if (receivedText) {
           setMessages((items) =>
             items.map((item) =>
@@ -558,10 +602,12 @@ export function AdminAiChat({
         }
       }
     } finally {
-      if (responseAbortRef.current === abortController) responseAbortRef.current = null;
-      setPending(false);
-      setReceivingText(false);
-      setActivity(null);
+      if (responseAbortRef.current === abortController) {
+        responseAbortRef.current = null;
+        setPending(false);
+        setReceivingText(false);
+        setActivity(null);
+      }
     }
   }
 
@@ -738,6 +784,11 @@ export function AdminAiChat({
             <ConversationPanel
               visible={mobilePanel === 'conversation'}
               loading={loadingConversation}
+              loadError={conversationLoadError}
+              onRetryLoad={() => {
+                const conversation = activeConversationRef.current;
+                if (conversation) void selectConversation(conversation);
+              }}
               messages={messages}
               pending={pending}
               receivingText={receivingText}
@@ -766,6 +817,10 @@ export function AdminAiChat({
               conversations={conversations}
               selectedConversationId={selectedConversationId}
               loading={loadingConversations}
+              loadError={listLoadError || jobsLoadError}
+              onRetryLoad={() => {
+                void Promise.allSettled([loadConversations(), loadAiHistory()]);
+              }}
               jobs={jobs}
               cancellingJobId={cancellingJobId}
               search={conversationSearch}
@@ -776,6 +831,7 @@ export function AdminAiChat({
               onSearchChange={setConversationSearch}
               onSelectConversation={(conversation) => {
                 setMobilePanel('conversation');
+                setInput('');
                 void selectConversation(conversation);
               }}
               onRenameConversation={renameConversation}

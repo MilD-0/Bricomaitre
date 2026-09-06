@@ -160,17 +160,34 @@ export async function POST(request: NextRequest) {
     const previousMessages = buildAdminAiConversationContext(previousRows);
     const effectiveTitle = previousMessages.length === 0 ? title : conversation.title || title;
 
-    await Promise.all([
-      db.insert(aiMessages).values({
+    await db.transaction(async (tx) => {
+      await tx.insert(aiMessages).values({
         conversationId: conversation.id,
         role: 'user',
         content: { text: parsed.data.message },
-      }),
-      db
+      });
+      await tx
         .update(aiConversations)
         .set({ title: effectiveTitle, updatedAt: now })
-        .where(eq(aiConversations.id, conversation.id)),
-    ]);
+        .where(eq(aiConversations.id, conversation.id));
+    });
+
+    const saveAssistantMessage = (content: (typeof aiMessages.$inferInsert)['content']) =>
+      db.transaction(async (tx) => {
+        const [message] = await tx
+          .insert(aiMessages)
+          .values({
+            conversationId: conversation.id,
+            role: 'assistant',
+            content,
+          })
+          .returning({ id: aiMessages.id });
+        await tx
+          .update(aiConversations)
+          .set({ updatedAt: new Date() })
+          .where(eq(aiConversations.id, conversation.id));
+        return message.id;
+      });
 
     try {
       const [run] = await db
@@ -231,22 +248,26 @@ export async function POST(request: NextRequest) {
       });
 
     const encoder = new TextEncoder();
+    let streamClosed = false;
     const responseStream = new ReadableStream<Uint8Array>({
       start(controller) {
+        const enqueue = (chunk: Uint8Array) => {
+          if (streamClosed) return;
+          try {
+            controller.enqueue(chunk);
+          } catch {
+            streamClosed = true;
+          }
+        };
         const write = (event: AdminAiChatStreamEvent) => {
-          controller.enqueue(
-            encoder.encode(`${JSON.stringify(adminAiChatStreamEventSchema.parse(event))}\n`),
-          );
+          enqueue(encoder.encode(`${JSON.stringify(adminAiChatStreamEventSchema.parse(event))}\n`));
         };
         // Keep reverse proxies from treating a long provider reasoning pass or
         // tool execution as an idle response. Empty lines are ignored by the
         // NDJSON client.
         const heartbeat = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode('\n'));
-          } catch {
-            clearInterval(heartbeat);
-          }
+          if (streamClosed) clearInterval(heartbeat);
+          else enqueue(encoder.encode('\n'));
         }, 15_000);
         write({ type: 'status', status: 'thinking' });
 
@@ -374,18 +395,7 @@ export async function POST(request: NextRequest) {
               write({ type: 'text-delta', delta: text });
             }
 
-            const [assistantMessage] = await db
-              .insert(aiMessages)
-              .values({
-                conversationId: conversation.id,
-                role: 'assistant',
-                content: { text, toolResults },
-              })
-              .returning({ id: aiMessages.id });
-            await db
-              .update(aiConversations)
-              .set({ updatedAt: new Date() })
-              .where(eq(aiConversations.id, conversation.id));
+            const assistantMessageId = await saveAssistantMessage({ text, toolResults });
 
             if (runId !== null) {
               const completedAt = new Date();
@@ -421,7 +431,7 @@ export async function POST(request: NextRequest) {
                 sessionKey: parsed.data.conversationKey,
                 title: effectiveTitle,
               },
-              messageId: assistantMessage.id,
+              messageId: assistantMessageId,
             });
           } catch (error) {
             const cancelled =
@@ -454,23 +464,11 @@ export async function POST(request: NextRequest) {
                   : adminAiReliableAnswerFailure(locale, toolResults.length > 0);
             let assistantMessageId: number | null = null;
             try {
-              const [assistantMessage] = await db
-                .insert(aiMessages)
-                .values({
-                  conversationId: conversation.id,
-                  role: 'assistant',
-                  content: {
-                    text: failureText,
-                    toolResults,
-                    outcome: { status: cancelled ? 'cancelled' : 'failed', errorCode },
-                  },
-                })
-                .returning({ id: aiMessages.id });
-              assistantMessageId = assistantMessage.id;
-              await db
-                .update(aiConversations)
-                .set({ updatedAt: completedAt })
-                .where(eq(aiConversations.id, conversation.id));
+              assistantMessageId = await saveAssistantMessage({
+                text: failureText,
+                toolResults,
+                outcome: { status: cancelled ? 'cancelled' : 'failed', errorCode },
+              });
             } catch {
               // The live error remains visible even if durable conversation storage is unavailable.
             }
@@ -527,9 +525,15 @@ export async function POST(request: NextRequest) {
             }
           } finally {
             clearInterval(heartbeat);
-            controller.close();
+            if (!streamClosed) {
+              streamClosed = true;
+              controller.close();
+            }
           }
         })();
+      },
+      cancel() {
+        streamClosed = true;
       },
     });
 

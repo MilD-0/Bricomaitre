@@ -43,6 +43,8 @@ export function ChatSidebar({
   conversations,
   selectedConversationId,
   loading,
+  loadError,
+  onRetryLoad,
   jobs,
   cancellingJobId,
   search,
@@ -58,6 +60,8 @@ export function ChatSidebar({
   conversations: ConversationSummary[];
   selectedConversationId: number | null;
   loading: boolean;
+  loadError: boolean;
+  onRetryLoad: () => void;
   jobs: AiJob[];
   cancellingJobId: string | null;
   search: string;
@@ -105,6 +109,14 @@ export function ChatSidebar({
           placeholder={t('aiChat.searchChats')}
         />
       </div>
+      {loadError ? (
+        <div role="alert" className="space-y-2 px-4 py-3 text-xs">
+          <p>{t('aiChat.historyLoadError')}</p>
+          <Button type="button" size="sm" variant="outline" onClick={onRetryLoad}>
+            {t('aiChat.retryLoad')}
+          </Button>
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3 sm:p-4">
         {loading ? (
           <div
