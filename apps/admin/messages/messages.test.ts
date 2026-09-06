@@ -1,3 +1,4 @@
+import { createTranslator } from 'next-intl';
 import { describe, expect, it } from 'vitest';
 
 import ar from './ar.json';
@@ -26,9 +27,25 @@ describe('admin message catalogs', () => {
   const catalogs = { en: flatten(en), fr: flatten(fr), ar: flatten(ar) };
   const canonicalKeys = [...catalogs.fr.keys()].sort();
 
-  it.each(Object.entries(catalogs))('%s has the canonical French key set', (_locale, catalog) => {
-    expect([...catalog.keys()].sort()).toEqual(canonicalKeys);
-  });
+  it.each(Object.entries({ en, fr, ar }))(
+    '%s has complete, valid messages for the formatter',
+    (locale, messages) => {
+      const catalog = flatten(messages);
+      expect([...catalog.keys()].sort()).toEqual(canonicalKeys);
+      const translate = createTranslator({
+        locale,
+        messages,
+        onError: (error) => {
+          throw error;
+        },
+      });
+      for (const [key, value] of catalog) {
+        expect(value.trim(), key).not.toBe('');
+        const values = Object.fromEntries(placeholders(value).map((name) => [name, 2]));
+        expect(() => translate(key as Parameters<typeof translate>[0], values), key).not.toThrow();
+      }
+    },
+  );
 
   it('uses the same interpolation parameters in every locale', () => {
     const mismatches = canonicalKeys.flatMap((key) => {

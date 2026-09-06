@@ -104,16 +104,6 @@ describe('AppShell', () => {
       if (key === 'assetsManager.groupsTitle') return 'Featured product groups';
       if (key === 'assetsManager.cardsTitle') return 'Cards';
       if (key === 'nav.landingPages') return 'Landing pages';
-      if (key === 'statsDashboard.tabs.overview') return 'Overview';
-      if (key === 'statsDashboard.tabs.landingPages') return 'Landing stats';
-      if (key === 'statsDashboard.tabs.aiAssistants') return 'AI assistants';
-      if (key === 'statsDashboard.tabs.customers') return 'Customers';
-      if (key === 'statsDashboard.tabs.products') return 'Products';
-      if (key === 'statsDashboard.tabs.geography') return 'Geography';
-      if (key === 'statsDashboard.tabs.time') return 'Time';
-      if (key === 'statsDashboard.tabs.metaAds') return 'Meta ads';
-      if (key === 'statsDashboard.manualOrders.sectionTitle') return 'Manual orders';
-      if (key === 'statsDashboard.imports.title') return 'Import spreadsheet';
       if (key === 'nav.statsOverview') return 'Overview';
       if (key === 'nav.statsMoney') return 'Money';
       if (key === 'nav.statsAcquisition') return 'Acquisition';

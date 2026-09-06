@@ -16,12 +16,4 @@ describe('admin permission translations', () => {
       expect(messages.settings.permissionLabels[permission].trim(), permission).not.toBe('');
     }
   });
-
-  it.each([
-    ['en', en],
-    ['fr', fr],
-    ['ar', ar],
-  ] as const)('defines shared workspace actions in %s', (_locale, messages) => {
-    expect(messages.actions.close.trim()).not.toBe('');
-  });
 });
