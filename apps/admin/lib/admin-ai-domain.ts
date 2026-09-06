@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { searchAssetProductOptions } from './admin-assets-data';
-import { loadOrderDetail, loadOrdersPageData } from './admin-orders-data';
+import { loadOrderRecordsByIds, loadOrdersPageData } from './admin-orders-data';
 
 export const adminAiProductLookupSchema = z
   .object({
@@ -24,7 +24,7 @@ export async function findAdminProducts(input: z.input<typeof adminAiProductLook
   });
 }
 
-function assistantOrder(order: NonNullable<Awaited<ReturnType<typeof loadOrderDetail>>>) {
+function assistantOrder(order: Awaited<ReturnType<typeof loadOrderRecordsByIds>>[number]) {
   return {
     id: order.id,
     publicToken: order.publicToken,
@@ -94,11 +94,12 @@ export async function inspectAdminOrders(input: {
 }) {
   const orderIds = [...new Set(input.orderIds ?? [])].slice(0, 50);
   if (orderIds.length > 0) {
-    const orders = await Promise.all(orderIds.map((id) => loadOrderDetail(id)));
+    const orders = await loadOrderRecordsByIds(orderIds, undefined, { includeHistory: true });
+    const foundIds = new Set(orders.map((order) => order.id));
     return {
-      items: orders.flatMap((order) => (order ? [assistantOrder(order)] : [])),
+      items: orders.map(assistantOrder),
       requestedIds: orderIds,
-      missingIds: orderIds.filter((id, index) => orders[index] === null),
+      missingIds: orderIds.filter((id) => !foundIds.has(id)),
     };
   }
 

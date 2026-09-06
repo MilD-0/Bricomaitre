@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  loadOrderDetail: vi.fn(),
+  loadOrderRecordsByIds: vi.fn(),
   loadOrdersPageData: vi.fn(),
   searchProducts: vi.fn(),
 }));
 
 vi.mock('./admin-orders-data', () => ({
-  loadOrderDetail: mocks.loadOrderDetail,
+  loadOrderRecordsByIds: mocks.loadOrderRecordsByIds,
   loadOrdersPageData: mocks.loadOrdersPageData,
 }));
 vi.mock('./admin-assets-data', () => ({
@@ -43,48 +43,54 @@ describe('shared Admin AI source adapters', () => {
   });
 
   it('preserves complete operational order evidence for exact inspection', async () => {
-    mocks.loadOrderDetail.mockResolvedValue({
-      id: 42,
-      createdAt: '2026-08-20T10:00:00.000Z',
-      updatedAt: '2026-08-21T10:00:00.000Z',
-      inHouseStatus: 2,
-      noAnswerCount: 1,
-      delivery: 0,
-      state: 16,
-      productSubtotal: 4_000,
-      deliveryFee: 500,
-      totalAmount: 4_500,
-      firstName: 'Private',
-      lastName: 'Customer',
-      fullName: 'Private Customer',
-      email: 'customer@example.com',
-      phoneNumber1: '0555000000',
-      phoneNumber2: null,
-      homeAddress: 'Private address',
-      note: 'Private note',
-      orderProducts: [
-        {
-          productId: 9,
-          title: 'Drill',
-          quantity: 2,
-          unitPrice: 2_000,
-          lineTotal: 4_000,
-          missing: false,
-          rawValue: 'private raw value',
-        },
-      ],
-      statusHistory: [
-        {
-          status: 2,
-          noAnswerCount: 1,
-          changedAt: '2026-08-21T10:00:00.000Z',
-          changedBy: 'staff@example.com',
-          changedByName: 'Staff Member',
-        },
-      ],
-    });
+    mocks.loadOrderRecordsByIds.mockResolvedValue([
+      {
+        id: 42,
+        createdAt: '2026-08-20T10:00:00.000Z',
+        updatedAt: '2026-08-21T10:00:00.000Z',
+        inHouseStatus: 2,
+        noAnswerCount: 1,
+        delivery: 0,
+        state: 16,
+        productSubtotal: 4_000,
+        deliveryFee: 500,
+        totalAmount: 4_500,
+        firstName: 'Private',
+        lastName: 'Customer',
+        fullName: 'Private Customer',
+        email: 'customer@example.com',
+        phoneNumber1: '0555000000',
+        phoneNumber2: null,
+        homeAddress: 'Private address',
+        note: 'Private note',
+        orderProducts: [
+          {
+            productId: 9,
+            title: 'Drill',
+            quantity: 2,
+            unitPrice: 2_000,
+            lineTotal: 4_000,
+            missing: false,
+            rawValue: 'private raw value',
+          },
+        ],
+        statusHistory: [
+          {
+            status: 2,
+            noAnswerCount: 1,
+            changedAt: '2026-08-21T10:00:00.000Z',
+            changedBy: 'staff@example.com',
+            changedByName: 'Staff Member',
+          },
+        ],
+      },
+    ]);
 
-    const result = await inspectAdminOrders({ orderIds: [42] });
+    const result = await inspectAdminOrders({ orderIds: [42, 43, 42] });
+    expect(mocks.loadOrderRecordsByIds).toHaveBeenCalledWith([42, 43], undefined, {
+      includeHistory: true,
+    });
+    expect(result.missingIds).toEqual([43]);
     expect(result.items[0]).toMatchObject({
       id: 42,
       status: 2,

@@ -440,21 +440,7 @@ export async function loadOrderDetail(
     return null;
   }
 
-  db ??= getDb();
-  const row = await db.query.orders.findFirst({ where: eq(orders.id, id) });
-
-  if (!row) {
-    return null;
-  }
-
-  const historyRows = await db
-    .select()
-    .from(orderStatusHistory)
-    .where(eq(orderStatusHistory.orderId, id))
-    .orderBy(asc(orderStatusHistory.changedAt));
-  const productLookup = await getOrderProductLookup(db, [row]);
-
-  return toOrderRecord(row, buildOrderHistory(historyRows), productLookup);
+  return (await loadOrderRecordsByIds([id], db ?? getDb(), { includeHistory: true }))[0] ?? null;
 }
 
 export async function loadConfirmedOrderIds(
@@ -478,10 +464,11 @@ export async function loadConfirmedOrderIds(
   return rows.map(({ id }) => id);
 }
 
-/** Loads export records in bounded batches, preserving the caller's selection order. */
+/** Loads canonical records in bounded batches, preserving the caller's selection order. */
 export async function loadOrderRecordsByIds(
   ids: readonly number[],
   db = getDb(),
+  options: { includeHistory?: boolean } = {},
 ): Promise<OrderRecord[]> {
   const uniqueIds = [...new Set(ids)];
   const records = new Map<number, OrderRecord>();
@@ -490,8 +477,31 @@ export async function loadOrderRecordsByIds(
       .select()
       .from(orders)
       .where(inArray(orders.id, uniqueIds.slice(start, start + 500)));
+    const history =
+      options.includeHistory && rows.length > 0
+        ? await db
+            .select()
+            .from(orderStatusHistory)
+            .where(
+              inArray(
+                orderStatusHistory.orderId,
+                rows.map((row) => row.id),
+              ),
+            )
+            .orderBy(asc(orderStatusHistory.changedAt))
+        : [];
+    const historyByOrderId = new Map<number, typeof history>();
+    for (const entry of history) {
+      const entries = historyByOrderId.get(entry.orderId) ?? [];
+      entries.push(entry);
+      historyByOrderId.set(entry.orderId, entries);
+    }
     const lookup = await getOrderProductLookup(db, rows);
-    for (const row of rows) records.set(row.id, toOrderRecord(row, [], lookup));
+    for (const row of rows)
+      records.set(
+        row.id,
+        toOrderRecord(row, buildOrderHistory(historyByOrderId.get(row.id) ?? []), lookup),
+      );
   }
   return uniqueIds.flatMap((id) => {
     const record = records.get(id);

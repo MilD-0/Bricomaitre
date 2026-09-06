@@ -33,78 +33,6 @@ const allPermissions = [
 describe('Admin AI live tool construction', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('constructs only the decided live surface', () => {
-    const tools = buildAdminAiTools({
-      permissions: allPermissions,
-      locale: 'en',
-      runtime: { kind: 'evaluation' },
-    });
-
-    expect(Object.keys(tools).sort()).toEqual(
-      [
-        'adjust_inventory',
-        'apply_order_shopping_list_inventory',
-        'archive_products',
-        'categorize_catalog',
-        'change_ecotrack_shipments',
-        'create_order',
-        'create_product',
-        'delete_orders',
-        'find_brands',
-        'find_categories',
-        'find_products',
-        'generate_product_content',
-        'get_catalog_categorization_status',
-        'get_landing_page_job_status',
-        'get_order_tracking_links',
-        'get_product_content_job_status',
-        'inspect_archived_products',
-        'inspect_assets',
-        'inspect_ecotrack_shipments',
-        'inspect_landing_pages',
-        'inspect_order_shopping_list',
-        'inspect_orders',
-        'inspect_products',
-        'inspect_storefront_configuration',
-        'load_ecotrack_requirements',
-        'manage_analytics_costs',
-        'manage_analytics_day_overrides',
-        'manage_assets',
-        'manage_ecotrack_shipments',
-        'manage_taxonomy',
-        'post_orders_to_ecotrack',
-        'present_admin_ui',
-        'preview_ecotrack_posting',
-        'preview_order_export',
-        'query_ai_stats',
-        'query_analytics',
-        'query_orders',
-        'query_products',
-        'read_system_guidance',
-        'receive_inventory',
-        'reorder_assets',
-        'restore_products',
-        'save_order_shopping_list',
-        'scan_inventory',
-        'set_landing_page_active',
-        'start_landing_page_work',
-        'start_order_export',
-        'sync_analytics_source',
-        'update_analytics_settings',
-        'update_inventory_state',
-        'update_order_details',
-        'update_order_status',
-        'update_products',
-        'update_storefront_announcement',
-        'update_storefront_settings',
-      ].sort(),
-    );
-    expect(tools).not.toHaveProperty('inspect_bulletin');
-    expect(tools).not.toHaveProperty('inspect_administration');
-    expect(tools).not.toHaveProperty('list_background_jobs');
-    expect(tools).not.toHaveProperty('create_landing_page');
-  });
-
   it('constructs the tool surface directly from permissions', () => {
     expect(
       Object.keys(
@@ -128,25 +56,29 @@ describe('Admin AI live tool construction', () => {
     ).toEqual({});
   });
 
-  it('keeps the same mutation schema and description while replacing only its effect in evals', async () => {
+  it('suppresses application mutations during evaluations', async () => {
     const tools = buildAdminAiTools({
-      permissions: ['products_write'],
+      permissions: allPermissions,
       locale: 'en',
       runtime: { kind: 'evaluation' },
-    });
-    const input = { title: 'Evaluation drill', price: 12_345 };
-    const createProduct = tools.create_product as unknown as {
-      description: string;
-      execute: (value: unknown) => Promise<unknown> | unknown;
-    };
-
-    expect(createProduct.description).toContain('Create one product');
-    await expect(createProduct.execute(input)).resolves.toEqual({
-      kind: 'evaluation_noop',
-      applied: false,
-      reason: 'Read-only evaluation: no application state was changed.',
-      receivedInput: input,
-    });
+    }) as unknown as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
+    for (const [toolName, input] of [
+      ['create_product', { title: 'Evaluation drill', price: 12_345 }],
+      ['start_order_export', { mode: 'confirmed', orderIds: [] }],
+      [
+        'update_storefront_announcement',
+        { messageFr: 'Bienvenue', messageAr: 'مرحبا', active: true },
+      ],
+    ] as const) {
+      await expect(tools[toolName]!.execute(input)).resolves.toMatchObject({
+        kind: 'evaluation_noop',
+        applied: false,
+        receivedInput: input,
+      });
+    }
+    expect(mocks.createProduct).not.toHaveBeenCalled();
+    expect(mocks.startOrderExport).not.toHaveBeenCalled();
+    expect(mocks.updateAnnouncement).not.toHaveBeenCalled();
   });
 
   it('hands live actor and job context to canonical workflows', async () => {

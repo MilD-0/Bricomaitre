@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { getDb, getPool } from '@bric/db/client';
@@ -10,7 +10,13 @@ import {
   categories,
   products,
   landingPages,
+  orders,
+  orderStatusHistory,
+  orderLineItems,
 } from '@bric/db/schema';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
+import { inspectAdminOrders } from '../lib/admin-ai-domain';
+import { loadOrderDetail, loadOrderRecordsByIds } from '../lib/admin-orders-data';
 import { proposeProductCategoryAssignment } from '../lib/ai-product-category-proposals';
 import { executeAiProposalReview } from '../lib/ai-proposal-review-workflow';
 import { publishAiTaskTerminalMessage } from '../lib/ai-task-followups';
@@ -34,6 +40,109 @@ afterAll(async () => {
 });
 
 describe('durable AI evidence', () => {
+  it('batches exact order inspection with real history, line snapshots and legacy product references', async () => {
+    const db = getDb();
+    const marker = randomUUID();
+    const [product] = await db
+      .insert(products)
+      .values({ title: 'Current catalog title', slug: marker, price: '10' })
+      .returning();
+    const rows = await db
+      .insert(orders)
+      .values([
+        {
+          firstName: 'Legacy customer',
+          phoneNumber1: '0550000111',
+          cartProducts: [String(product!.id), String(product!.id)],
+          inHouseStatus: ORDER_STATUS.NO_ANSWER,
+          noAnswerCount: 2,
+        },
+        {
+          firstName: 'Snapshot customer',
+          phoneNumber1: '0550000112',
+          cartProducts: [String(product!.id)],
+          productSubtotal: '16',
+          totalAmount: '16',
+          inHouseStatus: ORDER_STATUS.CONFIRMED,
+        },
+      ])
+      .returning();
+    try {
+      await db.insert(orderStatusHistory).values([
+        {
+          orderId: rows[0]!.id,
+          status: ORDER_STATUS.NO_ANSWER,
+          noAnswerCount: 2,
+          changedAt: new Date('2026-01-02'),
+          changedBy: 'second@example.invalid',
+        },
+        {
+          orderId: rows[0]!.id,
+          status: ORDER_STATUS.NO_ANSWER,
+          noAnswerCount: 1,
+          changedAt: new Date('2026-01-01'),
+          changedBy: 'first@example.invalid',
+        },
+        {
+          orderId: rows[1]!.id,
+          status: ORDER_STATUS.CONFIRMED,
+          changedAt: new Date('2026-01-03'),
+          changedBy: 'confirmed@example.invalid',
+        },
+      ]);
+      await db
+        .insert(orderLineItems)
+        .values({
+          orderId: rows[1]!.id,
+          productId: product!.id,
+          contentId: String(product!.id),
+          rawValue: String(product!.id),
+          titleSnapshot: 'Sold product title',
+          originalUnitPrice: '10',
+          effectiveUnitPrice: '8',
+          quantity: 2,
+          lineTotal: '16',
+        });
+      const missingId = Number.MAX_SAFE_INTEGER;
+      const result = await inspectAdminOrders({
+        orderIds: [rows[1]!.id, missingId, rows[0]!.id, rows[1]!.id],
+      });
+      expect(result.items.map((item) => item.id)).toEqual([rows[1]!.id, rows[0]!.id]);
+      expect(result.missingIds).toEqual([missingId]);
+      expect(result.items[0]).toMatchObject({
+        products: [
+          {
+            productId: product!.id,
+            title: 'Sold product title',
+            quantity: 2,
+            unitPrice: 8,
+            lineTotal: 16,
+          },
+        ],
+        statusHistory: [{ changedBy: 'confirmed@example.invalid' }],
+      });
+      expect(result.items[1]).toMatchObject({
+        products: [
+          { productId: product!.id, title: 'Current catalog title', quantity: 2, unitPrice: 10 },
+        ],
+        statusHistory: [
+          { noAnswerCount: 1, changedBy: 'first@example.invalid' },
+          { noAnswerCount: 2, changedBy: 'second@example.invalid' },
+        ],
+      });
+      expect((await loadOrderDetail(rows[0]!.id, db))!.statusHistory).toHaveLength(2);
+      expect((await loadOrderRecordsByIds([rows[0]!.id], db))[0]!.statusHistory).toEqual([]);
+    } finally {
+      await db.delete(orders).where(
+        inArray(
+          orders.id,
+          rows.map((row) => row.id),
+        ),
+      );
+      await db.delete(products).where(eq(products.id, product!.id));
+    }
+  });
+
   it.each(['product_content', 'product_category', 'product_relation'])(
     'allows rejecting expired %s proposals while refusing approval',
     async (proposalType) => {

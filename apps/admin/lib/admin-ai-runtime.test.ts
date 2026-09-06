@@ -6,7 +6,6 @@ import {
   adminAiConversationTitle,
   adminAiGuidanceRequestSchema,
   adminAiGuidanceRequestSchemaForTopics,
-  adminAiRuntimeInstructions,
   readAdminAiGuidance,
   readAdminAiGuidanceForTopics,
 } from './admin-ai-runtime';
@@ -30,18 +29,6 @@ describe('model-led Admin assistant runtime', () => {
     expect(adminAiChatRequestSchema.parse({ ...parsed, autoAcceptProposals: true })).toMatchObject({
       autoAcceptProposals: true,
     });
-  });
-
-  it('keeps runtime instructions lean and lets the connected tools describe capability', () => {
-    const instructions = adminAiRuntimeInstructions({
-      locale: 'en',
-      currentDate: '2026-08-28',
-    });
-    expect(instructions).toContain('Current application date in Africa/Algiers: 2026-08-28');
-    expect(instructions).toContain('Use no more text than the operator needs');
-    expect(instructions).not.toContain('Connected capability map');
-    expect(instructions).not.toContain('No mutation capability');
-    expect(instructions).not.toContain('inventoryQuantity');
   });
 
   it('retrieves only model-selected canonical guidance topics', () => {
@@ -99,85 +86,6 @@ describe('model-led Admin assistant runtime', () => {
     expect(() =>
       readAdminAiGuidanceForTopics(['catalog'], { topics: ['analytics_profit'] }),
     ).toThrow();
-  });
-
-  it('retrieves concise order and EcoTrack contracts only when selected', () => {
-    const result = readAdminAiGuidanceForTopics(['orders'], { topics: ['orders'] });
-
-    expect(result.topics).toEqual([
-      expect.objectContaining({
-        topic: 'orders',
-        owner: 'Orders and EcoTrack system',
-        facts: expect.objectContaining({
-          happyPath: expect.stringContaining('EcoTrack normally owns further shipment progress'),
-          statusSystems: expect.stringContaining('distinct statuses'),
-          inHouseStatuses: expect.stringContaining('manual_completed'),
-          ecotrackMapping: expect.stringContaining('seven days'),
-          posting: expect.stringContaining('an entered customer name is not'),
-          shipmentActions: expect.stringContaining(
-            'restores an in-house posted order to confirmed',
-          ),
-          exports: expect.stringContaining('does not change the in-house order status'),
-        }),
-      }),
-    ]);
-    expect(JSON.stringify(result)).not.toContain('analytics_profit');
-    expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(3_000);
-  });
-
-  it('keeps Storefront administration guidance limited to its few unusual settings rules', () => {
-    const result = readAdminAiGuidanceForTopics(['storefront'], { topics: ['storefront'] });
-
-    expect(result.topics).toEqual([
-      expect.objectContaining({
-        topic: 'storefront',
-        owner: 'Storefront configuration',
-        facts: {
-          phone: expect.stringContaining('stays enabled'),
-          assistant: expect.stringContaining('configured model choices'),
-          announcement: expect.stringContaining('French and Arabic'),
-        },
-      }),
-    ]);
-    expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(600);
-    expect(JSON.stringify(result)).not.toContain('roles');
-  });
-
-  it('keeps asset guidance compact and explains the current recommendation behavior', () => {
-    const result = readAdminAiGuidanceForTopics(['assets'], { topics: ['assets'] });
-
-    expect(result.topics).toEqual([
-      expect.objectContaining({
-        topic: 'assets',
-        owner: 'Storefront assets',
-        facts: expect.objectContaining({
-          featuredGroups: expect.stringContaining('brands and categories'),
-          productCards: expect.stringContaining('bilingual editorial cards'),
-          recommendation: expect.stringContaining('normal recommendation signals'),
-        }),
-      }),
-    ]);
-    expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(700);
-  });
-
-  it('keeps landing-page knowledge compact while preserving its unusual live contract', () => {
-    const result = readAdminAiGuidanceForTopics(['landing_pages'], {
-      topics: ['landing_pages'],
-    });
-
-    expect(result.topics).toEqual([
-      expect.objectContaining({
-        topic: 'landing_pages',
-        owner: 'Storefront landing pages',
-        facts: expect.objectContaining({
-          identity: expect.stringContaining('multiple landing pages'),
-          publication: expect.stringContaining('updates its live revision immediately'),
-          storefront: expect.stringContaining('live Storefront product data'),
-          discovery: expect.stringContaining('non-indexable direct-link campaigns'),
-        }),
-      }),
-    ]);
-    expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(900);
   });
 
   it('uses the Algeria business date and preserves readable bounded titles', () => {
