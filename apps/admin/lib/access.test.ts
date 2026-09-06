@@ -33,9 +33,7 @@ describe('access helpers', () => {
       },
     });
 
-    await expect(
-      buildAccessProfile({ email: 'employee@example.com', role: 'employee' }),
-    ).resolves.toEqual({
+    await expect(buildAccessProfile({ email: 'employee@example.com' })).resolves.toEqual({
       isAllowed: true,
       permissions: ['products_write', 'orders_write', 'assets_write', 'brands_categories_write'],
       role: 'employee',
@@ -73,9 +71,7 @@ describe('access helpers', () => {
       })),
     });
 
-    await expect(
-      buildAccessProfile({ email: 'campaigns@example.com', role: 'viewer', roleDefinitionId: 7 }),
-    ).resolves.toEqual({
+    await expect(buildAccessProfile({ email: 'campaigns@example.com' })).resolves.toEqual({
       isAllowed: true,
       permissions: ['brands_categories_write', 'settings_manage'],
       role: 'campaign-manager',

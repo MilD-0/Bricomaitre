@@ -125,7 +125,6 @@ export async function auth(): Promise<AdminSession | null> {
 
   const access = await loadAccessProfileForUserId(session.user.id, {
     email: session.user.email,
-    role: session.user.role as Role,
   });
 
   return {

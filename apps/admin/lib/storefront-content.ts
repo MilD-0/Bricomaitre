@@ -43,9 +43,6 @@ export async function saveStorefrontAnnouncement(
   actor?: string | null,
 ) {
   const values = storefrontAnnouncementMutationSchema.parse(input);
-  if (values.active && (!values.messageFr || !values.messageAr)) {
-    throw new Error('Both announcement messages are required when the bar is active.');
-  }
   const db = getDb();
   const now = new Date();
   await db.transaction(async (tx) => {

@@ -23,14 +23,7 @@ export async function PUT(request: Request) {
   );
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   const session = await auth();
-  try {
-    const item = await saveStorefrontAnnouncement(parsed.data, session?.user?.email);
-    await revalidateStorefrontSettings();
-    return NextResponse.json({ ok: true, item });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('announcement messages')) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-    throw error;
-  }
+  const item = await saveStorefrontAnnouncement(parsed.data, session?.user?.email);
+  await revalidateStorefrontSettings();
+  return NextResponse.json({ ok: true, item });
 }

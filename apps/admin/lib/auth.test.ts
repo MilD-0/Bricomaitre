@@ -22,7 +22,7 @@ const {
   isEmailAllowedMock: vi.fn(async () => true),
   loadAccessProfileForUserIdMock: vi.fn(async () => ({
     isAllowed: true,
-    permissions: ['products_read'],
+    permissions: ['assets_write'],
     role: 'employee',
     roleDefinitionId: null,
     roleLabel: null,
@@ -62,7 +62,6 @@ vi.mock('@bric/db/client', () => ({
 }));
 
 vi.mock('./access', () => ({
-  buildAccessProfile: vi.fn(),
   isEmailAllowed: isEmailAllowedMock,
   loadAccessProfileForUserId: loadAccessProfileForUserIdMock,
 }));
@@ -79,7 +78,7 @@ describe('Better Auth configuration', () => {
     isEmailAllowedMock.mockResolvedValue(true);
     loadAccessProfileForUserIdMock.mockResolvedValue({
       isAllowed: true,
-      permissions: ['products_read'],
+      permissions: ['assets_write'],
       role: 'employee',
       roleDefinitionId: null,
       roleLabel: null,
@@ -167,12 +166,11 @@ describe('Better Auth configuration', () => {
     expect(getSessionMock).toHaveBeenCalledWith({ headers: expect.any(Headers) });
     expect(loadAccessProfileForUserIdMock).toHaveBeenCalledWith('user-1', {
       email: 'person@example.com',
-      role: 'viewer',
     });
     expect(session?.user).toEqual(
       expect.objectContaining({
         isAllowed: true,
-        permissions: ['products_read'],
+        permissions: ['assets_write'],
         role: 'employee',
       }),
     );

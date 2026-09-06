@@ -102,22 +102,17 @@ describe('/api/storefront-content', () => {
     expect(revalidateStorefrontSettingsMock).toHaveBeenCalledOnce();
   });
 
-  it('keeps domain validation failures controlled and skips revalidation', async () => {
-    saveStorefrontAnnouncementMock.mockRejectedValue(
-      new Error('Both announcement messages are required when the bar is active.'),
-    );
-
-    const response = await PUT(
-      new Request('http://localhost/api/storefront-content', {
-        method: 'PUT',
-        body: JSON.stringify(announcement),
-      }),
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Both announcement messages are required when the bar is active.',
-    });
+  it('rejects an active announcement missing either locale before writing', async () => {
+    for (const field of ['messageFr', 'messageAr']) {
+      const response = await PUT(
+        new Request('http://localhost/api/storefront-content', {
+          method: 'PUT',
+          body: JSON.stringify({ ...announcement, [field]: '' }),
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(saveStorefrontAnnouncementMock).not.toHaveBeenCalled();
     expect(revalidateStorefrontSettingsMock).not.toHaveBeenCalled();
   });
 });

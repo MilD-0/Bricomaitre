@@ -26,10 +26,6 @@ export type AccessProfile = {
 
 type AccessSeed = {
   email?: string | null;
-  permissions?: unknown;
-  role?: unknown;
-  roleDefinitionId?: number | null;
-  roleLabel?: string | null;
 };
 
 function createDeniedAccessProfile(): AccessProfile {
@@ -86,8 +82,6 @@ async function loadAccessGrantByEmail(email: string) {
   return getDb().query.userAccessGrants.findFirst({
     where: eq(userAccessGrants.email, normalizedEmail),
     columns: {
-      id: true,
-      email: true,
       role: true,
       roleDefinitionId: true,
     },
@@ -129,23 +123,20 @@ export async function buildAccessProfile(seed: AccessSeed): Promise<AccessProfil
     }
   }
 
-  const resolvedRole = normalizeBuiltInRole(accessGrant.role ?? seed.role);
+  const resolvedRole = normalizeBuiltInRole(accessGrant.role);
 
   return {
     isAllowed: true,
     permissions: getPermissionsForRole(resolvedRole),
     role: resolvedRole,
     roleDefinitionId: null,
-    roleLabel:
-      typeof seed.roleLabel === 'string' && seed.roleLabel.trim().length > 0
-        ? seed.roleLabel.trim()
-        : null,
+    roleLabel: null,
   };
 }
 
 export async function loadAccessProfileForUserId(
   userId: string,
-  fallback: Omit<AccessSeed, 'roleDefinitionId'> = {},
+  fallback: AccessSeed = {},
 ): Promise<AccessProfile> {
   if (!hasDb()) {
     return buildAccessProfile(fallback);
@@ -155,8 +146,6 @@ export async function loadAccessProfileForUserId(
     where: eq(users.id, userId),
     columns: {
       email: true,
-      role: true,
-      roleDefinitionId: true,
     },
   });
 
@@ -166,7 +155,6 @@ export async function loadAccessProfileForUserId(
 
   return buildAccessProfile({
     email: dbUser.email,
-    role: dbUser.role ?? fallback.role,
   });
 }
 

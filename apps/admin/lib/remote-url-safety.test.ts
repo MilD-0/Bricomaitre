@@ -12,10 +12,15 @@ describe('remote URL safety', () => {
     'fd00::1',
     'fe80::1',
     '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    '::ffff:a00:1',
+    '0:0:0:0:0:0:0:1',
+    '0:0:0:0:0:ffff:c0a8:102',
   ])('rejects non-public address %s', (address) => expect(isPublicIpAddress(address)).toBe(false));
 
-  it.each(['93.184.216.34', '2606:4700:4700::1111'])('accepts public address %s', (address) =>
-    expect(isPublicIpAddress(address)).toBe(true),
+  it.each(['93.184.216.34', '2606:4700:4700::1111', '::ffff:5db8:d822'])(
+    'accepts public address %s',
+    (address) => expect(isPublicIpAddress(address)).toBe(true),
   );
 
   it('requires HTTPS without embedded credentials and rejects hostnames resolving to any private address', async () => {
@@ -30,6 +35,9 @@ describe('remote URL safety', () => {
     ).resolves.toBe(true);
     await expect(
       isSafeRemoteHttpsUrl('https://cdn.example.test/image.jpg', mixedLookup),
+    ).resolves.toBe(false);
+    await expect(
+      isSafeRemoteHttpsUrl('https://[::ffff:127.0.0.1]/image.jpg', publicLookup),
     ).resolves.toBe(false);
     await expect(
       isSafeRemoteHttpsUrl('http://cdn.example.test/image.jpg', publicLookup),

@@ -18,16 +18,7 @@ export const permissionKeySchema = z.enum([
 
 export type PermissionKey = z.infer<typeof permissionKeySchema>;
 
-export const permissionCatalog: readonly PermissionKey[] = [
-  'products_write',
-  'orders_write',
-  'assets_write',
-  'brands_categories_write',
-  'bulletin_moderate',
-  'ops_view',
-  'analytics_manage',
-  'settings_manage',
-] as const;
+export const permissionCatalog: readonly PermissionKey[] = permissionKeySchema.options;
 
 export const roleDefinitionFormSchema = z.object({
   name: z.string().trim().min(3).max(60),

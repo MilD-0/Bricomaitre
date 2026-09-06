@@ -60,149 +60,46 @@ async function postSignedRevalidationRequest(baseUrl: string, bodyText: string, 
   }
 }
 
-async function invalidateInOrder(targets: string[], bodyText: string, secret: string) {
-  const results: PromiseSettledResult<void>[] = [];
-  // Expire canonical data before any consumer can refill its own cache.
-  for (const target of targets) {
-    try {
-      await postSignedRevalidationRequest(target, bodyText, secret);
-      results.push({ status: 'fulfilled', value: undefined });
-    } catch (reason) {
-      results.push({ status: 'rejected', reason });
-    }
-  }
-  return results;
-}
-
-export async function revalidateStorefrontAssets() {
+async function revalidateScope(scope: string, label: string) {
   const secret = getStorefrontRevalidateSecret();
   if (!secret) {
     console.warn(
-      '[admin] storefront asset revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured',
+      `[admin] storefront ${label} revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured`,
     );
     return;
   }
-
-  const bodyText = JSON.stringify({ scope: 'assets' });
-  const targets = [
-    ...new Set(
-      [getStorefrontApiBaseUrl(), getStorefrontBaseUrl()].filter((baseUrl): baseUrl is string =>
-        Boolean(baseUrl),
-      ),
-    ),
-  ];
-  const results = await invalidateInOrder(targets, bodyText, secret);
-
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      console.warn('[admin] storefront asset revalidation request failed', {
-        baseUrl: targets[index],
-        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+  const bodyText = JSON.stringify({ scope });
+  // Expire canonical data before any consumer can refill its own cache.
+  for (const baseUrl of new Set([getStorefrontApiBaseUrl(), getStorefrontBaseUrl()])) {
+    if (!baseUrl) continue;
+    try {
+      await postSignedRevalidationRequest(baseUrl, bodyText, secret);
+    } catch (error) {
+      console.warn(`[admin] storefront ${label} revalidation request failed`, {
+        baseUrl,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
-  });
+  }
 }
 
-export async function revalidateStorefrontProducts() {
-  const secret = getStorefrontRevalidateSecret();
-  if (!secret) {
-    console.warn(
-      '[admin] storefront product revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured',
-    );
-    return;
-  }
+export function revalidateStorefrontAssets() {
+  return revalidateScope('assets', 'asset');
+}
 
-  await revalidateTargets(
-    [getStorefrontApiBaseUrl(), getStorefrontBaseUrl()],
-    { scope: 'products' },
-    secret,
-    'product',
-  );
+export function revalidateStorefrontProducts() {
+  return revalidateScope('products', 'product');
 }
 
 export async function revalidateStorefrontProductMeta() {
   revalidateServerTags(CACHE_TAGS.productsMeta);
-  const secret = getStorefrontRevalidateSecret();
-  if (!secret) {
-    console.warn(
-      '[admin] storefront product metadata revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured',
-    );
-    return;
-  }
-
-  await revalidateTargets(
-    [getStorefrontApiBaseUrl(), getStorefrontBaseUrl()],
-    { scope: 'product-meta' },
-    secret,
-    'product metadata',
-  );
+  await revalidateScope('product-meta', 'product metadata');
 }
 
-async function revalidateTargets(
-  candidateTargets: Array<string | null>,
-  payload: { scope: string },
-  secret: string,
-  label: string,
-) {
-  const targets = [
-    ...new Set(candidateTargets.filter((baseUrl): baseUrl is string => Boolean(baseUrl))),
-  ];
-  const bodyText = JSON.stringify(payload);
-  const results = await invalidateInOrder(targets, bodyText, secret);
-
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      console.warn(`[admin] storefront ${label} revalidation request failed`, {
-        baseUrl: targets[index],
-        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-      });
-    }
-  });
+export function revalidateStorefrontSettings() {
+  return revalidateScope('settings', 'settings');
 }
 
-export async function revalidateStorefrontSettings() {
-  const secret = getStorefrontRevalidateSecret();
-  if (!secret) {
-    console.warn(
-      '[admin] storefront settings revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured',
-    );
-    return;
-  }
-
-  const targets = [getStorefrontApiBaseUrl(), getStorefrontBaseUrl()].filter(
-    (baseUrl): baseUrl is string => Boolean(baseUrl),
-  );
-  const bodyText = JSON.stringify({ scope: 'settings' });
-  const results = await invalidateInOrder(targets, bodyText, secret);
-
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      console.warn('[admin] storefront settings revalidation request failed', {
-        baseUrl: targets[index],
-        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-      });
-    }
-  });
-}
-
-export async function revalidateStorefrontLandingPages() {
-  const secret = getStorefrontRevalidateSecret();
-  if (!secret) {
-    console.warn(
-      '[admin] storefront landing-page revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured',
-    );
-    return;
-  }
-  const targets = [getStorefrontApiBaseUrl(), getStorefrontBaseUrl()].filter(
-    (baseUrl): baseUrl is string => Boolean(baseUrl),
-  );
-  const bodyText = JSON.stringify({ scope: 'landing-pages' });
-  const results = await invalidateInOrder(targets, bodyText, secret);
-  results.forEach((result, index) => {
-    if (result.status === 'rejected')
-      console.warn('[admin] storefront landing-page revalidation request failed', {
-        baseUrl: targets[index],
-        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-      });
-  });
+export function revalidateStorefrontLandingPages() {
+  return revalidateScope('landing-pages', 'landing-page');
 }
