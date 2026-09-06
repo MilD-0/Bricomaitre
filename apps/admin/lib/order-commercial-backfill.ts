@@ -2,10 +2,7 @@ import { and, asc, gt, isNull } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import { orders } from '@bric/db/schema';
-import {
-  resolveOrderCommercialState,
-  type ResolvedOrderCommercialState,
-} from '@bric/storefront-core/order-commercial';
+import { resolveOrderCommercialState } from '@bric/storefront-core/order-commercial';
 import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
 import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 
@@ -33,42 +30,9 @@ function requestedItemCount(row: BackfillRow) {
 
 export async function backfillOrderCommercialSnapshots(
   db: Database,
-  options: {
-    batchSize?: number;
-    resolveCommercial?: (db: Database, row: BackfillRow) => Promise<ResolvedOrderCommercialState>;
-    persist?: (
-      db: Database,
-      row: BackfillRow,
-      commercial: ResolvedOrderCommercialState,
-    ) => Promise<void>;
-  } = {},
+  options: { batchSize?: number } = {},
 ): Promise<OrderCommercialBackfillResult> {
   const batchSize = Math.min(Math.max(options.batchSize ?? 100, 1), 1_000);
-  const resolveCommercial =
-    options.resolveCommercial ??
-    ((executor, row) =>
-      resolveOrderCommercialState(executor, {
-        cartProducts: row.cartProducts ?? [],
-        promoCode: row.promoCode,
-      }));
-  const persist =
-    options.persist ??
-    (async (executor, row, commercial) => {
-      const deliveryFee = Number(row.deliveryFee ?? 0);
-      const subtotalOverride = row.price == null ? null : Number(row.price);
-      await executor.transaction((tx) =>
-        updateCanonicalOrder(tx, {
-          orderId: row.id,
-          commercial,
-          deliveryFee,
-          totals: {
-            productSubtotal: commercial.productSubtotal,
-            deliveryFee,
-            subtotalOverride,
-          },
-        }),
-      );
-    });
 
   let cursor = 0;
   let scanned = 0;
@@ -93,13 +57,25 @@ export async function backfillOrderCommercialSnapshots(
     for (const row of batch) {
       cursor = row.id;
       scanned += 1;
-      const commercial = await resolveCommercial(db, row);
+      const commercial = await resolveOrderCommercialState(db, {
+        cartProducts: row.cartProducts ?? [],
+        promoCode: row.promoCode,
+      });
       const resolvedCount = commercial.lines.reduce((sum, line) => sum + line.quantity, 0);
       if (resolvedCount !== requestedItemCount(row)) {
         unresolvedOrderIds.push(row.id);
         continue;
       }
-      await persist(db, row, commercial);
+      const deliveryFee = Number(row.deliveryFee ?? 0);
+      const subtotalOverride = row.price == null ? null : Number(row.price);
+      await db.transaction((tx) =>
+        updateCanonicalOrder(tx, {
+          orderId: row.id,
+          commercial,
+          deliveryFee,
+          totals: { productSubtotal: commercial.productSubtotal, deliveryFee, subtotalOverride },
+        }),
+      );
       backfilled += 1;
     }
   }
@@ -109,27 +85,9 @@ export async function backfillOrderCommercialSnapshots(
 
 export async function backfillOrderNormalizedPhones(
   db: Database,
-  options: {
-    batchSize?: number;
-    persist?: (
-      db: Database,
-      row: Pick<typeof orders.$inferSelect, 'id' | 'phoneNumber1'>,
-      normalizedPhone: string,
-    ) => Promise<void>;
-  } = {},
+  options: { batchSize?: number } = {},
 ): Promise<OrderPhoneBackfillResult> {
   const batchSize = Math.min(Math.max(options.batchSize ?? 250, 1), 1_000);
-  const persist =
-    options.persist ??
-    ((executor, row, normalizedPhone) =>
-      executor
-        .transaction((tx) =>
-          updateCanonicalOrder(tx, {
-            orderId: row.id,
-            values: { normalizedPhone },
-          }),
-        )
-        .then(() => undefined));
   let cursor = 0;
   let scanned = 0;
   let backfilled = 0;
@@ -152,7 +110,9 @@ export async function backfillOrderNormalizedPhones(
         invalidOrderIds.push(row.id);
         continue;
       }
-      await persist(db, row, normalizedPhone);
+      await db.transaction((tx) =>
+        updateCanonicalOrder(tx, { orderId: row.id, values: { normalizedPhone } }),
+      );
       backfilled += 1;
     }
   }

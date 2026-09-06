@@ -1,5 +1,5 @@
 import { getRedis } from '@bric/runtime/redis';
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import { asc, count } from 'drizzle-orm';
 import {
   getJobSnapshot,
   getQueue,
@@ -9,10 +9,10 @@ import {
   requestJobCancellationById,
   startOwnedJob,
 } from '@bric/runtime/jobs';
-import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/order-records';
 
 import { getDb } from '@bric/db/client';
-import { brands, orderStatusHistory, orders, products } from '@bric/db/schema';
+import { brands, products } from '@bric/db/schema';
+import { loadOrderRecordsByIds } from './admin-orders-data';
 import { syncEcotrackShipmentStates } from './admin-ecotrack-orders-data';
 import {
   loadEcotrackOrderInputs,
@@ -40,7 +40,7 @@ import {
   filterRecentConfirmedOrders,
   type EcotrackCatalogExportData,
 } from './order-export';
-import { ORDER_STATUS, type OrderStatusHistoryRecord } from './orders';
+import { ORDER_STATUS } from './orders';
 import { importAdCostsSpreadsheet } from './stats-ad-costs';
 import { importStatsSpreadsheet } from './stats-order-import';
 import { refreshAnalyticsFacts } from './analytics-facts';
@@ -509,44 +509,6 @@ export async function runProductCatalogFeedRefreshJob(
   };
 }
 
-async function loadOrdersForExport(mode: 'selected' | 'confirmed', orderIds: number[]) {
-  const db = getDb();
-  const orderRows = await db.query.orders.findMany({
-    where:
-      mode === 'confirmed'
-        ? and(eq(orders.inHouseStatus, ORDER_STATUS.CONFIRMED), inArray(orders.id, orderIds))
-        : inArray(orders.id, orderIds),
-    orderBy: [asc(orders.id)],
-  });
-  const historyRows = await db.query.orderStatusHistory.findMany({
-    where: inArray(
-      orderStatusHistory.orderId,
-      orderRows.map((row) => row.id),
-    ),
-    orderBy: [asc(orderStatusHistory.changedAt)],
-  });
-  const historyByOrderId = new Map<number, OrderStatusHistoryRecord[]>();
-  for (const row of historyRows) {
-    const list = historyByOrderId.get(row.orderId) ?? [];
-    list.push({
-      id: row.id,
-      status: row.status as OrderStatusHistoryRecord['status'],
-      noAnswerCount: row.noAnswerCount,
-      changedAt: row.changedAt.toISOString(),
-      changedBy: row.changedBy,
-      changedByName: row.changedByName,
-    });
-    historyByOrderId.set(row.orderId, list);
-  }
-
-  const productLookup = await getOrderProductLookup(db, orderRows);
-  const exportOrders = orderRows.map((row) =>
-    toOrderRecord(row, historyByOrderId.get(row.id) ?? [], productLookup),
-  );
-
-  return mode === 'confirmed' ? filterRecentConfirmedOrders(exportOrders) : exportOrders;
-}
-
 export async function runOrderExportJob(
   payload: OrderExportPayload,
   helpers: {
@@ -557,7 +519,13 @@ export async function runOrderExportJob(
   },
 ) {
   await helpers.updateProgress({ phase: 'loading', current: 0, total: payload.orderIds.length });
-  const exportOrders = await loadOrdersForExport(payload.mode, payload.orderIds);
+  const selectedOrders = await loadOrderRecordsByIds([...payload.orderIds].sort((a, b) => a - b));
+  const exportOrders =
+    payload.mode === 'confirmed'
+      ? filterRecentConfirmedOrders(
+          selectedOrders.filter((order) => order.inHouseStatus === ORDER_STATUS.CONFIRMED),
+        )
+      : selectedOrders;
   await helpers.throwIfCancelled();
 
   const catalog = await readEcotrackCatalog(getDb());
