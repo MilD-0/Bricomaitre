@@ -76,10 +76,6 @@ export function formatAlgerianPhoneNumber(value: string) {
 export function toStorefrontContactSettings(input: StorefrontSettingsInputValue) {
   const settings = storefrontSettingsInputSchema.parse(input);
   const internationalDigits = `213${settings.contactPhone.slice(1)}`;
-  const contactEmail = settings.contactEmail ?? DEFAULT_STOREFRONT_SETTINGS.contactEmail;
-  const address = settings.address ?? DEFAULT_STOREFRONT_SETTINGS.address;
-  const mapUrl = settings.mapUrl ?? DEFAULT_STOREFRONT_SETTINGS.mapUrl;
-  const facebookUrl = settings.facebookUrl ?? DEFAULT_STOREFRONT_SETTINGS.facebookUrl;
 
   return {
     phoneDisplay: formatAlgerianPhoneNumber(settings.contactPhone),
@@ -88,10 +84,10 @@ export function toStorefrontContactSettings(input: StorefrontSettingsInputValue)
     // while preventing outdated stored toggles from hiding contact actions.
     phoneEnabled: true,
     aiAssistantEnabled: settings.aiAssistantEnabled,
-    contactEmail,
-    address,
-    mapUrl,
-    facebookUrl,
+    contactEmail: settings.contactEmail,
+    address: settings.address,
+    mapUrl: settings.mapUrl,
+    facebookUrl: settings.facebookUrl,
     aiModel: settings.aiModel,
     aiFallbackModel: settings.aiFallbackModel,
   };

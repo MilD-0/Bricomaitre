@@ -36,13 +36,17 @@ describe('app/storefront/settings/route', () => {
     });
   });
 
-  it('normalizes and returns the stored contact number', async () => {
+  it('normalizes the stored contact number and preserves cleared optional contacts', async () => {
     mocks.hasDb.mockReturnValue(true);
     mocks.limit.mockResolvedValue([
       {
         contactPhone: '+213 555 12 34 56',
         phoneEnabled: true,
         aiAssistantEnabled: false,
+        contactEmail: null,
+        address: null,
+        mapUrl: null,
+        facebookUrl: null,
       },
     ]);
 
@@ -53,12 +57,24 @@ describe('app/storefront/settings/route', () => {
       phoneHref: 'tel:+213555123456',
       phoneEnabled: true,
       aiAssistantEnabled: false,
+      contactEmail: null,
+      address: null,
+      mapUrl: null,
+      facebookUrl: null,
+      aiModel: 'openai/gpt-5.6-luna',
+      aiFallbackModel: null,
+    });
+  });
+
+  it('uses business defaults when no settings record exists', async () => {
+    mocks.hasDb.mockReturnValue(true);
+    mocks.limit.mockResolvedValue([]);
+    const response = await GET();
+    await expect(response.json()).resolves.toMatchObject({
       contactEmail: 'bricomaitre@gmail.com',
       address: 'BT N20, Cité 08 Mai 45, Bab Ezzouar 16024, Alger',
       mapUrl: 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8',
       facebookUrl: 'https://www.facebook.com/profile.php?id=61562272954715',
-      aiModel: 'openai/gpt-5.6-luna',
-      aiFallbackModel: null,
     });
   });
 

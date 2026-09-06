@@ -315,95 +315,29 @@ describe('storefront API client', () => {
     );
   });
 
-  it('reads every active catalog page for sitemap generation', async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            items: [
-              {
-                ...validProductResponse.item,
-                slug: 'first',
-                mongoId: null,
-                titleAr: null,
-                inStock: true,
-                availabilityStatus: 'in_stock',
-                brandId: null,
-                categoryId: null,
-                images: [],
-                oldPrice: null,
-              },
-            ],
-            total: 201,
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            items: [
-              {
-                ...validProductResponse.item,
-                id: 13,
-                slug: 'second',
-                mongoId: null,
-                titleAr: null,
-                inStock: true,
-                availabilityStatus: 'in_stock',
-                brandId: null,
-                categoryId: null,
-                images: [],
-                oldPrice: null,
-              },
-            ],
-            total: 201,
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            items: [
-              {
-                ...validProductResponse.item,
-                id: 14,
-                slug: 'third',
-                mongoId: null,
-                titleAr: null,
-                inStock: true,
-                availabilityStatus: 'in_stock',
-                brandId: null,
-                categoryId: null,
-                images: [],
-                oldPrice: null,
-              },
-            ],
-            total: 201,
-          }),
-          { status: 200 },
-        ),
-      );
+  it('reads the complete minimal product feed in one request for the sitemap', async () => {
+    const products = Array.from({ length: 201 }, (_, index) => ({
+      id: index + 1,
+      slug: `product-${index + 1}`,
+      mongoId: null,
+      updatedAt: '2026-07-02T10:00:00.000Z',
+    }));
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ items: products })));
 
-    const items = await fetchStorefrontSitemapProducts();
+    await expect(fetchStorefrontSitemapProducts()).resolves.toEqual(products);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(
+      'http://localhost:3001/storefront/products/build-feed',
+      expect.any(Object),
+    );
+  });
 
-    expect(items.map((item) => item.slug)).toEqual(['first', 'second', 'third']);
-    expect(fetch).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('page=1&limit=100'),
-      expect.any(Object),
+  it('rejects a malformed discovery feed instead of publishing invalid product URLs', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ items: [{ id: 12, slug: 'lamp', mongoId: null }] })),
     );
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('page=2&limit=100'),
-      expect.any(Object),
-    );
-    expect(fetch).toHaveBeenNthCalledWith(
-      3,
-      expect.stringContaining('page=3&limit=100'),
-      expect.any(Object),
-    );
+    await expect(fetchStorefrontSitemapProducts()).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
   });
 
   it('fetches and validates public contact settings', async () => {

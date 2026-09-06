@@ -26,6 +26,13 @@ describe('storefront settings contract', () => {
 });
 
 describe('storefront contact settings', () => {
+  it('preserves cleared optional contacts in the public settings', () => {
+    const cleared = { contactEmail: null, address: null, mapUrl: null, facebookUrl: null };
+    expect(
+      toStorefrontContactSettings({ ...DEFAULT_STOREFRONT_SETTINGS, ...cleared }),
+    ).toMatchObject(cleared);
+  });
+
   it('accepts national and international Algerian phone formats', () => {
     expect(normalizeAlgerianPhoneNumber('0795 34 28 26')).toBe('0795342826');
     expect(normalizeAlgerianPhoneNumber('+213 795 34 28 26')).toBe('0795342826');

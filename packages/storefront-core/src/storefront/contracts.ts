@@ -146,6 +146,19 @@ export const storefrontCatalogCardSchema = storefrontProductResponseItemSchema.o
   updatedAt: true,
 });
 
+export const storefrontProductBuildFeedItemSchema = z.object({
+  id: z.number().int().positive(),
+  slug: z.string().nullable(),
+  mongoId: z.string().nullable(),
+  updatedAt: isoTimestampSchema,
+});
+
+export const storefrontProductBuildFeedResponseSchema = z.object({
+  items: z.array(storefrontProductBuildFeedItemSchema),
+});
+
+export type StorefrontProductBuildFeedItem = z.infer<typeof storefrontProductBuildFeedItemSchema>;
+
 export const storefrontProductsResponseSchema = z.object({
   items: z.array(storefrontProductResponseItemSchema),
   total: z.number().int().nonnegative(),

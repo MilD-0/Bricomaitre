@@ -703,6 +703,15 @@ const server = createServer((request, response) => {
         : json({ error: 'Invalid locale' }, 400);
   } else if (url.pathname === '/storefront/landing-pages') {
     result = json({ items: [] });
+  } else if (url.pathname === '/storefront/products/build-feed') {
+    result = json({
+      items: catalogProducts.map(({ id, slug, mongoId, updatedAt }) => ({
+        id,
+        slug,
+        mongoId,
+        updatedAt,
+      })),
+    });
   } else if (url.pathname === '/storefront/products') {
     const search = url.searchParams.get('search') ?? '';
     const brandId = Number(url.searchParams.get('brandId')) || null;

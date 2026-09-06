@@ -26,7 +26,7 @@ import {
   productSlugHistory,
   products,
 } from '@bric/db/schema';
-import type { StorefrontProductListQuery } from './contracts';
+import type { StorefrontProductBuildFeedItem, StorefrontProductListQuery } from './contracts';
 import {
   toStorefrontBrandDto,
   toStorefrontCategoryDto,
@@ -57,12 +57,6 @@ const productSelection = {
   images: products.images,
   createdAt: products.createdAt,
   updatedAt: products.updatedAt,
-};
-
-export type StorefrontProductBuildFeedItem = {
-  id: number;
-  slug: string | null;
-  updatedAt: string;
 };
 
 export type StorefrontProductTokenMatch = 'slug' | 'mongoId' | 'id';
@@ -480,6 +474,7 @@ export async function readStorefrontProductBuildFeed(db: Database) {
     .select({
       id: products.id,
       slug: products.slug,
+      mongoId: products.mongoId,
       updatedAt: products.updatedAt,
     })
     .from(products)
@@ -491,6 +486,7 @@ export async function readStorefrontProductBuildFeed(db: Database) {
       ({
         id: row.id,
         slug: row.slug,
+        mongoId: row.mongoId,
         updatedAt: row.updatedAt.toISOString(),
       }) satisfies StorefrontProductBuildFeedItem,
   );

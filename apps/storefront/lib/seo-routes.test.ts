@@ -6,20 +6,6 @@ const product = {
   id: 12,
   slug: 'clé à choc',
   mongoId: null,
-  title: 'Clé à choc',
-  titleAr: 'مفتاح صدمات',
-  description: null,
-  descriptionAr: null,
-  sku: null,
-  barcode: null,
-  price: '1500.00',
-  oldPrice: null,
-  inStock: true,
-  availabilityStatus: 'in_stock',
-  brandId: null,
-  categoryId: null,
-  images: [],
-  createdAt: '2026-07-01T10:00:00.000Z',
   updatedAt: '2026-07-02T10:00:00.000Z',
 };
 
@@ -52,6 +38,21 @@ describe('SEO metadata routes', () => {
           }),
         },
       }),
+    );
+  });
+
+  it('retains legacy and numeric product tokens when a slug is absent', () => {
+    const entries = buildStorefrontSitemap([
+      { ...product, slug: null, mongoId: 'legacy-product' },
+      { ...product, id: 13, slug: null },
+    ]);
+    expect(entries.map((entry) => entry.url)).toEqual(
+      expect.arrayContaining([
+        'https://bricomaitre.com/fr/products/legacy-product',
+        'https://bricomaitre.com/ar/products/legacy-product',
+        'https://bricomaitre.com/fr/products/13',
+        'https://bricomaitre.com/ar/products/13',
+      ]),
     );
   });
 

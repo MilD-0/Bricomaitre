@@ -1,10 +1,10 @@
 import type { MetadataRoute } from 'next';
-import type { StorefrontProductsResponse } from '@bric/storefront-core/contracts';
+import type { StorefrontProductBuildFeedItem } from '@bric/storefront-core/contracts';
 
 import { locales } from '@/i18n/config';
 import { getStorefrontSiteUrl } from './site-url';
 
-type SitemapProduct = StorefrontProductsResponse['items'][number];
+type SitemapProduct = StorefrontProductBuildFeedItem;
 type SitemapTaxonomy = { slug: string | null; updatedAt: string };
 
 function localizedAlternates(path: string) {

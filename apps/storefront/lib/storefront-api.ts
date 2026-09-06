@@ -11,6 +11,7 @@ import {
   storefrontHomepageFeaturedGroupProductsResponseSchema,
   storefrontHomepageResponseSchema,
   storefrontProductDetailResponseSchema,
+  storefrontProductBuildFeedResponseSchema,
   storefrontProductListQuerySchema,
   storefrontProductPromoResponseSchema,
   storefrontProductsResponseSchema,
@@ -421,31 +422,13 @@ export async function getStorefrontCatalog(input: StorefrontProductListQueryInpu
 }
 
 export async function fetchStorefrontSitemapProducts() {
-  const query = storefrontProductListQuerySchema.parse({
-    page: 1,
-    limit: 100,
-    search: '',
-    brandId: null,
-    categoryId: null,
-    stock: 'all',
-    minPrice: null,
-    maxPrice: null,
-    sortKey: 'updatedAt',
-    sortDirection: 'desc',
-    id: null,
-    mongoId: null,
-    slug: null,
-  });
-  const firstPage = await fetchStorefrontCatalog(query);
-  const pageCount = Math.ceil(firstPage.total / query.limit);
-  const items = [...firstPage.items];
-
-  for (let page = 2; page <= pageCount; page += 1) {
-    const response = await fetchStorefrontCatalog({ ...query, page });
-    items.push(...response.items);
-  }
-
-  return items;
+  const pathname = '/storefront/products/build-feed';
+  const response = await parseUpstreamJson(
+    await fetchStorefrontUpstream(pathname),
+    pathname,
+    storefrontProductBuildFeedResponseSchema,
+  );
+  return response.items;
 }
 
 export async function getStorefrontSitemapProducts() {

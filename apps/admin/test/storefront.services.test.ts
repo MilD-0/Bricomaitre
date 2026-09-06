@@ -9,6 +9,7 @@ import {
 } from '@bric/db/schema';
 import {
   countStorefrontProducts,
+  readStorefrontProductBuildFeed,
   readStorefrontProductById,
   readStorefrontProductByToken,
 } from '@bric/storefront-core/catalog';
@@ -33,6 +34,54 @@ afterAll(async () => {
 });
 
 describe('storefront transaction boundaries', () => {
+  it('includes only public products and discovery fields in the complete build feed', async () => {
+    const db = getDb();
+    const rows = await db
+      .insert(products)
+      .values([
+        {
+          slug: `feed-public-${runId}`,
+          title: 'Public feed product',
+          price: '100',
+          active: true,
+          mongoId: '123456789012345678901234',
+        },
+        {
+          slug: `feed-inactive-${runId}`,
+          title: 'Inactive feed product',
+          price: '100',
+          active: false,
+        },
+        {
+          slug: `feed-archived-${runId}`,
+          title: 'Archived feed product',
+          price: '100',
+          active: true,
+          archivedAt: new Date(),
+        },
+      ])
+      .returning();
+    try {
+      const ids = new Set(rows.map((row) => row.id));
+      const feed = await readStorefrontProductBuildFeed(db);
+      expect(feed.filter((item) => ids.has(item.id))).toEqual([
+        {
+          id: rows[0]!.id,
+          slug: rows[0]!.slug,
+          mongoId: rows[0]!.mongoId,
+          updatedAt: rows[0]!.updatedAt.toISOString(),
+        },
+      ]);
+    } finally {
+      await db.delete(products).where(
+        inArray(
+          products.id,
+          rows.map((row) => row.id),
+        ),
+      );
+    }
+  });
+
   it('fences stale completion and cleanup after an expired claim is replaced', async () => {
     const db = getDb();
     const keyHash = `fencing-${runId}`;

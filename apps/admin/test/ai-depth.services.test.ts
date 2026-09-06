@@ -55,11 +55,14 @@ import { resolveAnalyticsFilters, clipAnalyticsFilters } from '../lib/analytics/
 import { ANALYTICS_FACT_SEMANTICS_VERSION } from '../lib/analytics-fact-contract';
 import { getAiStatsData } from '../lib/ai-stats';
 import { getLiveStorefrontAiStats } from '../lib/stats-experience-ai';
-import { DEFAULT_STOREFRONT_SETTINGS } from '@bric/storefront-core/settings';
+import {
+  DEFAULT_STOREFRONT_SETTINGS,
+  toStorefrontContactSettings,
+} from '@bric/storefront-core/settings';
 import { patchAdminAsset, deleteAdminAsset, reorderAdminAssets } from '../lib/asset-mutations';
 import { applyHistoryAction } from '../lib/action-history';
 import { patchProductThroughCanonicalWorkflow } from '../lib/product-update-workflow';
-import { saveStorefrontSettings } from '../lib/storefront-settings';
+import { loadStorefrontSettings, saveStorefrontSettings } from '../lib/storefront-settings';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import {
   createProfitTrackerCost,
@@ -783,6 +786,20 @@ describe('durable AI evidence', () => {
         .from(storefrontSettings)
         .where(eq(storefrontSettings.id, 1));
       expect(afterInvalid).toEqual(stored);
+      const clearedContacts = {
+        contactEmail: null,
+        address: null,
+        mapUrl: null,
+        facebookUrl: null,
+      };
+      await saveStorefrontSettings(clearedContacts);
+      const reloaded = await loadStorefrontSettings();
+      expect(reloaded).toMatchObject({
+        ...clearedContacts,
+        contactPhone: '0550123456',
+        aiModel: 'configured/custom-model',
+      });
+      expect(toStorefrontContactSettings(reloaded)).toMatchObject(clearedContacts);
     } finally {
       if (original) {
         await db.update(storefrontSettings).set(original).where(eq(storefrontSettings.id, 1));

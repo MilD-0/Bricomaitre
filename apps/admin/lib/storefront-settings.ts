@@ -25,12 +25,7 @@ export async function loadStorefrontSettings(): Promise<StorefrontSettingsInput>
     .limit(1);
 
   return storefrontSettingsInputSchema.parse({
-    ...DEFAULT_STOREFRONT_SETTINGS,
-    ...stored,
-    contactEmail: stored?.contactEmail ?? DEFAULT_STOREFRONT_SETTINGS.contactEmail,
-    address: stored?.address ?? DEFAULT_STOREFRONT_SETTINGS.address,
-    mapUrl: stored?.mapUrl ?? DEFAULT_STOREFRONT_SETTINGS.mapUrl,
-    facebookUrl: stored?.facebookUrl ?? DEFAULT_STOREFRONT_SETTINGS.facebookUrl,
+    ...(stored ?? DEFAULT_STOREFRONT_SETTINGS),
     phoneEnabled: true,
   });
 }
