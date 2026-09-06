@@ -594,7 +594,11 @@ function OrderEditorBody({
           {(order.promoDiscountAmount ?? 0) > 0 ? (
             <>
               <dt className="text-muted-foreground">
-                {t('ordersManager.amount.promoDiscount', { code: order.promoCode ?? '' })}
+                {t('ordersManager.amount.promoDiscount', {
+                  code: order.productPromos?.length
+                    ? order.productPromos.map((offer) => offer.code).join(', ')
+                    : (order.promoCode ?? ''),
+                })}
               </dt>
               <dd className="text-end text-emerald-700 tabular-nums">
                 -{formatOrderMoney(locale, order.promoDiscountAmount ?? 0)}

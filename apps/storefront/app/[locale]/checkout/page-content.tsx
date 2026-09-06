@@ -36,8 +36,9 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
     : query.landingRevision;
   const landingPageId = Number.parseInt(rawLandingPageId ?? '', 10);
   const landingRevision = Number.parseInt(rawLandingRevision ?? '', 10);
-  const detail = rawProduct ? await getStorefrontProductDetail(rawProduct).catch(() => null) : null;
+  const detail = rawProduct ? await getStorefrontProductDetail(rawProduct) : null;
   const product = detail?.item;
+  if (rawProduct && !product) notFound();
   const rawPromo = Array.isArray(query.promo) ? query.promo[0] : query.promo;
   const promo =
     product && rawPromo

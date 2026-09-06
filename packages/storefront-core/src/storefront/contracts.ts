@@ -1,3 +1,4 @@
+import { productPromosSchema } from '../orders-support';
 import { z } from 'zod';
 
 import {
@@ -140,10 +141,20 @@ export const storefrontProductsResponseSchema = z.object({
 
 export const storefrontCartValidationRequestSchema = z.object({
   productIds: z.array(z.number().int().positive()).min(1).max(50),
+  productPromos: productPromosSchema.optional(),
   promoCode: z.string().trim().min(1).max(120).nullable().optional(),
 });
 
 export const storefrontCartValidationResponseSchema = z.object({
+  promos: z
+    .array(
+      z.object({
+        code: z.string(),
+        productId: z.number().int().positive(),
+        promoPrice: z.number().nonnegative(),
+      }),
+    )
+    .optional(),
   items: z.array(storefrontProductResponseItemSchema),
   promo: z
     .object({
@@ -442,6 +453,7 @@ export const storefrontOrderResponseItemSchema = z.object({
   deliveryFee: z.number(),
   totalAmount: z.number(),
   promoCode: z.string().nullable().default(null),
+  productPromos: productPromosSchema.optional(),
   promoProductId: z.number().int().positive().nullable().default(null),
   promoOriginalSubtotal: z.number().nullable().default(null),
   promoDiscountAmount: z.number().default(0),

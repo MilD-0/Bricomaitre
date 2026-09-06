@@ -142,6 +142,27 @@ describe('ProductMedia', () => {
 
   afterEach(() => cleanup());
 
+  it('uses loaded intrinsic dimensions when catalog metadata is absent and limits zoom to native resolution', async () => {
+    const { container } = render(
+      <ProductMedia
+        items={[{ ...items[0]!, width: null, height: null }]}
+        productName="Desk Lamp"
+        analytics={analytics}
+        labels={labels}
+      />,
+    );
+    const image = container.querySelector('img')!;
+    Object.defineProperties(image, { naturalWidth: { value: 900 }, naturalHeight: { value: 600 } });
+    fireEvent.load(image);
+    fireEvent.click(screen.getByRole('link', { name: labels.zoom }));
+    await waitFor(() => expect(lightboxMock.loadAndOpen).toHaveBeenCalled());
+    expect(lightboxMock.options).toMatchObject({
+      dataSource: [{ width: 900, height: 600 }],
+      secondaryZoomLevel: 1,
+      maxZoomLevel: 1,
+    });
+  });
+
   it('exposes accessible gallery controls and changes the active image', () => {
     render(
       <ProductMedia items={items} productName="Desk Lamp" analytics={analytics} labels={labels} />,

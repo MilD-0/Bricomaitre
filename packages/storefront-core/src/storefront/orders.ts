@@ -140,6 +140,7 @@ export async function createStorefrontOrder(
   const commercial = await resolveOrderCommercialState(db, {
     cartProducts: payload.cartProducts,
     promoCode: payload.promoCode,
+    productPromos: payload.productPromos,
     now,
     requireOrderable: true,
   });
@@ -405,13 +406,24 @@ export async function updateStorefrontOrder(
   if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
   let nextCommercial: Awaited<ReturnType<typeof resolveOrderCommercialState>> | null = null;
 
-  if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
+  if (
+    changes.cartProducts !== undefined ||
+    changes.promoCode !== undefined ||
+    changes.productPromos !== undefined
+  ) {
     const nextCartProducts = changes.cartProducts ?? access.order.cartProducts ?? [];
     const nextPromoCode =
-      changes.promoCode !== undefined ? changes.promoCode : access.order.promoCode;
+      changes.promoCode !== undefined
+        ? changes.promoCode
+        : changes.productPromos !== undefined
+          ? null
+          : access.order.promoCode;
     nextCommercial = await resolveOrderCommercialState(db, {
       cartProducts: nextCartProducts,
       promoCode: nextPromoCode,
+      productPromos:
+        changes.productPromos ??
+        (changes.promoCode !== undefined ? [] : access.order.productPromos),
     });
   }
 

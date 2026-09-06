@@ -166,6 +166,19 @@ describe('localized Checkout Page', () => {
     expect(html).not.toContain('data-eyebrow=');
   });
 
+  it.each(['fr', 'ar'])(
+    'keeps unavailable Buy Now intent out of ordinary basket checkout in %s',
+    async (locale) => {
+      mocks.product.mockResolvedValue(null);
+      await expect(
+        CheckoutPageContent({
+          params: Promise.resolve({ locale }),
+          searchParams: Promise.resolve({ product: 'removed-product' }),
+        }),
+      ).rejects.toThrow('NEXT_NOT_FOUND');
+    },
+  );
+
   it('does not fabricate an empty delivery catalog during an outage', async () => {
     mocks.catalog.mockRejectedValue(new Error('delivery API unavailable'));
 

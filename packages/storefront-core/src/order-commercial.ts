@@ -5,7 +5,12 @@ import { orderLineItems, orders } from '@bric/db/schema';
 import { parseNumericAmount } from './orders-support';
 
 import { resolveOrderLineSnapshots, type MetaCommerceLine } from './storefront/meta';
-import { resolveOrderPromo, type ResolvedOrderPromo } from './storefront/promos';
+import {
+  resolveOrderPromo,
+  resolveProductPromos,
+  type ActiveProductPromo,
+  type ResolvedOrderPromo,
+} from './storefront/promos';
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -15,6 +20,7 @@ export type ResolvedOrderCommercialState = {
   cartProducts: string[];
   lines: MetaCommerceLine[];
   promo: ResolvedOrderPromo | null;
+  productPromos?: ActiveProductPromo[];
   productSubtotal: number;
   originalProductSubtotal: number;
   discountAmount: number;
@@ -28,11 +34,24 @@ export class UnorderableCartError extends Error {
 }
 
 export function assertReviewedOrderPrices(
-  commercial: Pick<ResolvedOrderCommercialState, 'promo' | 'productSubtotal'>,
-  review: { promoCode?: string | null; expectedProductSubtotal?: number },
+  commercial: Pick<ResolvedOrderCommercialState, 'promo' | 'productSubtotal' | 'productPromos'>,
+  review: {
+    promoCode?: string | null;
+    productPromos?: Array<{ productId: number; code: string }>;
+    expectedProductSubtotal?: number;
+  },
 ) {
   if (
-    (review.promoCode && !commercial.promo) ||
+    (review.productPromos?.length
+      ? review.productPromos.some(
+          (offer) =>
+            !commercial.productPromos?.some(
+              (accepted) =>
+                accepted.productId === offer.productId &&
+                accepted.code.toLowerCase() === offer.code.toLowerCase(),
+            ),
+        )
+      : review.promoCode && !commercial.promo) ||
     (review.expectedProductSubtotal !== undefined &&
       Math.abs(review.expectedProductSubtotal - commercial.productSubtotal) > 0.005)
   ) {
@@ -57,17 +76,25 @@ export async function resolveOrderCommercialState(
   input: {
     cartProducts: string[];
     promoCode?: string | null;
+    productPromos?: Array<{ productId: number; code: string }>;
     now?: Date;
     requireOrderable?: boolean;
   },
 ): Promise<ResolvedOrderCommercialState> {
-  const promo = await resolveOrderPromo(db as Database, {
-    ...input,
-    promoCode: input.promoCode ?? null,
-  });
+  const explicitOffers = input.productPromos?.length ? input.productPromos : undefined;
+  const promo = explicitOffers
+    ? null
+    : await resolveOrderPromo(db as Database, {
+        ...input,
+        promoCode: input.promoCode ?? null,
+      });
+  const productPromos = explicitOffers
+    ? await resolveProductPromos(db as Database, { productPromos: explicitOffers, now: input.now })
+    : [];
   const lines = await resolveOrderLineSnapshots(db, {
     ...input,
     resolvedPromo: promo,
+    resolvedProductPromos: productPromos,
     orderableOnly: input.requireOrderable,
   });
   if (input.requireOrderable) {
@@ -84,6 +111,9 @@ export async function resolveOrderCommercialState(
     cartProducts: buildCanonicalCartProducts(input.cartProducts, lines),
     lines,
     promo,
+    productPromos: productPromos.filter((offer) =>
+      lines.some((line) => line.productId === offer.productId),
+    ),
     productSubtotal: roundCurrency(lines.reduce((sum, line) => sum + line.lineTotal, 0)),
     originalProductSubtotal: roundCurrency(
       lines.reduce((sum, line) => sum + line.originalUnitPrice * line.quantity, 0),
@@ -97,17 +127,21 @@ export function buildOrderCommercialValues(
   deliveryFee: number,
 ): Partial<InferInsertModel<typeof orders>> {
   const productSubtotal = commercial.productSubtotal;
+  const offers = commercial.productPromos ?? [];
+  const singleOffer = offers.length === 1 ? offers[0] : commercial.promo;
+  const hasPromo = offers.length > 0 || !!commercial.promo;
   const normalizedDeliveryFee = roundCurrency(Math.max(0, deliveryFee));
 
   return {
     cartProducts: commercial.cartProducts,
     productSubtotal: productSubtotal.toFixed(2),
     totalAmount: roundCurrency(productSubtotal + normalizedDeliveryFee).toFixed(2),
-    promoCode: commercial.promo?.code ?? null,
-    promoProductId: commercial.promo?.productId ?? null,
-    promoOriginalSubtotal: commercial.promo ? commercial.originalProductSubtotal.toFixed(2) : null,
-    promoDiscountAmount: commercial.promo ? commercial.discountAmount.toFixed(2) : null,
-    promoFinalSubtotal: commercial.promo ? productSubtotal.toFixed(2) : null,
+    promoCode: singleOffer?.code ?? null,
+    productPromos: offers.map(({ productId, code }) => ({ productId, code })),
+    promoProductId: singleOffer?.productId ?? null,
+    promoOriginalSubtotal: hasPromo ? commercial.originalProductSubtotal.toFixed(2) : null,
+    promoDiscountAmount: hasPromo ? commercial.discountAmount.toFixed(2) : null,
+    promoFinalSubtotal: hasPromo ? productSubtotal.toFixed(2) : null,
   };
 }
 

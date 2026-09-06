@@ -64,6 +64,36 @@ describe('CatalogFilters', () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+  it('keeps every brand selectable in a large mobile catalog without thousands of radio controls', () => {
+    render(
+      <CatalogFilters
+        locale="ar"
+        categories={[]}
+        brands={Array.from({ length: 1562 }, (_, index) => ({
+          id: index + 1,
+          label: `Brand ${index + 1}`,
+        }))}
+        selectedCategory={null}
+        selectedBrand={1500}
+        discounted={true}
+        search="drill"
+        sort="newest"
+        labels={labels}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Filtrer les produits/ }));
+    const sheet = screen.getByRole('dialog');
+    const select = within(sheet).getByRole('combobox', { name: 'Marque' });
+    expect(select).toHaveValue('1500');
+    expect(within(select).getAllByRole('option')).toHaveLength(1563);
+    fireEvent.change(select, { target: { value: '1562' } });
+    const data = new FormData(sheet.querySelector('form')!);
+    expect(data.get('brand')).toBe('1562');
+    expect(data.get('discounted')).toBe('1');
+    expect(data.get('q')).toBe('drill');
+    expect(sheet.querySelectorAll('input[type="radio"]').length).toBeLessThan(5);
+  });
+
   it('uses one in-stock checkbox and a bounded two-handle price slider', () => {
     render(
       <CatalogFilters

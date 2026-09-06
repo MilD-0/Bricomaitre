@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { readStorefrontProductsByIds } from '@bric/storefront-core/catalog';
 import { storefrontCartValidationRequestSchema } from '@bric/storefront-core/contracts';
-import { resolveOrderPromo } from '@bric/storefront-core/promos';
+import { resolveOrderPromo, resolveProductPromos } from '@bric/storefront-core/promos';
 
 export async function POST(request: Request) {
   if (!hasDb()) {
@@ -17,14 +17,19 @@ export async function POST(request: Request) {
   }
 
   const db = getDb();
-  const [items, promo] = await Promise.all([
+  const [items, promo, promos] = await Promise.all([
     readStorefrontProductsByIds(db, parsed.data.productIds),
-    parsed.data.promoCode
+    !parsed.data.productPromos?.length && parsed.data.promoCode
       ? resolveOrderPromo(db, {
           cartProducts: parsed.data.productIds.map(String),
           promoCode: parsed.data.promoCode,
         })
       : null,
+    resolveProductPromos(db, {
+      productPromos: (parsed.data.productPromos ?? []).filter((offer) =>
+        parsed.data.productIds.includes(offer.productId),
+      ),
+    }),
   ]);
-  return NextResponse.json({ items, promo });
+  return NextResponse.json({ items, promo, promos });
 }

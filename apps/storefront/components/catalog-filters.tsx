@@ -124,7 +124,7 @@ export function CatalogFilters({
 
   function prepareSubmission(event: FormEvent<HTMLFormElement>) {
     for (const input of event.currentTarget.querySelectorAll<HTMLInputElement>(
-      'input[type="radio"]:checked',
+      'input[type="radio"]:checked, select',
     )) {
       if (!input.value) input.disabled = true;
     }
@@ -322,6 +322,28 @@ function FilterGroup({
   selected: number | null;
   surface: 'rail' | 'sheet';
 }) {
+  if (options.length > 40) {
+    return (
+      <fieldset>
+        <legend>{title}</legend>
+        <select
+          name={name}
+          aria-label={title}
+          defaultValue={selected ?? ''}
+          data-surface={surface}
+          className="catalog-filter-select"
+        >
+          <option value="">{allLabel}</option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+              {option.productCount !== undefined ? ` (${option.productCount})` : ''}
+            </option>
+          ))}
+        </select>
+      </fieldset>
+    );
+  }
   return (
     <fieldset>
       <legend>{title}</legend>

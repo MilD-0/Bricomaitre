@@ -89,6 +89,7 @@ export function buildCheckoutOrderPayload(options: {
   sessionId: string | null;
   marketing?: StorefrontOrderMarketing;
   promoCode?: string | null;
+  productPromos?: Array<{ productId: number; code: string }>;
   expectedProductSubtotal?: number;
 }): StorefrontOrderCreateRequest {
   return storefrontOrderCreateRequestSchema.parse({
@@ -104,6 +105,7 @@ export function buildCheckoutOrderPayload(options: {
     homeAddress: options.form.homeAddress,
     note: null,
     promoCode: options.promoCode ?? null,
+    ...(options.productPromos ? { productPromos: options.productPromos } : {}),
     ...(options.expectedProductSubtotal !== undefined
       ? { expectedProductSubtotal: options.expectedProductSubtotal }
       : {}),

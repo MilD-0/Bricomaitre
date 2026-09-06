@@ -952,3 +952,14 @@
     transform: none !important;
   }
 }
+
+.catalog-filter-select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--sf-border-default, #e0e3e4);
+  border-radius: var(--sf-radius-control, 0.25rem);
+  background: var(--sf-surface-raised, #fff);
+  color: inherit;
+  font: inherit;
+}

@@ -3,6 +3,7 @@ import { CHECKOUT_REQUEST_TIMEOUT_MS } from './checkout-request';
 
 import {
   addCartItem,
+  mergeCartValidation,
   consumeOrderedCartItems,
   getCartItemCount,
   getCartSubtotal,
@@ -25,6 +26,53 @@ const item = {
 };
 
 describe('storefront cart boundary', () => {
+  it('merges refreshed quotes without erasing concurrent quantities, offers, additions or removals', () => {
+    const refreshed = { ...item, unitPrice: 1700 };
+    const other = { ...item, productId: 90 };
+    expect(mergeCartValidation([{ ...item, quantity: 3 }, other], [item], [refreshed])).toEqual([
+      { ...refreshed, quantity: 3 },
+      other,
+    ]);
+    expect(mergeCartValidation([], [item], [refreshed])).toEqual([]);
+    const newOffer = { ...item, promoCode: 'NEW', unitPrice: 1000 };
+    expect(mergeCartValidation([newOffer], [item], [refreshed])).toEqual([newOffer]);
+    expect(mergeCartValidation([item, other], [item], [])).toEqual([other]);
+  });
+
+  it.each([false, true])(
+    'preserves each active product offer regardless of insertion order: reversed=%s',
+    async (reverse) => {
+      const cart = [
+        { ...item, quantity: 1, promoCode: 'A', unitPrice: 800 },
+        { ...item, productId: 13, quantity: 1, promoCode: 'B', unitPrice: 1500 },
+      ];
+      if (reverse) cart.reverse();
+      const fetcher = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: [12, 13].map((id) => ({
+              id,
+              slug: item.token,
+              title: item.title,
+              price: id === 12 ? '1000' : '2000',
+              inStock: true,
+              availabilityStatus: 'in_stock',
+              images: [],
+            })),
+            promos: [
+              { productId: 12, code: 'A', promoPrice: 800 },
+              { productId: 13, code: 'B', promoPrice: 1500 },
+            ],
+          }),
+        ),
+      );
+      const result = await reconcileCartWithCatalog(cart, fetcher);
+      expect(getCartSubtotal(result.items)).toBe(2300);
+      expect(result.requiresReview).toBe(false);
+      expect(JSON.parse(fetcher.mock.calls[0][1].body).productPromos).toHaveLength(2);
+    },
+  );
+
   it('consumes only the accepted order quantities, preserving later additions and unrelated products', () => {
     const later = { ...item, productId: 99, quantity: 4 };
     expect(
@@ -64,7 +112,9 @@ describe('storefront cart boundary', () => {
       promoCode: 'AUDIT10',
     });
     expect(active.requiresReview).toBe(false);
-    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ promoCode: 'AUDIT10' });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({
+      productPromos: [{ productId: 12, code: 'AUDIT10' }],
+    });
     const expired = await reconcileCartWithCatalog(active.items, fetcher, 'ar');
     expect(expired.items[0]).toMatchObject({ unitPrice: 1500, promoCode: null });
     expect(expired.requiresReview).toBe(true);

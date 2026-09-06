@@ -186,6 +186,7 @@ export async function updateAdminOrder(
         : await resolveOrderCommercialState(tx, {
             cartProducts: changes.cartProducts,
             promoCode: existing.promoCode,
+            productPromos: existing.productPromos,
           });
     const persistedSubtotal =
       commercial === null

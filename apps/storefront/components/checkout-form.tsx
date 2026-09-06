@@ -25,6 +25,8 @@ import type { Locale } from '@/i18n/config';
 import { getAnalyticsIdentity, trackCheckoutEvent } from '@/lib/analytics';
 import {
   readCart,
+  getCartProductPromos,
+  mergeCartValidation,
   consumeOrderedCartItems,
   reconcileCartWithCatalog,
   STOREFRONT_CART_KEY,
@@ -107,6 +109,16 @@ export function CheckoutForm({
   const validationLock = useRef(false);
   const submitIconRef = useRef<ShieldCheckIconHandle>(null);
   const viewed = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const focusInvalid = useRef(false);
+  useEffect(() => {
+    if (!focusInvalid.current || busy) return;
+    const field = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (field) {
+      focusInvalid.current = false;
+      field.focus();
+    }
+  }, [errors, busy]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- Checkout persistence must hydrate before the customer can submit the form. */
@@ -119,8 +131,13 @@ export function CheckoutForm({
       void reconcileCartWithCatalog(storedItems, fetch, locale)
         .then((reconciled) => {
           if (!reconciled.changed) return;
-          setItems(reconciled.items);
-          writeCart(window.localStorage, reconciled.items);
+          const merged = mergeCartValidation(
+            readCart(window.localStorage),
+            storedItems,
+            reconciled.items,
+          );
+          setItems(merged);
+          writeCart(window.localStorage, merged);
           window.dispatchEvent(new CustomEvent('bric:cart-updated'));
           setRequestError(labels.cartUpdated);
         })
@@ -343,13 +360,14 @@ export function CheckoutForm({
         if (delivery === 'office' && !officeAvailable) setDelivery('home');
         if (city && !communes.some((commune) => commune.name === city)) setCity('');
         try {
-          const reconciled = await reconcileCartWithCatalog(
-            cartMode === 'cart' ? readCart(window.localStorage) : items,
-            fetch,
-            locale,
-          );
-          setItems(reconciled.items);
-          if (cartMode === 'cart') writeCart(window.localStorage, reconciled.items);
+          const snapshot = cartMode === 'cart' ? readCart(window.localStorage) : items;
+          const reconciled = await reconcileCartWithCatalog(snapshot, fetch, locale);
+          const merged =
+            cartMode === 'cart'
+              ? mergeCartValidation(readCart(window.localStorage), snapshot, reconciled.items)
+              : reconciled.items;
+          setItems(merged);
+          if (cartMode === 'cart') writeCart(window.localStorage, merged);
           window.dispatchEvent(new CustomEvent('bric:cart-updated'));
         } catch {
           // A fresh submit will validate again before creating another attempt.
@@ -408,8 +426,12 @@ export function CheckoutForm({
       const reconciled = await reconcileCartWithCatalog(items, fetch, locale);
       const validatedItems = reconciled.items;
       if (reconciled.changed) {
-        setItems(reconciled.items);
-        if (cartMode === 'cart') writeCart(window.localStorage, reconciled.items);
+        const merged =
+          cartMode === 'cart'
+            ? mergeCartValidation(readCart(window.localStorage), items, reconciled.items)
+            : reconciled.items;
+        setItems(merged);
+        if (cartMode === 'cart') writeCart(window.localStorage, merged);
         window.dispatchEvent(new CustomEvent('bric:cart-updated'));
         if (reconciled.requiresReview) {
           setRequestError(labels.cartUpdated);
@@ -437,12 +459,9 @@ export function CheckoutForm({
                 ? labels.phoneError
                 : labels.requiredError;
         }
+        focusInvalid.current = true;
         setErrors(nextErrors);
         setRequestError('');
-        window.setTimeout(
-          () => document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-          0,
-        );
         return;
       }
       setErrors({});
@@ -462,7 +481,7 @@ export function CheckoutForm({
       const payload = buildCheckoutOrderPayload({
         form: parsed.data,
         cartProducts: expandCheckoutCart(validatedItems),
-        promoCode: validatedItems.find((item) => item.promoCode)?.promoCode ?? null,
+        productPromos: getCartProductPromos(validatedItems),
         expectedProductSubtotal: validatedItems.reduce(
           (sum, item) => sum + item.unitPrice * item.quantity,
           0,
@@ -550,7 +569,7 @@ export function CheckoutForm({
         </section>
       ) : null}
 
-      <form className="checkout-layout" onSubmit={submit} aria-busy={busy} noValidate>
+      <form ref={formRef} className="checkout-layout" onSubmit={submit} aria-busy={busy} noValidate>
         <fieldset
           className="checkout-form-panel"
           aria-label={labels.title}

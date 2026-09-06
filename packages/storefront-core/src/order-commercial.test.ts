@@ -51,6 +51,42 @@ describe('order commercial values', () => {
     });
   });
 
+  it('persists all product offers with aggregate discount and rejects a missing accepted offer', () => {
+    const productPromos = [
+      { productId: 7, code: 'A', originalPrice: 1000, promoPrice: 800, discountAmount: 200 },
+      { productId: 8, code: 'B', originalPrice: 2000, promoPrice: 1500, discountAmount: 500 },
+    ];
+    const commercial = {
+      cartProducts: ['7', '8'],
+      lines: [],
+      promo: null,
+      productPromos,
+      productSubtotal: 2300,
+      originalProductSubtotal: 3000,
+      discountAmount: 700,
+    };
+    expect(buildOrderCommercialValues(commercial, 600)).toMatchObject({
+      productSubtotal: '2300.00',
+      totalAmount: '2900.00',
+      promoCode: null,
+      promoProductId: null,
+      productPromos: [
+        { productId: 7, code: 'A' },
+        { productId: 8, code: 'B' },
+      ],
+      promoDiscountAmount: '700.00',
+    });
+    expect(() =>
+      assertReviewedOrderPrices(commercial, { productPromos, expectedProductSubtotal: 2300 }),
+    ).not.toThrow();
+    expect(() =>
+      assertReviewedOrderPrices(
+        { ...commercial, productPromos: productPromos.slice(0, 1) },
+        { productPromos, expectedProductSubtotal: 2300 },
+      ),
+    ).toThrow(UnorderableCartError);
+  });
+
   it('uses immutable line-derived promotional totals', () => {
     expect(
       buildOrderCommercialValues(

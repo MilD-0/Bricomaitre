@@ -52,7 +52,7 @@ describe('HomepageBannerCarousel', () => {
     fireEvent.load(fullImages[0]!);
     vi.advanceTimersByTime(10_000);
     expect(mocks.scrollNext).not.toHaveBeenCalled();
-    fireEvent.load(fullImages[1]!);
+    fireEvent.load(container.querySelectorAll('.home-banner-picture > picture:last-child img')[1]!);
     vi.advanceTimersByTime(5_000);
     expect(mocks.scrollNext).toHaveBeenCalledTimes(1);
   });
@@ -97,18 +97,14 @@ describe('HomepageBannerCarousel', () => {
     ).toHaveAttribute('srcset', '/banner-1-portrait.svg');
   });
 
-  it('uses the original banner as the blur layer when image optimization is disabled', () => {
+  it('loads the hero before allowing other banners to compete for bandwidth', () => {
     mocks.unoptimized = true;
     const { container } = render(<HomepageBannerCarousel banners={banners} locale="fr" />);
-
-    expect(container.querySelector('.home-banner-blur img')).toHaveAttribute(
-      'src',
-      '/banner-1-wide.jpg',
-    );
-    expect(container.querySelector('.home-banner-blur source')).toHaveAttribute(
-      'srcset',
-      '/banner-1-portrait.jpg',
-    );
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    const hero = container.querySelector('img')!;
+    expect(hero).toHaveAttribute('src', '/banner-1-wide.jpg');
+    fireEvent.load(hero);
+    expect(container.querySelectorAll('img')).toHaveLength(2);
   });
 
   it('keeps the carousel DOM direction aligned with the Arabic Embla direction', () => {
@@ -125,6 +121,7 @@ describe('HomepageBannerCarousel', () => {
       .querySelectorAll('.home-banner-picture > picture:last-child img')
       .forEach((image) => fireEvent.load(image));
 
+    fireEvent.load(container.querySelectorAll('.home-banner-picture > picture:last-child img')[1]!);
     vi.advanceTimersByTime(5_000);
 
     expect(mocks.scrollNext).toHaveBeenCalledTimes(1);

@@ -141,6 +141,18 @@ const nullableWilayaCode = z.union([z.number(), z.string(), z.null()]).transform
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 58 ? parsed : null;
 });
 
+export const productPromosSchema = z
+  .array(
+    z.object({
+      productId: z.number().int().positive(),
+      code: z.string().trim().min(1).max(120),
+    }),
+  )
+  .max(50)
+  .refine((offers) => new Set(offers.map((offer) => offer.productId)).size === offers.length, {
+    message: 'Only one promotion may be selected for each product.',
+  });
+
 export const storefrontOrderCreateSchema = z.object({
   firstName: optionalNullableTrimmedString(80),
   lastName: optionalNullableTrimmedString(80),
@@ -154,6 +166,7 @@ export const storefrontOrderCreateSchema = z.object({
   homeAddress: optionalNullableTrimmedString(300),
   note: optionalNullableTrimmedString(500),
   promoCode: optionalNullableTrimmedString(120),
+  productPromos: productPromosSchema.optional(),
   visitId: optionalNullableTrimmedString(120),
   journeyId: optionalNullableTrimmedString(120),
   sessionId: optionalNullableTrimmedString(120),
@@ -173,6 +186,7 @@ export const storefrontOrderPatchSchema = z
     homeAddress: nullableTrimmedString(300).optional(),
     cartProducts: z.array(z.string().trim().min(1).max(160)).min(1).max(50).optional(),
     promoCode: optionalNullableTrimmedString(120).optional(),
+    productPromos: productPromosSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field must be provided.',
@@ -229,6 +243,7 @@ export type OrderRecord = {
   deliveryFee: number;
   totalAmount: number;
   promoCode?: string | null;
+  productPromos?: Array<{ productId: number; code: string }>;
   promoProductId?: number | null;
   promoOriginalSubtotal?: number | null;
   promoDiscountAmount?: number;

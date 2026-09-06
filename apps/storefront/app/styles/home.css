@@ -207,18 +207,6 @@
   display: block;
   object-fit: cover;
 }
-.home-banner-picture > picture:last-child {
-  opacity: 0;
-  transition: opacity var(--sf-duration-slow, 650ms)
-    var(--sf-ease-emphasized, cubic-bezier(0.2, 0.75, 0.2, 1));
-}
-.home-banner-picture.is-ready > picture:last-child {
-  opacity: 1;
-}
-.home-banner-blur {
-  scale: 1.05;
-  filter: blur(18px);
-}
 .home-carousel-wrap {
   min-width: 0;
   display: grid;

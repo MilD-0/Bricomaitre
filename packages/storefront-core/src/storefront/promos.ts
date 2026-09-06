@@ -233,6 +233,43 @@ export async function resolveOrderPromo(
   };
 }
 
+export async function resolveProductPromos(
+  db: Database,
+  input: { productPromos: Array<{ productId: number; code: string }>; now?: Date },
+): Promise<ActiveProductPromo[]> {
+  if (!input.productPromos.length) return [];
+  const rows = await db
+    .select({
+      code: productPromoCodes.code,
+      productId: products.id,
+      originalPrice: products.price,
+      promoPrice: productPromoCodes.promoPrice,
+    })
+    .from(productPromoCodes)
+    .innerJoin(products, eq(products.id, productPromoCodes.productId))
+    .where(
+      and(
+        eq(products.active, true),
+        activePromoWindow(input.now ?? new Date()),
+        or(
+          ...input.productPromos.map((offer) =>
+            and(
+              eq(productPromoCodes.productId, offer.productId),
+              eq(productPromoCodes.normalizedCode, normalizePromoCode(offer.code) ?? ''),
+            ),
+          ),
+        ),
+      ),
+    );
+  return rows.flatMap((row) => {
+    const originalPrice = parseNumericAmount(row.originalPrice);
+    const promoPrice = parseNumericAmount(row.promoPrice);
+    return originalPrice > promoPrice
+      ? [{ ...row, originalPrice, promoPrice, discountAmount: originalPrice - promoPrice }]
+      : [];
+  });
+}
+
 export function applyPromoToOrderProducts(
   orderProducts: OrderProductSummary[],
   promo: {

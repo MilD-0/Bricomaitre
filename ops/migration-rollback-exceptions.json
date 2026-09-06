@@ -5,6 +5,11 @@
       "migration": "0098_careless_wolfpack.sql",
       "sha256": "dfc6a1b9c1df5e032d576142b86a85b4cd219c4064f8b09239854056774e8909",
       "reason": "The foreign keys constrain only the new stock allocation table, which the previous runtime does not use. The new shopping-list allocation version defaults to zero, preserving inserts from the previous runtime."
+    },
+    {
+      "migration": "0100_parallel_selene.sql",
+      "sha256": "6cf42d5a6a3aa438d34b1b37c4c817daa55a297edc1d8375787317519fa530f9",
+      "reason": "The additive product_promos column defaults to an empty array, so the previous runtime can still insert and update orders without supplying it. Existing prices remain in the established immutable order-line snapshots and commercial totals; the legacy single-promotion fields remain available."
     }
   ]
 }

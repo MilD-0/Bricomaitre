@@ -615,6 +615,34 @@ describe('CheckoutForm', () => {
     ]);
   });
 
+  it('retains a cross-tab addition while reviewing a changed price', async () => {
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify([directItem]));
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={null} labels={labels} />);
+    await waitFor(() => expect(mocks.reconcile).toHaveBeenCalledTimes(1));
+    let release!: (value: unknown) => void;
+    mocks.reconcile.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify([{ ...directItem, quantity: 3 }]));
+    window.dispatchEvent(new Event('storage'));
+    release({
+      items: [{ ...directItem, unitPrice: 4700 }],
+      changed: true,
+      requiresReview: true,
+      removedProductIds: [],
+      priceChangedProductIds: [12],
+    });
+    expect(await screen.findByText('cartUpdated')).toBeVisible();
+    expect(JSON.parse(window.localStorage.getItem('bric:cart:v1')!)).toMatchObject([
+      { quantity: 3, unitPrice: 4700 },
+    ]);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
   it('requires explicit review when catalog revalidation changes a price', async () => {
     mocks.reconcile.mockResolvedValue({
       items: [{ ...directItem, unitPrice: 4700 }],

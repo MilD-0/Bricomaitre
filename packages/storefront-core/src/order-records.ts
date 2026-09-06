@@ -269,6 +269,7 @@ export function toOrderRecord(
     deliveryFee,
     totalAmount,
     promoCode: row.promoCode ?? null,
+    productPromos: row.productPromos ?? [],
     promoProductId: row.promoProductId ?? null,
     promoOriginalSubtotal:
       row.promoOriginalSubtotal === null ? null : parseNumericAmount(row.promoOriginalSubtotal),
@@ -319,6 +320,7 @@ export function toStorefrontOrderRecord(
     deliveryFee: record.deliveryFee,
     totalAmount: record.totalAmount,
     promoCode: record.promoCode,
+    productPromos: record.productPromos ?? [],
     promoProductId: record.promoProductId,
     promoOriginalSubtotal: record.promoOriginalSubtotal,
     promoDiscountAmount: record.promoDiscountAmount,

@@ -30,6 +30,7 @@ function orderRow(overrides: Partial<typeof orders.$inferSelect> = {}): typeof o
     totalAmount: '2500.00',
     price: null,
     promoCode: null,
+    productPromos: [],
     promoProductId: null,
     promoOriginalSubtotal: null,
     promoDiscountAmount: null,

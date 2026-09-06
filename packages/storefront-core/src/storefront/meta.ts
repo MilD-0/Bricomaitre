@@ -193,6 +193,7 @@ export async function resolveOrderLineSnapshots(
     promoCode?: string | null;
     now?: Date;
     resolvedPromo?: Awaited<ReturnType<typeof resolveOrderPromo>>;
+    resolvedProductPromos?: Array<{ productId: number; promoPrice: number }>;
     orderableOnly?: boolean;
   },
 ) {
@@ -280,7 +281,12 @@ export async function resolveOrderLineSnapshots(
     .map(({ row, quantity, rawValue }): MetaCommerceLine => {
       const originalUnitPrice = parseNumericAmount(row.price);
       const originalLineTotal = originalUnitPrice * quantity;
-      const discountAmount = promo?.productId === row.id ? promo.discountAmount : 0;
+      const offer = input.resolvedProductPromos?.find((entry) => entry.productId === row.id);
+      const discountAmount = offer
+        ? Math.max(0, originalUnitPrice - offer.promoPrice) * quantity
+        : promo?.productId === row.id
+          ? promo.discountAmount
+          : 0;
       const lineTotal = roundCurrency(Math.max(0, originalLineTotal - discountAmount));
       return {
         productId: row.id,

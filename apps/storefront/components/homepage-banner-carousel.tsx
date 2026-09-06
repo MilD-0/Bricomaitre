@@ -8,7 +8,7 @@ import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts
 
 type Banner = StorefrontHomepageResponse['banners'][number];
 
-function ProgressiveBannerImage({
+function BannerImage({
   banner,
   priority,
   onReady,
@@ -37,7 +37,8 @@ function ProgressiveBannerImage({
     ...common,
     src: landscape,
     sizes: '(max-width: 620px) 0px, 100vw',
-    priority,
+    loading: priority ? 'eager' : 'lazy',
+    fetchPriority: priority ? 'high' : 'low',
     unoptimized: landscapeSvg,
   });
   const { props: portraitProps } = getImageProps({
@@ -46,34 +47,23 @@ function ProgressiveBannerImage({
     width: 760,
     height: 920,
     sizes: '(max-width: 620px) 100vw, 0px',
-    priority,
+    loading: priority ? 'eager' : 'lazy',
+    fetchPriority: priority ? 'high' : 'low',
     unoptimized: portraitSvg,
   });
-  const lowLandscape =
-    landscapeSvg || !landscapeProps.srcSet
-      ? landscape
-      : `/_next/image?url=${encodeURIComponent(landscape)}&w=32&q=60`;
-  const lowPortrait =
-    portraitSvg || !portraitProps.srcSet
-      ? portrait
-      : `/_next/image?url=${encodeURIComponent(portrait)}&w=32&q=60`;
   useEffect(() => {
     const image = imageRef.current;
     if (image?.complete && image.naturalWidth > 0) markReady();
   }, [markReady]);
   return (
     <span className={ready ? 'home-banner-picture is-ready' : 'home-banner-picture'}>
-      <picture className="home-banner-blur">
-        <source media="(max-width: 620px)" srcSet={lowPortrait} />
-        <img src={lowLandscape} alt="" aria-hidden="true" />
-      </picture>
       <picture>
         <source
           media="(max-width: 620px)"
           srcSet={portraitProps.srcSet ?? portraitProps.src}
           sizes={portraitProps.sizes}
         />
-        <img {...landscapeProps} alt={alt} ref={imageRef} onLoad={markReady} />
+        <img {...landscapeProps} alt={alt} ref={imageRef} onLoad={markReady} onError={markReady} />
       </picture>
     </span>
   );
@@ -92,9 +82,11 @@ export function HomepageBannerCarousel({
     duration: 28,
   });
   const loaded = useRef(new Set<number>());
+  const [heroReady, setHeroReady] = useState(false);
   const [canAutoplay, setCanAutoplay] = useState(false);
   const markLoaded = useCallback((index: number) => {
     loaded.current.add(index);
+    if (index === 0) setHeroReady(true);
     if (index === 1) setCanAutoplay(true);
   }, []);
 
@@ -131,12 +123,16 @@ export function HomepageBannerCarousel({
                   }
                   aria-label={label}
                 >
-                  <ProgressiveBannerImage
-                    banner={banner}
-                    alt={label}
-                    priority={index === 0}
-                    onReady={() => markLoaded(index)}
-                  />
+                  {index === 0 || heroReady ? (
+                    <BannerImage
+                      banner={banner}
+                      alt={label}
+                      priority={index === 0}
+                      onReady={() => markLoaded(index)}
+                    />
+                  ) : (
+                    <span className="home-banner-picture" />
+                  )}
                 </a>
               </div>
             );

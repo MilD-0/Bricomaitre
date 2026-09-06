@@ -73,6 +73,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
   });
   const [lightboxElement, setLightboxElement] = useState<HTMLElement | null>(null);
   const activeIndexRef = useRef(0);
+  const imageSizes = useRef(new Map<string, { width: number; height: number }>());
   const lightboxRef = useRef<ProductLightbox | null>(null);
   const lightboxPromiseRef = useRef<Promise<ProductLightbox> | null>(null);
   const mountedRef = useRef(true);
@@ -135,8 +136,8 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
         const lightbox = new PhotoSwipeLightbox({
           dataSource: items.map((item, index) => ({
             src: item.url,
-            width: item.width ?? 1600,
-            height: item.height ?? 1600,
+            width: imageSizes.current.get(item.url)?.width ?? item.width ?? 1600,
+            height: imageSizes.current.get(item.url)?.height ?? item.height ?? 1600,
             alt: `${productName} — ${labels.image} ${index + 1}`,
           })),
           pswpModule: () => import('photoswipe'),
@@ -146,8 +147,8 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
           showAnimationDuration: 0,
           hideAnimationDuration: 0,
           wheelToZoom: true,
-          secondaryZoomLevel: 2.5,
-          maxZoomLevel: 4,
+          secondaryZoomLevel: 1,
+          maxZoomLevel: 1,
           preload: [1, 1],
           closeTitle: labels.closeZoom,
           zoomTitle: labels.zoom,
@@ -159,6 +160,18 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
           arrowPrev: false,
           arrowNext: false,
           counter: false,
+        });
+
+        lightbox.on('loadComplete', ({ content }) => {
+          const image = content.element;
+          if (!(image instanceof HTMLImageElement) || !image.naturalWidth || !image.naturalHeight)
+            return;
+          const { naturalWidth: width, naturalHeight: height } = image;
+          if (content.data.width === width && content.data.height === height) return;
+          imageSizes.current.set(items[content.index]!.url, { width, height });
+          content.data.width = width;
+          content.data.height = height;
+          lightbox.pswp?.refreshSlideContent(content.index);
         });
 
         lightbox.on('afterInit', () => {
@@ -244,6 +257,15 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
                 >
                   <StorefrontImage
                     src={item.url}
+                    onLoad={(event) => {
+                      const image = event.currentTarget;
+                      if (image.naturalWidth && image.naturalHeight) {
+                        imageSizes.current.set(item.url, {
+                          width: item.width ?? image.naturalWidth,
+                          height: item.height ?? image.naturalHeight,
+                        });
+                      }
+                    }}
                     alt={`${productName} — ${labels.image} ${index + 1}`}
                     fill
                     sizes="(max-width: 767px) calc(100vw - 32px), (max-width: 1199px) 48vw, 560px"

@@ -131,7 +131,7 @@ export function ProductActions({
   }
 
   return (
-    <div className="product-actions">
+    <div className="product-actions" data-mobile-sticky={!analytics.metadata?.landingPageId}>
       <div className="quantity-control">
         <span id="product-quantity-label">{labels.quantity}</span>
         <div role="group" aria-labelledby="product-quantity-label">

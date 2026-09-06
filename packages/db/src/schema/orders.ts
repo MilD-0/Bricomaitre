@@ -41,6 +41,10 @@ export const orders = pgTable(
     totalAmount: numeric('total_amount', { precision: 12, scale: 2 }),
     price: numeric('price', { precision: 12, scale: 2 }),
     promoCode: text('promo_code'),
+    productPromos: jsonb('product_promos')
+      .$type<Array<{ productId: number; code: string }>>()
+      .notNull()
+      .default([]),
     promoProductId: bigint('promo_product_id', { mode: 'number' }).references(() => products.id, {
       onDelete: 'set null',
     }),

@@ -84,6 +84,22 @@ export function consumeOrderedCartItems(
   });
 }
 
+export function mergeCartValidation(
+  current: CartItem[],
+  snapshot: CartItem[],
+  validated: CartItem[],
+) {
+  const previous = new Map(snapshot.map((item) => [item.productId, item]));
+  const next = new Map(validated.map((item) => [item.productId, item]));
+  return current.flatMap((item) => {
+    const before = previous.get(item.productId);
+    if (!before || item.promoCode !== before.promoCode || item.unitPrice !== before.unitPrice)
+      return [item];
+    const refreshed = next.get(item.productId);
+    return refreshed ? [{ ...refreshed, quantity: item.quantity }] : [];
+  });
+}
+
 export function getCartItemCount(current: unknown) {
   const parsed = cartSchema.safeParse(current);
   return parsed.success ? parsed.data.reduce((total, item) => total + item.quantity, 0) : 0;
@@ -94,6 +110,12 @@ export function getCartSubtotal(current: unknown) {
   return parsed.success
     ? parsed.data.reduce((total, item) => total + item.unitPrice * item.quantity, 0)
     : 0;
+}
+
+export function getCartProductPromos(items: CartItem[]) {
+  return items.flatMap((item) =>
+    item.promoCode ? [{ productId: item.productId, code: item.promoCode }] : [],
+  );
 }
 
 export async function reconcileCartWithCatalog(
@@ -116,12 +138,13 @@ export async function reconcileCartWithCatalog(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         productIds: current.map((item) => item.productId),
-        promoCode: current.find((item) => item.promoCode)?.promoCode ?? null,
+        productPromos: getCartProductPromos(current),
       }),
       signal,
     });
     if (!response.ok) throw new Error('Cart validation is unavailable.');
     return (await response.json()) as {
+      promos?: Array<{ code: string; productId: number; promoPrice: number }>;
       promo?: { code: string; productId: number; promoPrice: number } | null;
       items?: Array<{
         id: number;
@@ -140,7 +163,9 @@ export async function reconcileCartWithCatalog(
   const priceChangedProductIds: number[] = [];
   const items = current.flatMap((item) => {
     const product = products.get(item.productId);
-    const promo = payload.promo?.productId === item.productId ? payload.promo : null;
+    const promo =
+      payload.promos?.find((offer) => offer.productId === item.productId) ??
+      (payload.promo?.productId === item.productId ? payload.promo : null);
     const unitPrice = promo?.promoPrice ?? Number(product?.price);
     if (
       !product?.inStock ||

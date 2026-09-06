@@ -701,6 +701,13 @@
       "when": 1788665284619,
       "tag": "0099_curved_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1788676220222,
+      "tag": "0100_parallel_selene",
+      "breakpoints": true
     }
   ]
 }

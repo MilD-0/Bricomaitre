@@ -1,26 +1,22 @@
 import { z } from 'zod';
 
 export const navigationMetaSchema = z.object({
-  categories: z
-    .array(
-      z.object({
-        id: z.number().int().positive(),
-        name: z.string().trim().min(1),
-        nameAr: z.string().trim().min(1).nullable(),
-        slug: z.string().trim().min(1).nullable(),
-        parentId: z.number().int().positive().nullable(),
-      }),
-    )
-    .max(128),
-  brands: z
-    .array(
-      z.object({
-        id: z.number().int().positive(),
-        name: z.string().trim().min(1),
-        slug: z.string().trim().min(1).nullable(),
-      }),
-    )
-    .max(128),
+  categories: z.array(
+    z.object({
+      id: z.number().int().positive(),
+      name: z.string().trim().min(1),
+      nameAr: z.string().trim().min(1).nullable(),
+      slug: z.string().trim().min(1).nullable(),
+      parentId: z.number().int().positive().nullable(),
+    }),
+  ),
+  brands: z.array(
+    z.object({
+      id: z.number().int().positive(),
+      name: z.string().trim().min(1),
+      slug: z.string().trim().min(1).nullable(),
+    }),
+  ),
 });
 
 type NavigationMeta = z.infer<typeof navigationMetaSchema>;
@@ -33,9 +29,10 @@ export async function fetchNavigationMeta(signal?: AbortSignal) {
       headers: { accept: 'application/json' },
     })
       .then(async (response) => {
-        if (!response.ok) return EMPTY_NAVIGATION_META;
+        if (!response.ok) throw new Error('Navigation metadata unavailable');
         const parsed = navigationMetaSchema.safeParse(await response.json());
-        return parsed.success ? parsed.data : EMPTY_NAVIGATION_META;
+        if (!parsed.success) throw new Error('Invalid navigation metadata');
+        return parsed.data;
       })
       .catch(() => {
         navigationMetaPromise = null;
