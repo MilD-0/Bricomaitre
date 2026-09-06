@@ -46,7 +46,11 @@ import {
   getStorefrontLandingPageCacheTag,
   STOREFRONT_CACHE_TAGS,
 } from './cache-tags';
-import { fetchStorefrontUpstream, StorefrontUpstreamError } from './storefront-upstream';
+import {
+  fetchStorefrontUpstream,
+  getStorefrontApiBaseUrl,
+  StorefrontUpstreamError,
+} from './storefront-upstream';
 
 export async function recordStorefrontAssistantRun(input: {
   telemetry: { journeyId: string; sessionId: string; pagePath: string } | undefined;
@@ -142,7 +146,7 @@ export async function getStorefrontLandingPage(
   }
   return unstable_cache(
     () => fetchStorefrontLandingPage(parsedLocale, parsedSlug),
-    ['storefront-landing-page', parsedLocale, parsedSlug],
+    ['storefront-landing-page', getStorefrontApiBaseUrl(), parsedLocale, parsedSlug],
     {
       revalidate: 120,
       tags: [
@@ -163,7 +167,7 @@ export async function getStorefrontSitemapLandingPages() {
         storefrontLandingPageSitemapResponseSchema,
       );
     },
-    ['storefront-sitemap-landing-pages'],
+    ['storefront-sitemap-landing-pages', getStorefrontApiBaseUrl()],
     {
       revalidate: 3600,
       tags: [STOREFRONT_CACHE_TAGS.landingPages],
@@ -418,7 +422,7 @@ export async function getStorefrontSettings() {
         return defaultStorefrontSettingsResponse;
       }
     },
-    ['storefront-settings'],
+    ['storefront-settings', getStorefrontApiBaseUrl()],
     {
       revalidate: 3600,
       tags: [STOREFRONT_CACHE_TAGS.settings],
@@ -436,7 +440,7 @@ export async function getStorefrontAssistantSettings() {
         storefrontSettingsResponseSchema,
       );
     },
-    ['storefront-assistant-settings'],
+    ['storefront-assistant-settings', getStorefrontApiBaseUrl()],
     {
       revalidate: 3600,
       tags: [STOREFRONT_CACHE_TAGS.settings],
@@ -445,21 +449,29 @@ export async function getStorefrontAssistantSettings() {
 }
 
 export async function getStorefrontContent(locale: 'fr' | 'ar') {
-  return unstable_cache(() => fetchStorefrontContent(locale), ['storefront-content', locale], {
-    revalidate: 300,
-    tags: [STOREFRONT_CACHE_TAGS.settings],
-  })();
+  return unstable_cache(
+    () => fetchStorefrontContent(locale),
+    ['storefront-content', getStorefrontApiBaseUrl(), locale],
+    {
+      revalidate: 300,
+      tags: [STOREFRONT_CACHE_TAGS.settings],
+    },
+  )();
 }
 
 export async function getStorefrontHomepage() {
-  return unstable_cache(fetchStorefrontHomepage, ['storefront-homepage'], {
-    revalidate: 120,
-    tags: [
-      STOREFRONT_CACHE_TAGS.assets,
-      STOREFRONT_CACHE_TAGS.products,
-      STOREFRONT_CACHE_TAGS.productMeta,
-    ],
-  })();
+  return unstable_cache(
+    fetchStorefrontHomepage,
+    ['storefront-homepage', getStorefrontApiBaseUrl()],
+    {
+      revalidate: 120,
+      tags: [
+        STOREFRONT_CACHE_TAGS.assets,
+        STOREFRONT_CACHE_TAGS.products,
+        STOREFRONT_CACHE_TAGS.productMeta,
+      ],
+    },
+  )();
 }
 
 export async function getStorefrontEcotrackCatalog() {
@@ -473,7 +485,7 @@ export async function getStorefrontCatalog(input: StorefrontProductListQueryInpu
   const query = storefrontProductListQuerySchema.parse(input);
   return unstable_cache(
     () => fetchStorefrontCatalog(query),
-    ['storefront-catalog', JSON.stringify(query)],
+    ['storefront-catalog', getStorefrontApiBaseUrl(), JSON.stringify(query)],
     { revalidate: 60, tags: [STOREFRONT_CACHE_TAGS.products] },
   )();
 }
@@ -507,17 +519,25 @@ export async function fetchStorefrontSitemapProducts() {
 }
 
 export async function getStorefrontSitemapProducts() {
-  return unstable_cache(fetchStorefrontSitemapProducts, ['storefront-sitemap-products'], {
-    revalidate: 3600,
-    tags: [STOREFRONT_CACHE_TAGS.products],
-  })();
+  return unstable_cache(
+    fetchStorefrontSitemapProducts,
+    ['storefront-sitemap-products', getStorefrontApiBaseUrl()],
+    {
+      revalidate: 3600,
+      tags: [STOREFRONT_CACHE_TAGS.products],
+    },
+  )();
 }
 
 export async function getStorefrontCatalogMeta() {
-  return unstable_cache(fetchStorefrontCatalogMeta, ['storefront-catalog-meta'], {
-    revalidate: 3600,
-    tags: [STOREFRONT_CACHE_TAGS.productMeta],
-  })();
+  return unstable_cache(
+    fetchStorefrontCatalogMeta,
+    ['storefront-catalog-meta', getStorefrontApiBaseUrl()],
+    {
+      revalidate: 3600,
+      tags: [STOREFRONT_CACHE_TAGS.productMeta],
+    },
+  )();
 }
 
 export async function fetchStorefrontProductDetail(
@@ -580,7 +600,7 @@ export async function getStorefrontProductDetail(
   const parsedToken = storefrontProductTokenSchema.parse(value);
   return unstable_cache(
     () => fetchStorefrontProductDetail(parsedToken),
-    ['storefront-product', parsedToken],
+    ['storefront-product', getStorefrontApiBaseUrl(), parsedToken],
     {
       revalidate: 900,
       tags: [STOREFRONT_CACHE_TAGS.products, getStorefrontProductCacheTag(parsedToken)],

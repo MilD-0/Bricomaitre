@@ -154,6 +154,8 @@ describe('storefront API client', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.mocked(unstable_cache).mockImplementation((read) => read);
   });
 
   it('normalizes configuration and applies safe timeout defaults', () => {
@@ -558,12 +560,46 @@ describe('storefront API client', () => {
 
     expect(unstable_cache).toHaveBeenCalledWith(
       expect.any(Function),
-      ['storefront-product', 'legacy lamp'],
+      ['storefront-product', 'http://localhost:3001', 'legacy lamp'],
       {
         revalidate: 900,
         tags: ['storefront-products', 'storefront-product:legacy lamp'],
       },
     );
+  });
+
+  it('does not reuse persisted product data after changing the canonical API origin', async () => {
+    const persisted = new Map<string, ReturnType<typeof getStorefrontProductDetail>>();
+    vi.mocked(unstable_cache).mockImplementation((read, keyParts) => {
+      return ((...args: Parameters<typeof read>) => {
+        const key = JSON.stringify([keyParts, args]);
+        if (!persisted.has(key)) persisted.set(key, read(...args));
+        return persisted.get(key)!;
+      }) as typeof read;
+    });
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const origin = new URL(String(input)).origin;
+      return new Response(
+        JSON.stringify({
+          ...validProductResponse,
+          item: { ...validProductResponse.item, title: origin },
+        }),
+      );
+    });
+
+    vi.stubEnv('STOREFRONT_API_BASE_URL', 'http://127.0.0.1:4311/');
+    expect((await getStorefrontProductDetail('desk-lamp'))?.item.title).toBe(
+      'http://127.0.0.1:4311',
+    );
+    vi.stubEnv('STOREFRONT_API_BASE_URL', 'http://127.0.0.1:14017');
+    expect((await getStorefrontProductDetail('desk-lamp'))?.item.title).toBe(
+      'http://127.0.0.1:14017',
+    );
+    vi.stubEnv('STOREFRONT_API_BASE_URL', 'http://127.0.0.1:4311');
+    expect((await getStorefrontProductDetail('desk-lamp'))?.item.title).toBe(
+      'http://127.0.0.1:4311',
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('fetches the canonical API-cached delivery catalog for checkout', async () => {
