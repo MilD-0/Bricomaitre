@@ -40,6 +40,7 @@ Sentry.init({
 
 let stopping = false;
 let lastHeartbeatAt = 0;
+let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 let lastReconciliationAt = 0;
 
 const analyticsWorker = createLightweightQueueWorker<{ event: StorefrontAnalyticsEvent }>(
@@ -51,6 +52,18 @@ const analyticsWorker = createLightweightQueueWorker<{ event: StorefrontAnalytic
 async function run() {
   const db = getDb();
   await analyticsWorker.waitUntilReady();
+  await writeWorkerHeartbeat(WORKER_HEARTBEAT_PATH);
+  // Liveness must continue while a healthy drain waits on provider responses.
+  // The database heartbeat below still records only completed drain cycles.
+  heartbeatTimer = setInterval(() => {
+    void writeWorkerHeartbeat(WORKER_HEARTBEAT_PATH).catch((error) => {
+      console.error('[storefront-meta-worker] heartbeat failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      Sentry.captureException(error);
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
   console.log('[storefront-meta-worker] started');
 
   while (!stopping) {
@@ -74,13 +87,13 @@ async function run() {
       }
       const drain = await processMetaOutboxBatch(db);
       const marketingDrain = await processMarketingOutboxBatch(db);
-      if (reconciliationResult || cycleStartedAt - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {
+      const drainedAt = Date.now();
+      if (reconciliationResult || drainedAt - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {
         await updateMetaWorkerHeartbeat(db, {
           successfulDrain: true,
           reconciliationResult,
         });
-        await writeWorkerHeartbeat(WORKER_HEARTBEAT_PATH, cycleStartedAt);
-        lastHeartbeatAt = cycleStartedAt;
+        lastHeartbeatAt = drainedAt;
       }
       if (drain.claimed >= 50 || marketingDrain.claimed >= 50) continue;
     } catch (error) {
@@ -97,6 +110,7 @@ async function run() {
 async function shutdown(signal: string, exitCode = 0) {
   if (stopping) return;
   stopping = true;
+  clearInterval(heartbeatTimer);
   console.log(`[storefront-meta-worker] stopping on ${signal}`);
   await analyticsWorker.close();
   await Sentry.close(2_000);
@@ -115,6 +129,7 @@ process.on('unhandledRejection', (error) => {
 });
 
 void run().catch(async (error) => {
+  clearInterval(heartbeatTimer);
   console.error('[storefront-meta-worker] fatal startup failure', {
     message: error instanceof Error ? error.message : String(error),
   });
