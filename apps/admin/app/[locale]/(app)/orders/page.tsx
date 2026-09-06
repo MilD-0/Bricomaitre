@@ -2,11 +2,11 @@ import { OrdersWorkspace } from '../../../../components/orders/orders-workspace'
 import { loadOrdersPageData } from '../../../../lib/admin-orders-data';
 import { getDb, hasDb } from '@bric/db/client';
 import { readEcotrackCatalog } from '../../../../lib/ecotrack';
-import { requireOrdersPageAccess } from '../../../../lib/page-access';
+import { requirePageAccess } from '../../../../lib/page-access';
 
 export default async function OrdersPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  await requireOrdersPageAccess(locale);
+  await requirePageAccess(locale, 'orders');
   const [initialOrders, initialCatalog] = await Promise.all([
     loadOrdersPageData(
       { page: 1, limit: 25, search: '', sortKey: 'createdAt', sortDirection: 'desc' },

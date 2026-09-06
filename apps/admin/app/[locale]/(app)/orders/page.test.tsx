@@ -19,7 +19,7 @@ vi.mock('../../../../lib/admin-orders-data', () => ({
 }));
 vi.mock('../../../../lib/ecotrack', () => ({ readEcotrackCatalog: readCatalog }));
 vi.mock('@bric/db/client', () => ({ getDb: () => ({}), hasDb: () => true }));
-vi.mock('../../../../lib/page-access', () => ({ requireOrdersPageAccess: requireAccess }));
+vi.mock('../../../../lib/page-access', () => ({ requirePageAccess: requireAccess }));
 
 import OrdersPage from './page';
 
@@ -40,7 +40,7 @@ describe('OrdersPage', () => {
   it('renders orders and catalog without blocking on the operational overview', async () => {
     render(await OrdersPage({ params: Promise.resolve({ locale: 'en' }) }));
 
-    expect(requireAccess).toHaveBeenCalledWith('en');
+    expect(requireAccess).toHaveBeenCalledWith('en', 'orders');
     expect(loadOrders).toHaveBeenCalledWith(
       { page: 1, limit: 25, search: '', sortKey: 'createdAt', sortDirection: 'desc' },
       true,

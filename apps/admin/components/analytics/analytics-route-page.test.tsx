@@ -1,14 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getAnalyticsDataMock, hasDbMock, requireStatsPageAccessMock } = vi.hoisted(() => ({
+const { getAnalyticsDataMock, hasDbMock, requirePageAccessMock } = vi.hoisted(() => ({
   getAnalyticsDataMock: vi.fn(),
   hasDbMock: vi.fn(),
-  requireStatsPageAccessMock: vi.fn(),
+  requirePageAccessMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
-vi.mock('../../lib/page-access', () => ({ requireStatsPageAccess: requireStatsPageAccessMock }));
+vi.mock('../../lib/page-access', () => ({ requirePageAccess: requirePageAccessMock }));
 vi.mock('../../lib/analytics-snapshots', () => ({ getAnalyticsSnapshot: getAnalyticsDataMock }));
 vi.mock('./analytics-workspace', () => ({
   StatsWorkspace: ({ initialData }: { initialData: { marker: string } }) => (
@@ -22,7 +22,7 @@ describe('StatsRoutePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasDbMock.mockReturnValue(true);
-    requireStatsPageAccessMock.mockResolvedValue(undefined);
+    requirePageAccessMock.mockResolvedValue(undefined);
     getAnalyticsDataMock.mockResolvedValue({ marker: 'route data' });
   });
 
@@ -34,7 +34,7 @@ describe('StatsRoutePage', () => {
     });
     render(ui);
 
-    expect(requireStatsPageAccessMock).toHaveBeenCalledWith('en');
+    expect(requirePageAccessMock).toHaveBeenCalledWith('en', 'stats');
     expect(getAnalyticsDataMock).toHaveBeenCalledWith({
       view: 'money',
       range: '90d',

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { hasDb } from '@bric/db/client';
 
 import { aiStatsQuerySchema, getAiStatsData, type AiStatsSurface } from '../../lib/ai-stats';
-import { requireStatsPageAccess } from '../../lib/page-access';
+import { requirePageAccess } from '../../lib/page-access';
 import { AiStatsWorkspace } from './ai-stats-workspace';
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -21,7 +21,7 @@ export async function AiStatsRoutePage({
   searchParams?: Promise<SearchParams>;
   surface: AiStatsSurface;
 }) {
-  await requireStatsPageAccess(locale);
+  await requirePageAccess(locale, 'stats');
   if (!hasDb()) notFound();
 
   const query = (await searchParams) ?? {};

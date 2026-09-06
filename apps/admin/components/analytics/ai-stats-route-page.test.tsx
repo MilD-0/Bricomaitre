@@ -1,14 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getAiStatsDataMock, hasDbMock, requireStatsPageAccessMock } = vi.hoisted(() => ({
+const { getAiStatsDataMock, hasDbMock, requirePageAccessMock } = vi.hoisted(() => ({
   getAiStatsDataMock: vi.fn(),
   hasDbMock: vi.fn(),
-  requireStatsPageAccessMock: vi.fn(),
+  requirePageAccessMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
-vi.mock('../../lib/page-access', () => ({ requireStatsPageAccess: requireStatsPageAccessMock }));
+vi.mock('../../lib/page-access', () => ({ requirePageAccess: requirePageAccessMock }));
 vi.mock('../../lib/ai-stats', async () => {
   const actual = await vi.importActual<typeof import('../../lib/ai-stats')>('../../lib/ai-stats');
   return { ...actual, getAiStatsData: getAiStatsDataMock };
@@ -25,7 +25,7 @@ describe('AiStatsRoutePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasDbMock.mockReturnValue(true);
-    requireStatsPageAccessMock.mockResolvedValue(undefined);
+    requirePageAccessMock.mockResolvedValue(undefined);
     getAiStatsDataMock.mockResolvedValue({ marker: 'AI route data' });
   });
 
@@ -42,7 +42,7 @@ describe('AiStatsRoutePage', () => {
       }),
     );
 
-    expect(requireStatsPageAccessMock).toHaveBeenCalledWith('en');
+    expect(requirePageAccessMock).toHaveBeenCalledWith('en', 'stats');
     expect(getAiStatsDataMock).toHaveBeenCalledWith({
       surface: 'operations',
       range: '90d',

@@ -4,7 +4,7 @@ import { hasDb } from '@bric/db/client';
 
 import { analyticsQuerySchema, type AnalyticsView } from '../../lib/analytics';
 import { getAnalyticsSnapshot } from '../../lib/analytics-snapshots';
-import { requireStatsPageAccess } from '../../lib/page-access';
+import { requirePageAccess } from '../../lib/page-access';
 import { StatsWorkspace } from './analytics-workspace';
 
 export type StatsRouteSearchParams = Record<string, string | string[] | undefined>;
@@ -22,7 +22,7 @@ export async function StatsRoutePage({
   searchParams?: Promise<StatsRouteSearchParams>;
   view: AnalyticsView;
 }) {
-  await requireStatsPageAccess(locale);
+  await requirePageAccess(locale, 'stats');
   if (!hasDb()) notFound();
 
   const query = (await searchParams) ?? {};

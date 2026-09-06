@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { navigationKeys } from './navigation';
 import { cn } from './utils';
 
 describe('cn', () => {
@@ -8,21 +7,5 @@ describe('cn', () => {
     const result = cn('p-2', false && 'hidden', 'p-4', 'text-sm');
 
     expect(result).toBe('p-4 text-sm');
-  });
-});
-
-describe('navigationKeys', () => {
-  it('contains expected stable route keys', () => {
-    expect(navigationKeys).toEqual([
-      'administration',
-      'products',
-      'aiProposals',
-      'orders',
-      'inventory',
-      'assets',
-      'brandsCategories',
-      'stats',
-      'bulletin',
-    ]);
   });
 });

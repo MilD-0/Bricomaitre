@@ -54,18 +54,4 @@ describe('requestJson', () => {
       message: 'Upstream unavailable',
     });
   });
-
-  it('supports minimal json-only fetch doubles used by component tests', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: vi.fn().mockResolvedValue({ ok: true }),
-      }),
-    );
-
-    await expect(requestJson('/api/example')).resolves.toEqual({ ok: true });
-  });
 });

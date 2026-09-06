@@ -6,7 +6,7 @@ const { requireAccess } = vi.hoisted(() => ({ requireAccess: vi.fn() }));
 vi.mock('../../../../components/products/products-workspace', () => ({
   ProductsWorkspace: () => <div>Products workspace</div>,
 }));
-vi.mock('../../../../lib/page-access', () => ({ requireProductsPageAccess: requireAccess }));
+vi.mock('../../../../lib/page-access', () => ({ requirePageAccess: requireAccess }));
 
 import ProductsPage from './page';
 
@@ -14,7 +14,7 @@ describe('ProductsPage', () => {
   it('always renders the canonical products workspace after enforcing access', async () => {
     render(await ProductsPage({ params: Promise.resolve({ locale: 'en' }) }));
 
-    expect(requireAccess).toHaveBeenCalledWith('en');
+    expect(requireAccess).toHaveBeenCalledWith('en', 'products');
     expect(screen.getByText('Products workspace')).toBeInTheDocument();
   });
 });

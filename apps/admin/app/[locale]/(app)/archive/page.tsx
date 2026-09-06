@@ -5,7 +5,7 @@ import {
   archivedProductListQuerySchema,
   loadArchivedProductsPage,
 } from '../../../../lib/product-archive';
-import { requireProductsPageAccess } from '../../../../lib/page-access';
+import { requirePageAccess } from '../../../../lib/page-access';
 
 export default async function ProductArchivePage({
   params,
@@ -15,7 +15,7 @@ export default async function ProductArchivePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
-  await requireProductsPageAccess(locale);
+  await requirePageAccess(locale, 'products');
   const rawQuery = await searchParams;
   const query = archivedProductListQuerySchema.parse({
     page: Array.isArray(rawQuery.page) ? rawQuery.page[0] : rawQuery.page,

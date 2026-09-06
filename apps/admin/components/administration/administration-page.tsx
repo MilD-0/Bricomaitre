@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { requireAdministrationPageAccess } from '../../lib/page-access';
+import { requirePageAccess } from '../../lib/page-access';
 import {
   getStorefrontAiModelOptions,
   loadStorefrontSettings,
@@ -23,7 +23,7 @@ export async function AdministrationPage({
   section?: string;
 }) {
   if (!sections.includes(section as AdministrationSection)) notFound();
-  await requireAdministrationPageAccess(locale);
+  await requirePageAccess(locale, 'administration');
   const currentSection = section as AdministrationSection;
 
   let content: React.ReactNode;

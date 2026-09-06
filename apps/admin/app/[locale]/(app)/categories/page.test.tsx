@@ -8,7 +8,7 @@ vi.mock('../../../../components/brands-categories/taxonomy-workspace', () => ({
   TaxonomyWorkspace: ({ view }: { view: string }) => <div>{view}</div>,
 }));
 vi.mock('../../../../lib/page-access', () => ({
-  requireBrandsCategoriesPageAccess: requireAccess,
+  requirePageAccess: requireAccess,
 }));
 
 import CategoriesPage from './page';
@@ -16,7 +16,7 @@ import CategoriesPage from './page';
 describe('CategoriesPage', () => {
   it('always renders the canonical categories workspace after enforcing access', async () => {
     render(await CategoriesPage({ params: Promise.resolve({ locale: 'ar' }) }));
-    expect(requireAccess).toHaveBeenCalledWith('ar');
+    expect(requireAccess).toHaveBeenCalledWith('ar', 'brandsCategories');
     expect(screen.getByText('categories')).toBeInTheDocument();
   });
 });

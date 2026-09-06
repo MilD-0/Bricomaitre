@@ -3,7 +3,7 @@ import {
   loadAssetsTaxonomyData,
   searchAssetProductOptions,
 } from '../../lib/admin-assets-data';
-import { requireAssetsPageAccess } from '../../lib/page-access';
+import { requirePageAccess } from '../../lib/page-access';
 import { AssetsWorkspace, type AssetsWorkspaceView } from './assets-workspace';
 
 export async function AssetsWorkspacePage({
@@ -13,7 +13,7 @@ export async function AssetsWorkspacePage({
   locale: string;
   view: AssetsWorkspaceView;
 }) {
-  await requireAssetsPageAccess(locale);
+  await requirePageAccess(locale, 'assets');
   const [assets, taxonomy] = await Promise.all([loadAssetsData(), loadAssetsTaxonomyData()]);
   const productIds = [
     ...new Set([

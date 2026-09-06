@@ -5,7 +5,7 @@ import {
   getLandingPageDetail,
   LandingPageNotFoundError,
 } from '../../../../../../lib/landing-pages';
-import { requireAssetsPageAccess } from '../../../../../../lib/page-access';
+import { requirePageAccess } from '../../../../../../lib/page-access';
 import { getStorefrontPublicBaseUrl } from '../../../../../../lib/storefront-public-url';
 
 export default async function LandingPageBuilderPage({
@@ -14,7 +14,7 @@ export default async function LandingPageBuilderPage({
   params: Promise<{ locale: string; id: string }>;
 }) {
   const { locale, id } = await params;
-  await requireAssetsPageAccess(locale);
+  await requirePageAccess(locale, 'assets');
   const numericId = Number(id);
   if (!Number.isSafeInteger(numericId) || numericId <= 0) notFound();
   let initialPage;

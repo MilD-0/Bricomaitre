@@ -18,7 +18,6 @@ export default async function LocaleRootPage({ params }: { params: Promise<{ loc
         isAllowed: session.user.isAllowed,
         locale,
         permissions: session.user.permissions,
-        role: session.user.role,
       }),
     );
   }

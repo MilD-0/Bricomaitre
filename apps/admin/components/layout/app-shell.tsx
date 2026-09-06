@@ -181,7 +181,6 @@ export function AppShell({
             isAllowed: initialIsAllowed,
             key: item.key,
             permissions,
-            role,
           }),
         )
         .map((item) => ({
@@ -192,7 +191,7 @@ export function AppShell({
               subItem.requiredPermissions.every((permission) => permissions.includes(permission)),
           ),
         })),
-    [initialIsAllowed, permissions, role],
+    [initialIsAllowed, permissions],
   );
   const analyticsQuery = useMemo(() => {
     if (!pathname.startsWith(`/${locale}/stats`) && pathname !== `/${locale}/stats`) return '';

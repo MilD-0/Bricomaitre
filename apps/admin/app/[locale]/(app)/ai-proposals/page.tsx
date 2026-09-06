@@ -6,7 +6,7 @@ import {
   loadAiProposalInbox,
   parseAiProposalInboxQuery,
 } from '../../../../lib/ai-proposal-inbox';
-import { requireAiProposalPageAccess } from '../../../../lib/page-access';
+import { requirePageAccess } from '../../../../lib/page-access';
 
 export default async function AiProposalsPage({
   params,
@@ -16,7 +16,7 @@ export default async function AiProposalsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
-  await requireAiProposalPageAccess(locale);
+  await requirePageAccess(locale, 'aiProposals');
   const query = parseAiProposalInboxQuery(await searchParams);
   const emptyData = {
     items: [],

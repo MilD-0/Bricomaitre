@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 
 import { loadDailyOrderStatusOverview } from '../../../../lib/admin-orders-data';
 import { auth } from '../../../../lib/auth';
-import { canAccessOrders } from '../../../../lib/navigation-access';
-import { canViewProfitStats, normalizePermissions } from '../../../../lib/permissions';
+import {
+  canViewProfitStats,
+  hasPermission,
+  normalizePermissions,
+} from '../../../../lib/permissions';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -12,7 +15,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!session.user.isAllowed || !canAccessOrders(normalizePermissions(session.user.permissions))) {
+  if (
+    !session.user.isAllowed ||
+    !hasPermission(normalizePermissions(session.user.permissions), 'orders_write')
+  ) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

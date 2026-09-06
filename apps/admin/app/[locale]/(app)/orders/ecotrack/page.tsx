@@ -2,7 +2,7 @@ import { OrdersEcotrackManager } from '../../../../../components/orders/orders-e
 import { getDb, hasDb } from '@bric/db/client';
 import { loadEcotrackOrdersPageData } from '../../../../../lib/admin-ecotrack-orders-data';
 import { readEcotrackCatalog } from '../../../../../lib/ecotrack';
-import { requireOrdersPageAccess } from '../../../../../lib/page-access';
+import { requirePageAccess } from '../../../../../lib/page-access';
 
 export default async function OrdersEcotrackPage({
   params,
@@ -10,7 +10,7 @@ export default async function OrdersEcotrackPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  await requireOrdersPageAccess(locale);
+  await requirePageAccess(locale, 'orders');
 
   const [initialOrders, initialCatalog] = await Promise.all([
     loadEcotrackOrdersPageData(

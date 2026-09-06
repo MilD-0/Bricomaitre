@@ -8,7 +8,7 @@ const { access, load, parse } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => ({ kind: 'db' }), hasDb: () => true }));
-vi.mock('../../../../lib/page-access', () => ({ requireAiProposalPageAccess: access }));
+vi.mock('../../../../lib/page-access', () => ({ requirePageAccess: access }));
 vi.mock('../../../../lib/ai-proposal-inbox', () => ({
   aiProposalInboxQuerySchema: { parse: (value: unknown) => value },
   loadAiProposalInbox: load,
@@ -52,7 +52,7 @@ describe('AiProposalPage', () => {
         searchParams: Promise.resolve({}),
       }),
     );
-    expect(access).toHaveBeenCalledWith('en');
+    expect(access).toHaveBeenCalledWith('en', 'aiProposals');
     expect(load).toHaveBeenCalledWith({ kind: 'db' }, query);
     expect(screen.getByText('Proposal review workspace')).toBeInTheDocument();
   });

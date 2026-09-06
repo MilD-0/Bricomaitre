@@ -40,20 +40,6 @@ function readErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-async function readResponsePayload(response: Response) {
-  // Some component tests use a minimal fetch response with json() only.
-  // Production Fetch responses always take the text() branch.
-  if (typeof response.text === 'function') {
-    return parseResponseBody(await response.text());
-  }
-
-  if (typeof response.json === 'function') {
-    return response.json().catch(() => null) as Promise<unknown>;
-  }
-
-  return null;
-}
-
 export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   let requestInit = init;
   if (init?.body != null) {
@@ -65,7 +51,7 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
   }
 
   const response = await fetch(url, requestInit);
-  const payload = await readResponsePayload(response);
+  const payload = parseResponseBody(await response.text());
 
   if (!response.ok) {
     throw new AdminApiError(

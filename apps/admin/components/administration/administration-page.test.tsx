@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('../../lib/page-access', () => ({ requireAdministrationPageAccess: mocks.access }));
+vi.mock('../../lib/page-access', () => ({ requirePageAccess: mocks.access }));
 vi.mock('../../lib/storefront-settings', () => ({
   loadStorefrontSettings: mocks.loadSettings,
   getStorefrontAiModelOptions: mocks.modelOptions,
@@ -57,7 +57,7 @@ describe('AdministrationPage', () => {
     async (section, expected) => {
       render(await AdministrationPage({ locale: 'fr', section }));
       expect(screen.getByText(expected)).toBeInTheDocument();
-      expect(mocks.access).toHaveBeenCalledWith('fr');
+      expect(mocks.access).toHaveBeenCalledWith('fr', 'administration');
       expect(mocks.loadSettings).not.toHaveBeenCalled();
     },
   );
