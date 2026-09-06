@@ -7,8 +7,6 @@ import {
   products,
 } from '@bric/db/schema';
 import type { EcotrackCatalogRecord } from '../ecotrack-support';
-import { toStorefrontOrderRecord } from '../order-records';
-import type { OrderStatusHistoryRecord } from '../orders-support';
 
 export type StorefrontProductDtoRow = Pick<
   typeof products.$inferSelect,
@@ -176,13 +174,4 @@ export function toStorefrontEcotrackCatalogDto(catalog: EcotrackCatalogRecord) {
     weightFees: catalog.weightFees,
     lastSync: catalog.lastSync,
   };
-}
-
-export function toStorefrontOrderDto(
-  row: Parameters<typeof toStorefrontOrderRecord>[0],
-  history: OrderStatusHistoryRecord[],
-  productLookup: Parameters<typeof toStorefrontOrderRecord>[2],
-  purchaseEventId: string | null = null,
-) {
-  return toStorefrontOrderRecord(row, history, productLookup, purchaseEventId);
 }

@@ -4,7 +4,6 @@ import { and, eq } from 'drizzle-orm';
 
 import { readStorefrontProductById } from './catalog';
 import {
-  landingPageDocumentSchema,
   landingPageLocaleSchema,
   landingPageRevisionSchema,
   landingPageSlugSchema,
@@ -125,7 +124,7 @@ async function readStorefrontLandingPageRevisionPointer(
     locale: page.locale,
     revision: page.revision,
     publishedAt: page.publishedAt?.toISOString() ?? null,
-    document: landingPageDocumentSchema.parse(revision.document),
+    document: revision.document,
     product: product.item,
   });
 }

@@ -51,32 +51,17 @@ export async function getOrderProductLookup(
       Partial<Pick<typeof orders.$inferSelect, 'id'>>
   >,
 ) {
-  const productIds = [
-    ...new Set(
-      rows
-        .flatMap((row) => row.cartProducts ?? [])
-        .map((value) => value.trim())
-        .filter((value) => /^\d+$/.test(value))
-        .map((value) => Number.parseInt(value, 10))
-        .filter((value) => Number.isInteger(value) && value > 0),
-    ),
+  const references = [
+    ...new Set(rows.flatMap((row) => row.cartProducts ?? []).map((value) => value.trim())),
   ];
-  const mongoIds = [
-    ...new Set(
-      rows
-        .flatMap((row) => row.cartProducts ?? [])
-        .map((value) => value.trim())
-        .filter((value) => isMongoObjectId(value)),
-    ),
-  ];
-  const slugs = [
-    ...new Set(
-      rows
-        .flatMap((row) => row.cartProducts ?? [])
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value)),
-    ),
-  ];
+  const productIds = references
+    .filter((value) => /^\d+$/.test(value))
+    .map(Number)
+    .filter((value) => Number.isInteger(value) && value > 0);
+  const mongoIds = references.filter(isMongoObjectId);
+  const slugs = references.filter(
+    (value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value),
+  );
 
   const orderIds = [
     ...new Set(
@@ -87,10 +72,10 @@ export async function getOrderProductLookup(
   ];
   const lookup = new OrderProductLookup();
 
-  const productRows =
+  const [productRows, lineRows] = await Promise.all([
     productIds.length === 0 && mongoIds.length === 0 && slugs.length === 0
       ? []
-      : await db
+      : db
           .select({
             id: products.id,
             mongoId: products.mongoId,
@@ -108,7 +93,24 @@ export async function getOrderProductLookup(
               ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
               ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
             ),
-          );
+          ),
+    orderIds.length === 0
+      ? []
+      : db
+          .select({
+            orderId: orderLineItems.orderId,
+            productId: orderLineItems.productId,
+            contentId: orderLineItems.contentId,
+            rawValue: orderLineItems.rawValue,
+            title: orderLineItems.titleSnapshot,
+            effectiveUnitPrice: orderLineItems.effectiveUnitPrice,
+            quantity: orderLineItems.quantity,
+            lineTotal: orderLineItems.lineTotal,
+            thumbnailUrl: orderLineItems.thumbnailUrl,
+          })
+          .from(orderLineItems)
+          .where(inArray(orderLineItems.orderId, orderIds)),
+  ]);
 
   for (const product of productRows) {
     const entry = {
@@ -132,36 +134,19 @@ export async function getOrderProductLookup(
     }
   }
 
-  if (orderIds.length > 0) {
-    const lineRows = await db
-      .select({
-        orderId: orderLineItems.orderId,
-        productId: orderLineItems.productId,
-        contentId: orderLineItems.contentId,
-        rawValue: orderLineItems.rawValue,
-        title: orderLineItems.titleSnapshot,
-        effectiveUnitPrice: orderLineItems.effectiveUnitPrice,
-        quantity: orderLineItems.quantity,
-        lineTotal: orderLineItems.lineTotal,
-        thumbnailUrl: orderLineItems.thumbnailUrl,
-      })
-      .from(orderLineItems)
-      .where(inArray(orderLineItems.orderId, orderIds));
-
-    for (const line of lineRows) {
-      const current = lookup.orderLinesByOrderId.get(line.orderId) ?? [];
-      current.push({
-        productId: line.productId,
-        contentId: line.contentId,
-        rawValue: line.rawValue,
-        title: line.title,
-        effectiveUnitPrice: parseNumericAmount(line.effectiveUnitPrice),
-        quantity: line.quantity,
-        lineTotal: parseNumericAmount(line.lineTotal),
-        thumbnailUrl: line.thumbnailUrl,
-      });
-      lookup.orderLinesByOrderId.set(line.orderId, current);
-    }
+  for (const line of lineRows) {
+    const current = lookup.orderLinesByOrderId.get(line.orderId) ?? [];
+    current.push({
+      productId: line.productId,
+      contentId: line.contentId,
+      rawValue: line.rawValue,
+      title: line.title,
+      effectiveUnitPrice: parseNumericAmount(line.effectiveUnitPrice),
+      quantity: line.quantity,
+      lineTotal: parseNumericAmount(line.lineTotal),
+      thumbnailUrl: line.thumbnailUrl,
+    });
+    lookup.orderLinesByOrderId.set(line.orderId, current);
   }
 
   return lookup;
@@ -177,36 +162,7 @@ export function toOrderRecord(
   const deliveryFee = parseNumericAmount(row.deliveryFee);
   const subtotalOverride = row.price === null ? null : parseNumericAmount(row.price);
   const snapshotLines = productLookup.orderLinesByOrderId.get(row.id) ?? [];
-  const mutableCatalogProducts = buildOrderProductSummaries(
-    row.cartProducts ?? [],
-    (_rawValue, productId) => {
-      const rawValue = _rawValue.trim();
-      const lookupKey = isMongoObjectId(rawValue)
-        ? `mongo:${rawValue}`
-        : productId !== null
-          ? `id:${productId}`
-          : `slug:${rawValue}`;
 
-      const product = productLookup.get(lookupKey);
-
-      if (!product) {
-        return {
-          missing: true,
-        };
-      }
-
-      return {
-        productId: product.id,
-        brandId: product.brandId,
-        ...(product.slug !== null ? { slug: product.slug } : {}),
-        title: product.title,
-        titleAr: product.titleAr,
-        unitPrice: product.price,
-        thumbnailUrl: product.thumbnailUrl,
-        missing: false,
-      };
-    },
-  );
   const promoDiscountAmount = parseNumericAmount(row.promoDiscountAmount);
   const orderProducts =
     snapshotLines.length > 0
@@ -227,10 +183,39 @@ export function toOrderRecord(
             missing: false,
           };
         })
-      : applyPromoToOrderProducts(mutableCatalogProducts, {
-          productId: row.promoProductId,
-          discountAmount: promoDiscountAmount,
-        });
+      : applyPromoToOrderProducts(
+          buildOrderProductSummaries(row.cartProducts ?? [], (_rawValue, productId) => {
+            const rawValue = _rawValue.trim();
+            const lookupKey = isMongoObjectId(rawValue)
+              ? `mongo:${rawValue}`
+              : productId !== null
+                ? `id:${productId}`
+                : `slug:${rawValue}`;
+
+            const product = productLookup.get(lookupKey);
+
+            if (!product) {
+              return {
+                missing: true,
+              };
+            }
+
+            return {
+              productId: product.id,
+              brandId: product.brandId,
+              ...(product.slug !== null ? { slug: product.slug } : {}),
+              title: product.title,
+              titleAr: product.titleAr,
+              unitPrice: product.price,
+              thumbnailUrl: product.thumbnailUrl,
+              missing: false,
+            };
+          }),
+          {
+            productId: row.promoProductId,
+            discountAmount: promoDiscountAmount,
+          },
+        );
   const derivedSubtotal = orderProducts.reduce((sum, product) => sum + product.lineTotal, 0);
   const persistedSubtotal =
     row.productSubtotal === null ? null : parseNumericAmount(row.productSubtotal);

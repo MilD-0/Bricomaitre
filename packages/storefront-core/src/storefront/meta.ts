@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, lt, lte, inArray, isNull, or, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -337,24 +337,6 @@ export async function replaceOrderLineSnapshots(
   );
 }
 
-export async function refreshOrderLineSnapshotsForMutableOrder(
-  db: Database,
-  input: {
-    orderId: number;
-    cartProducts: string[];
-    promoCode?: string | null;
-  },
-) {
-  const lines = await resolveOrderLineSnapshots(db, {
-    cartProducts: input.cartProducts,
-    promoCode: input.promoCode,
-  });
-  await db.transaction(async (tx) => {
-    await replaceOrderLineSnapshots(tx, input.orderId, lines);
-  });
-  return true;
-}
-
 export function buildMetaCommerceCustomData(lines: MetaCommerceLine[], orderId?: number) {
   const value = roundCurrency(lines.reduce((sum, line) => sum + line.lineTotal, 0));
   return {
@@ -467,12 +449,8 @@ export async function createOrderMetaArtifacts(
     requestContext: MetaRequestContext;
     location?: MetaOrderLocation | null;
     now: Date;
-    linesAlreadyPersisted?: boolean;
   },
 ): Promise<StorefrontOrderMetaResponse> {
-  if (!input.linesAlreadyPersisted) {
-    await replaceOrderLineSnapshots(tx, input.order.id, input.lines, input.now);
-  }
   const externalIdSource =
     input.requestContext.externalIdSource ??
     input.order.visitId ??
@@ -675,37 +653,43 @@ export async function sendMetaEvent(
   }
 }
 
-async function claimMetaOutboxEvents(db: Database, limit: number) {
+async function claimMetaOutboxEvent(db: Database) {
   const now = new Date();
-  const leaseExpiresAt = new Date(now.getTime() + META_PROCESSING_LEASE_MS);
-  const result = await db.execute(sql`
-    with candidates as (
-      select id
-      from ${metaEventOutbox}
-      where (
-        (${metaEventOutbox.status} in ('pending', 'retryable')
-          and ${metaEventOutbox.nextAttemptAt} <= ${now})
-        or (${metaEventOutbox.status} = 'processing'
-          and ${metaEventOutbox.processingLeaseExpiresAt} < ${now})
-      )
-      order by ${metaEventOutbox.nextAttemptAt} asc, ${metaEventOutbox.id} asc
-      for update skip locked
-      limit ${limit}
+  const [row] = await db
+    .update(metaEventOutbox)
+    .set({
+      status: 'processing',
+      attemptCount: sql`${metaEventOutbox.attemptCount} + 1`,
+      processingStartedAt: now,
+      processingLeaseExpiresAt: new Date(now.getTime() + META_PROCESSING_LEASE_MS),
+      lastAttemptAt: now,
+      updatedAt: now,
+    })
+    .where(
+      inArray(
+        metaEventOutbox.id,
+        db
+          .select({ id: metaEventOutbox.id })
+          .from(metaEventOutbox)
+          .where(
+            or(
+              and(
+                inArray(metaEventOutbox.status, ['pending', 'retryable']),
+                lte(metaEventOutbox.nextAttemptAt, now),
+              ),
+              and(
+                eq(metaEventOutbox.status, 'processing'),
+                lt(metaEventOutbox.processingLeaseExpiresAt, now),
+              ),
+            ),
+          )
+          .orderBy(asc(metaEventOutbox.nextAttemptAt), asc(metaEventOutbox.id))
+          .limit(1)
+          .for('update', { skipLocked: true }),
+      ),
     )
-    update ${metaEventOutbox}
-    set
-      status = 'processing',
-      attempt_count = ${metaEventOutbox.attemptCount} + 1,
-      processing_started_at = ${now},
-      processing_lease_expires_at = ${leaseExpiresAt},
-      last_attempt_at = ${now},
-      updated_at = ${now}
-    where id in (select id from candidates)
-    returning id
-  `);
-  const ids = (result.rows as Array<{ id: number | string }>).map((row) => Number(row.id));
-  if (ids.length === 0) return [];
-  return db.select().from(metaEventOutbox).where(inArray(metaEventOutbox.id, ids));
+    .returning();
+  return row;
 }
 
 function retryDelayMs(attemptCount: number) {
@@ -715,31 +699,41 @@ function retryDelayMs(attemptCount: number) {
 }
 
 export async function processMetaOutboxBatch(db: Database, limit = 50) {
-  const rows = await claimMetaOutboxEvents(db, Math.max(1, Math.min(limit, 50)));
+  let claimed = 0;
   let delivered = 0;
   let retryable = 0;
   let failed = 0;
   let skipped = 0;
 
-  for (const row of rows) {
-    const now = new Date();
-    if (row.eventTime.getTime() < now.getTime() - META_EVENT_MAX_AGE_MS) {
-      skipped += 1;
-      await db
+  // Claim only when ready to send; queued rows must not spend their lease waiting in memory.
+  for (let index = 0; index < Math.max(1, Math.min(limit, 50)); index += 1) {
+    const row = await claimMetaOutboxEvent(db);
+    if (!row) break;
+    claimed += 1;
+    const ownership = and(
+      eq(metaEventOutbox.id, row.id),
+      eq(metaEventOutbox.status, 'processing'),
+      eq(metaEventOutbox.attemptCount, row.attemptCount),
+      eq(metaEventOutbox.processingStartedAt, row.processingStartedAt!),
+    );
+    if (row.eventTime.getTime() < Date.now() - META_EVENT_MAX_AGE_MS) {
+      const updated = await db
         .update(metaEventOutbox)
         .set({
           status: 'skipped',
           metaErrorMessage: "Event exceeded Meta's seven-day delivery window.",
           processingLeaseExpiresAt: null,
-          updatedAt: now,
+          updatedAt: new Date(),
         })
-        .where(eq(metaEventOutbox.id, row.id));
+        .where(ownership)
+        .returning({ id: metaEventOutbox.id });
+      skipped += updated.length;
       continue;
     }
     const result = await sendMetaEvent(row);
+    const now = new Date();
     if (result.ok) {
-      delivered += 1;
-      await db
+      const updated = await db
         .update(metaEventOutbox)
         .set({
           status: 'delivered',
@@ -751,16 +745,16 @@ export async function processMetaOutboxBatch(db: Database, limit = 50) {
           userData: {},
           updatedAt: now,
         })
-        .where(eq(metaEventOutbox.id, row.id));
+        .where(ownership)
+        .returning({ id: metaEventOutbox.id });
+      delivered += updated.length;
       continue;
     }
     const canRetry =
       result.retryable &&
       row.attemptCount < META_MAX_ATTEMPTS &&
       row.eventTime.getTime() + META_EVENT_MAX_AGE_MS > now.getTime();
-    if (canRetry) retryable += 1;
-    else failed += 1;
-    await db
+    const updated = await db
       .update(metaEventOutbox)
       .set({
         status: canRetry ? 'retryable' : 'failed',
@@ -775,9 +769,12 @@ export async function processMetaOutboxBatch(db: Database, limit = 50) {
         fbtraceId: result.fbtraceId,
         updatedAt: now,
       })
-      .where(eq(metaEventOutbox.id, row.id));
+      .where(ownership)
+      .returning({ id: metaEventOutbox.id });
+    if (canRetry) retryable += updated.length;
+    else failed += updated.length;
   }
-  return { claimed: rows.length, delivered, retryable, failed, skipped };
+  return { claimed, delivered, retryable, failed, skipped };
 }
 
 export function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): MetaCommerceLine {
@@ -799,18 +796,33 @@ export function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): 
   };
 }
 
-export async function ensureOrderConfirmedEventForOrder(
+type MetaOrderStatusInput = {
+  orderId: number;
+  statusHistoryId: number;
+  status: number;
+  changedAt: Date;
+};
+
+export async function ensureOrderConfirmedEventForOrder(db: Database, input: MetaOrderStatusInput) {
+  return ensureMetaOrderStatusEvent(db, input, 'confirmed');
+}
+
+export async function ensureOrderCompletedEventForOrder(db: Database, input: MetaOrderStatusInput) {
+  return ensureMetaOrderStatusEvent(db, input, 'completed');
+}
+
+async function ensureMetaOrderStatusEvent(
   db: Database,
-  input: {
-    orderId: number;
-    statusHistoryId: number;
-    status: number;
-    changedAt: Date;
-  },
+  input: MetaOrderStatusInput,
+  kind: 'confirmed' | 'completed',
 ) {
-  if (!isMetaOrderConfirmedStatus(input.status)) {
-    return { created: false, reason: 'unqualified' as const };
-  }
+  const qualified =
+    kind === 'confirmed'
+      ? isMetaOrderConfirmedStatus(input.status)
+      : isMetaCompletedStatus(input.status);
+  if (!qualified) return { created: false, reason: 'unqualified' as const };
+  const eventName =
+    kind === 'confirmed' ? META_ORDER_CONFIRMED_EVENT_NAME : META_ORDER_COMPLETED_EVENT_NAME;
   const [attribution] = await db
     .select()
     .from(orderMetaAttribution)
@@ -825,24 +837,22 @@ export async function ensureOrderConfirmedEventForOrder(
   const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
   if (!order) return { created: false, reason: 'missing_order' as const };
 
-  const eventId = getOrderConfirmedEventId(input.orderId);
-  const [existingConfirmation] = await db
+  const eventId =
+    kind === 'confirmed'
+      ? getOrderConfirmedEventId(input.orderId)
+      : getOrderCompletedEventId(input.orderId);
+  const [existingEvent] = await db
     .select({
       id: metaEventOutbox.id,
     })
     .from(metaEventOutbox)
-    .where(
-      and(
-        eq(metaEventOutbox.eventName, META_ORDER_CONFIRMED_EVENT_NAME),
-        eq(metaEventOutbox.eventId, eventId),
-      ),
-    )
+    .where(and(eq(metaEventOutbox.eventName, eventName), eq(metaEventOutbox.eventId, eventId)))
     .limit(1);
-  if (existingConfirmation) {
+  if (existingEvent) {
     return {
       created: false,
       reason: 'deduped' as const,
-      outboxId: existingConfirmation.id,
+      outboxId: existingEvent.id,
       eventId,
     };
   }
@@ -876,106 +886,9 @@ export async function ensureOrderConfirmedEventForOrder(
     order_status: input.status,
   };
   const outbox = await insertMetaOutboxEvent(db, {
-    eventName: META_ORDER_CONFIRMED_EVENT_NAME,
+    eventName: eventName,
     eventId,
-    source: 'order_confirmation',
-    orderId: order.id,
-    orderStatusHistoryId: input.statusHistoryId,
-    eventTime: normalizedTime.value,
-    eventSourceUrl: attribution.eventSourceUrl,
-    userData,
-    customData,
-    status: normalizedTime.kind === 'expired' ? 'skipped' : 'pending',
-  });
-  if (!outbox) {
-    return {
-      created: false,
-      reason: 'deduped' as const,
-      eventId,
-    };
-  }
-  return { created: true, outboxId: outbox.id, eventId };
-}
-
-export async function ensureOrderCompletedEventForOrder(
-  db: Database,
-  input: {
-    orderId: number;
-    statusHistoryId: number;
-    status: number;
-    changedAt: Date;
-  },
-) {
-  if (!isMetaCompletedStatus(input.status)) {
-    return { created: false, reason: 'unqualified' as const };
-  }
-  const [attribution] = await db
-    .select()
-    .from(orderMetaAttribution)
-    .where(
-      and(
-        eq(orderMetaAttribution.orderId, input.orderId),
-        eq(orderMetaAttribution.semanticsVersion, META_SEMANTICS_VERSION),
-      ),
-    )
-    .limit(1);
-  if (!attribution) return { created: false, reason: 'legacy' as const };
-  const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
-  if (!order) return { created: false, reason: 'missing_order' as const };
-
-  const eventId = getOrderCompletedEventId(input.orderId);
-  const [existingCompletion] = await db
-    .select({
-      id: metaEventOutbox.id,
-    })
-    .from(metaEventOutbox)
-    .where(
-      and(
-        eq(metaEventOutbox.eventName, META_ORDER_COMPLETED_EVENT_NAME),
-        eq(metaEventOutbox.eventId, eventId),
-      ),
-    )
-    .limit(1);
-  if (existingCompletion) {
-    return {
-      created: false,
-      reason: 'deduped' as const,
-      outboxId: existingCompletion.id,
-      eventId,
-    };
-  }
-
-  const lineRows = await db
-    .select()
-    .from(orderLineItems)
-    .where(eq(orderLineItems.orderId, input.orderId));
-  const lines = lineRows
-    .map(lineRowToCommerceLine)
-    .filter((line) => Number.isInteger(line.productId));
-  if (lines.length === 0) return { created: false, reason: 'missing_lines' as const };
-
-  const normalizedTime = normalizeMetaEventTime(input.changedAt);
-  const userData = buildMetaUserData({
-    email: order.email,
-    firstName: order.firstName,
-    lastName: order.lastName,
-    phone: order.phoneNumber1,
-    city: order.city,
-    state: order.state == null ? null : String(order.state),
-    externalIdSource: attribution.externalIdSource,
-    fbc: attribution.fbc,
-    fbp: attribution.fbp,
-    clientIpAddress: attribution.clientIpAddress,
-    clientUserAgent: attribution.clientUserAgent,
-  });
-  const customData = {
-    ...buildMetaCommerceCustomData(lines, order.id),
-    order_status: input.status,
-  };
-  const outbox = await insertMetaOutboxEvent(db, {
-    eventName: META_ORDER_COMPLETED_EVENT_NAME,
-    eventId,
-    source: 'order_completion',
+    source: kind === 'confirmed' ? 'order_confirmation' : 'order_completion',
     orderId: order.id,
     orderStatusHistoryId: input.statusHistoryId,
     eventTime: normalizedTime.value,

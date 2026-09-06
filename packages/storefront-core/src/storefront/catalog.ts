@@ -337,7 +337,6 @@ export async function readStorefrontProductsForSelectionPage(
   { page, limit, includeTotal = true }: { page: number; limit: number; includeTotal?: boolean },
 ) {
   const direct = await readStorefrontProductsByIds(db, selection.productIds);
-  const uniqueDirect = [...new Map(direct.map((product) => [product.id, product])).values()];
   const dynamicConditions = [
     selection.brandIds.length > 0 ? inArray(products.brandId, selection.brandIds) : undefined,
     selection.categoryIds.length > 0
@@ -346,22 +345,22 @@ export async function readStorefrontProductsForSelectionPage(
   ].filter((condition): condition is NonNullable<typeof condition> => Boolean(condition));
   const start = Math.max(0, page - 1) * limit;
   if (dynamicConditions.length === 0) {
-    return { items: uniqueDirect.slice(start, start + limit), total: uniqueDirect.length };
+    return { items: direct.slice(start, start + limit), total: direct.length };
   }
 
   const dynamicWhere = and(
     eq(products.active, true),
     isNull(products.archivedAt),
     or(...dynamicConditions),
-    uniqueDirect.length > 0
+    direct.length > 0
       ? notInArray(
           products.id,
-          uniqueDirect.map((product) => product.id),
+          direct.map((product) => product.id),
         )
       : undefined,
   );
-  const dynamicOffset = Math.max(0, start - uniqueDirect.length);
-  const dynamicLimit = Math.max(0, limit - Math.max(0, uniqueDirect.length - start));
+  const dynamicOffset = Math.max(0, start - direct.length);
+  const dynamicLimit = Math.max(0, limit - Math.max(0, direct.length - start));
 
   const [countRows, rows] = await Promise.all([
     includeTotal
@@ -380,10 +379,10 @@ export async function readStorefrontProductsForSelectionPage(
 
   return {
     items: [
-      ...uniqueDirect.slice(start, start + limit),
+      ...direct.slice(start, start + limit),
       ...rows.map((row) => toStorefrontProductDto(row satisfies StorefrontProductDtoRow)),
     ].slice(0, limit),
-    total: countRows === null ? null : uniqueDirect.length + Number(countRows[0]?.count ?? 0),
+    total: countRows === null ? null : direct.length + Number(countRows[0]?.count ?? 0),
   };
 }
 

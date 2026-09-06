@@ -11,7 +11,11 @@ import {
 } from '@bric/db/schema';
 import { readEcotrackDeliveryFee } from '../ecotrack-support';
 import { assertReviewedOrderPrices, resolveOrderCommercialState } from '../order-commercial';
-import { OrderProductLookup, getOrderProductLookup } from '../order-records';
+import {
+  OrderProductLookup,
+  getOrderProductLookup,
+  toStorefrontOrderRecord,
+} from '../order-records';
 import { insertCanonicalOrder } from '../order-write';
 import {
   DEGRADED_CAPTURE_VARIANT,
@@ -22,7 +26,6 @@ import {
 } from '../orders-support';
 import { attachJourneyToOrder } from './analytics';
 import type { StorefrontOrderCreateRequest } from './contracts';
-import { toStorefrontOrderDto } from './dto';
 import { createOrderMarketingArtifacts } from './marketing';
 import { createOrderMetaArtifacts, readMetaOrderLocation, type MetaRequestContext } from './meta';
 import {
@@ -219,7 +222,6 @@ export async function createStorefrontOrder(
               requestContext: options?.metaRequestContext ?? {},
               location: metaLocation,
               now,
-              linesAlreadyPersisted: true,
             });
           }
           if (payload.marketing) {
@@ -286,7 +288,7 @@ export async function createStorefrontOrder(
   }
 
   const item = await measureStep('buildOrderDto', reportTiming, async () =>
-    toStorefrontOrderDto(
+    toStorefrontOrderRecord(
       currentOrder,
       toStorefrontHistoryEntries(historyRows),
       productLookup,
@@ -316,7 +318,7 @@ async function hydrateStorefrontOrder(db: Database, order: typeof orders.$inferS
     readPurchaseEventId(db, order.id),
   ]);
 
-  return toStorefrontOrderDto(
+  return toStorefrontOrderRecord(
     order,
     toStorefrontHistoryEntries(historyRows),
     productLookup,

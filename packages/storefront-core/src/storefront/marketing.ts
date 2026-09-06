@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, lt, lte, inArray, or, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -715,43 +715,68 @@ export async function sendMarketingDestinationEvent(row: OutboxRow): Promise<Sen
   }
 }
 
-async function claimEvents(db: Database, limit: number) {
+async function claimMarketingOutboxEvent(db: Database) {
   const now = new Date();
-  const lease = new Date(now.getTime() + PROCESSING_LEASE_MS);
-  const result = await db.execute(sql`
-    with candidates as (
-      select id from ${marketingEventOutbox}
-      where ((${marketingEventOutbox.status} in ('queued', 'retrying') and ${marketingEventOutbox.nextAttemptAt} <= ${now})
-        or (${marketingEventOutbox.status} = 'processing' and ${marketingEventOutbox.processingLeaseExpiresAt} < ${now}))
-      order by ${marketingEventOutbox.nextAttemptAt} asc, ${marketingEventOutbox.id} asc
-      for update skip locked limit ${limit}
+  const [row] = await db
+    .update(marketingEventOutbox)
+    .set({
+      status: 'processing',
+      attemptCount: sql`${marketingEventOutbox.attemptCount} + 1`,
+      processingStartedAt: now,
+      processingLeaseExpiresAt: new Date(now.getTime() + PROCESSING_LEASE_MS),
+      lastAttemptAt: now,
+      updatedAt: now,
+    })
+    .where(
+      inArray(
+        marketingEventOutbox.id,
+        db
+          .select({ id: marketingEventOutbox.id })
+          .from(marketingEventOutbox)
+          .where(
+            or(
+              and(
+                inArray(marketingEventOutbox.status, ['queued', 'retrying']),
+                lte(marketingEventOutbox.nextAttemptAt, now),
+              ),
+              and(
+                eq(marketingEventOutbox.status, 'processing'),
+                lt(marketingEventOutbox.processingLeaseExpiresAt, now),
+              ),
+            ),
+          )
+          .orderBy(asc(marketingEventOutbox.nextAttemptAt), asc(marketingEventOutbox.id))
+          .limit(1)
+          .for('update', { skipLocked: true }),
+      ),
     )
-    update ${marketingEventOutbox}
-    set status = 'processing', attempt_count = ${marketingEventOutbox.attemptCount} + 1,
-      processing_started_at = ${now}, processing_lease_expires_at = ${lease}, last_attempt_at = ${now}, updated_at = ${now}
-    where id in (select id from candidates) returning id
-  `);
-  const ids = (result.rows as Array<{ id: number | string }>).map((row) => Number(row.id));
-  return ids.length
-    ? db.select().from(marketingEventOutbox).where(inArray(marketingEventOutbox.id, ids))
-    : [];
+    .returning();
+  return row;
 }
 
 export async function processMarketingOutboxBatch(db: Database, limit = 50) {
-  const rows = await claimEvents(db, Math.max(1, Math.min(limit, 50)));
   const result = {
-    claimed: rows.length,
+    claimed: 0,
     accepted: 0,
     rejected: 0,
     retrying: 0,
     exhausted: 0,
     dropped: 0,
   };
-  for (const row of rows) {
+  // Claim only when ready to send; queued rows must not spend their lease waiting in memory.
+  for (let index = 0; index < Math.max(1, Math.min(limit, 50)); index += 1) {
+    const row = await claimMarketingOutboxEvent(db);
+    if (!row) break;
+    result.claimed += 1;
+    const ownership = and(
+      eq(marketingEventOutbox.id, row.id),
+      eq(marketingEventOutbox.status, 'processing'),
+      eq(marketingEventOutbox.attemptCount, row.attemptCount),
+      eq(marketingEventOutbox.processingStartedAt, row.processingStartedAt!),
+    );
     const maxAge = row.destination === 'google' ? GOOGLE_MAX_AGE_MS : TIKTOK_MAX_AGE_MS;
     if (row.eventTime.getTime() < Date.now() - maxAge) {
-      result.dropped += 1;
-      await db
+      const updated = await db
         .update(marketingEventOutbox)
         .set({
           status: 'dropped',
@@ -761,14 +786,15 @@ export async function processMarketingOutboxBatch(db: Database, limit = 50) {
           payload: { redacted: true, eventName: row.eventName },
           updatedAt: new Date(),
         })
-        .where(eq(marketingEventOutbox.id, row.id));
+        .where(ownership)
+        .returning({ id: marketingEventOutbox.id });
+      result.dropped += updated.length;
       continue;
     }
     const sent = await sendMarketingDestinationEvent(row);
     const now = new Date();
     if (sent.ok) {
-      result.accepted += 1;
-      await db
+      const updated = await db
         .update(marketingEventOutbox)
         .set({
           status: 'accepted',
@@ -780,16 +806,15 @@ export async function processMarketingOutboxBatch(db: Database, limit = 50) {
           payload: { redacted: true, eventName: row.eventName },
           updatedAt: now,
         })
-        .where(eq(marketingEventOutbox.id, row.id));
+        .where(ownership)
+        .returning({ id: marketingEventOutbox.id });
+      result.accepted += updated.length;
       continue;
     }
     const canRetry = sent.retryable && row.attemptCount < MAX_ATTEMPTS;
-    if (canRetry) result.retrying += 1;
-    else if (sent.retryable) result.exhausted += 1;
-    else result.rejected += 1;
     const delay =
       RETRY_DELAYS_MS[Math.min(Math.max(row.attemptCount - 1, 0), RETRY_DELAYS_MS.length - 1)];
-    await db
+    const updated = await db
       .update(marketingEventOutbox)
       .set({
         status: canRetry ? 'retrying' : sent.retryable ? 'exhausted' : 'rejected',
@@ -802,7 +827,11 @@ export async function processMarketingOutboxBatch(db: Database, limit = 50) {
         errorMessage: sent.message.slice(0, 2000),
         updatedAt: now,
       })
-      .where(eq(marketingEventOutbox.id, row.id));
+      .where(ownership)
+      .returning({ id: marketingEventOutbox.id });
+    if (canRetry) result.retrying += updated.length;
+    else if (sent.retryable) result.exhausted += updated.length;
+    else result.rejected += updated.length;
   }
   return result;
 }
