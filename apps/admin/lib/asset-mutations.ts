@@ -36,7 +36,10 @@ export const adminAssetKindSchema = z.enum(['banner', 'featured-group', 'product
 async function syncFeaturedGroupSelections(
   tx: Transaction,
   groupId: number,
-  value: z.output<typeof featuredProductGroupSchema>,
+  value: Pick<
+    z.output<typeof featuredProductGroupSchema>,
+    'productIds' | 'brandIds' | 'categoryIds'
+  >,
 ) {
   await Promise.all([
     tx
@@ -228,14 +231,14 @@ export async function patchAdminAsset(
   );
   if (stateOnly) {
     const {
-      kind: _kind,
-      id: _id,
+      kind: stateKind,
+      id: stateId,
       ...values
     } = adminAssetStateItemSchema.parse({ kind, id, ...changes });
-    const { table, entityType } = assetStorage[resolvedKind];
+    const { table, entityType } = assetStorage[stateKind];
     const result = await mutateEntityWithHistory(db, {
       entityType,
-      entityId: id,
+      entityId: stateId,
       operation: 'update',
       actor,
       execute: async (tx, beforeState) => {
@@ -243,7 +246,7 @@ export async function patchAdminAsset(
         await tx
           .update(table)
           .set({ ...values, updatedAt: new Date() })
-          .where(eq(table.id, id));
+          .where(eq(table.id, stateId));
         return { previous, data: { ...previous, ...values } };
       },
     });
@@ -297,17 +300,12 @@ async function writeAdminAsset(
       }
       if (resolvedKind === 'featured-group') {
         const data = featuredProductGroupSchema.parse(input);
-        const {
-          productIds: _products,
-          brandIds: _brands,
-          categoryIds: _categories,
-          ...values
-        } = data;
+        const { productIds, brandIds, categoryIds, ...values } = data;
         await tx
           .update(featuredProductGroups)
           .set({ ...values, updatedAt: new Date() })
           .where(eq(featuredProductGroups.id, id));
-        await syncFeaturedGroupSelections(tx, id, data);
+        await syncFeaturedGroupSelections(tx, id, { productIds, brandIds, categoryIds });
         return { previous, data };
       }
       const data = productCardSchema.parse(input);

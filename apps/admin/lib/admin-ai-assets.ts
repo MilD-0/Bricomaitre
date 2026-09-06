@@ -166,15 +166,6 @@ export const adminAiAssetReorderSchema = z
     }
   });
 
-function recordsForKind(
-  data: Awaited<ReturnType<typeof loadAssetsData>>,
-  kind: z.infer<typeof assetKindSchema>,
-) {
-  if (kind === 'banner') return data.banners;
-  if (kind === 'featured-group') return data.featuredGroups;
-  return data.productCards;
-}
-
 function summarizeRecords<T extends { id: number; active: boolean }>(
   records: T[],
   input: z.output<typeof adminAiAssetInspectionSchema>,
