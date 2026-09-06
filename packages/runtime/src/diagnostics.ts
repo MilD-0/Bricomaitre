@@ -100,7 +100,7 @@ export function getRequestId(request?: { headers?: { get(name: string): string |
   return `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-export function withRequestIdHeaders(requestId: string, headers: HeadersInit = {}) {
+export function withRequestIdHeaders(requestId: string, headers: Record<string, string> = {}) {
   return {
     ...headers,
     'x-request-id': requestId,

@@ -1,5 +1,11 @@
 import { getRedis } from './redis';
 
+const INCREMENT_WINDOW = `
+  local total = redis.call('incr', KEYS[1])
+  if total == 1 then redis.call('expire', KEYS[1], ARGV[1]) end
+  return total
+`;
+
 export type RateLimitResult = {
   ok: boolean;
   limit: number;
@@ -18,11 +24,7 @@ export async function applyRateLimit(options: {
   const now = Date.now();
   const bucket = Math.floor(now / (options.windowSeconds * 1000));
   const redisKey = `bric:ratelimit:${options.scope}:${options.key}:${bucket}`;
-  const total = await redis.incr(redisKey);
-
-  if (total === 1) {
-    await redis.expire(redisKey, options.windowSeconds);
-  }
+  const total = Number(await redis.eval(INCREMENT_WINDOW, 1, redisKey, options.windowSeconds));
 
   const resetAt = (bucket + 1) * options.windowSeconds * 1000;
   return {

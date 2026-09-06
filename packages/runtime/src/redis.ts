@@ -80,17 +80,6 @@ export function getRedisConnectionOptions(
   };
 }
 
-export function getRequestRedisConnectionOptions(
-  env: RedisEnvironment = process.env,
-): RedisConnectionOptions {
-  return {
-    ...getRedisConnectionOptions(env),
-    commandTimeout: REQUEST_REDIS_COMMAND_TIMEOUT_MS,
-    connectTimeout: REQUEST_REDIS_CONNECT_TIMEOUT_MS,
-    maxRetriesPerRequest: 1,
-  };
-}
-
 function buildClient(cacheKey: string, overrides: RedisOptions = {}) {
   const clients = getGlobalClients();
   const existing = clients.get(cacheKey);

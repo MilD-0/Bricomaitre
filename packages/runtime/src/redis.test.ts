@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getRedisConnectionOptions } from './redis';
+import {
+  closeRedisConnections,
+  getBullRedisConnection,
+  getRedis,
+  getRedisConnectionOptions,
+} from './redis';
+
+afterEach(async () => {
+  await closeRedisConnections();
+  vi.unstubAllEnvs();
+});
 
 describe('Redis connection options', () => {
   it('uses a separately rotated password when a legacy URL has no credentials', () => {
@@ -29,6 +39,9 @@ describe('Redis connection options', () => {
       port: 6380,
       db: 2,
       tls: {},
+      protocol: 2,
+      lazyConnect: true,
+      maxRetriesPerRequest: null,
     });
   });
 
@@ -43,5 +56,31 @@ describe('Redis connection options', () => {
       password: 'new-password',
       db: 1,
     });
+  });
+
+  it('supports discrete host configuration with the same protocol and lazy connection policy', () => {
+    expect(getRedisConnectionOptions({ REDIS_HOST: 'redis', REDIS_PORT: '6380' })).toMatchObject({
+      host: 'redis',
+      port: 6380,
+      protocol: 2,
+      tls: undefined,
+      lazyConnect: true,
+    });
+  });
+
+  it('bounds the actual request client while keeping BullMQ retries unlimited', () => {
+    vi.stubEnv('REDIS_URL', 'redis://127.0.0.1:6379');
+    const request = getRedis();
+    const worker = getBullRedisConnection('configuration-test');
+    expect(request.options).toMatchObject({
+      commandTimeout: 5_000,
+      connectTimeout: 5_000,
+      maxRetriesPerRequest: 1,
+      protocol: 2,
+    });
+    expect(worker.options).toMatchObject({ maxRetriesPerRequest: null, protocol: 2 });
+    expect(worker.options.commandTimeout).toBeUndefined();
+    expect(getRedis()).toBe(request);
+    expect(getBullRedisConnection('configuration-test')).toBe(worker);
   });
 });

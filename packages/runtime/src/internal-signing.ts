@@ -2,10 +2,6 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000;
 
-function toBuffer(value: string) {
-  return Buffer.from(value, 'utf8');
-}
-
 export function signInternalRequest(payload: string, secret: string, timestamp: string) {
   return createHmac('sha256', secret).update(`${timestamp}.${payload}`).digest('hex');
 }
@@ -43,8 +39,8 @@ export function verifyInternalRequestSignature(options: {
   }
 
   const expected = signInternalRequest(payload, secret, timestamp);
-  const signatureBuffer = toBuffer(signature);
-  const expectedBuffer = toBuffer(expected);
+  const signatureBuffer = Buffer.from(signature, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
 
   if (signatureBuffer.length !== expectedBuffer.length) {
     return { ok: false as const, error: 'Invalid signature' };
