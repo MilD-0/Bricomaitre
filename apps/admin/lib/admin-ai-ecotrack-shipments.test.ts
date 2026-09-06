@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   dispatchBatch: vi.fn(),
   loadDetail: vi.fn(),
   loadPage: vi.fn(),
-  parseDraft: vi.fn((input) => input),
   recreateShipment: vi.fn(),
   refreshBatch: vi.fn(),
   requestReturn: vi.fn(),
@@ -19,7 +18,6 @@ vi.mock('./admin-ecotrack-orders-data', () => ({
   dispatchEcotrackOrdersBatch: mocks.dispatchBatch,
   loadEcotrackOrderDetail: mocks.loadDetail,
   loadEcotrackOrdersPageData: mocks.loadPage,
-  parseEcotrackShipmentUpdateDraft: mocks.parseDraft,
   recreatePostedEcotrackOrder: mocks.recreateShipment,
   refreshEcotrackOrdersBatch: mocks.refreshBatch,
   requestEcotrackReturn: mocks.requestReturn,
@@ -272,7 +270,7 @@ describe('admin AI ECOTRACK shipment actions', () => {
 describe('admin AI ECOTRACK shipment changes', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('edits the carrier shipment while preserving every unmentioned field server-side', async () => {
+  it('passes only explicit carrier changes so canonical state owns unmentioned fields', async () => {
     const current = shipment();
     mocks.loadDetail.mockResolvedValue(current);
     mocks.updateShipment.mockResolvedValue(
@@ -301,20 +299,7 @@ describe('admin AI ECOTRACK shipment changes', () => {
     });
     expect(mocks.updateShipment).toHaveBeenCalledWith(
       91,
-      {
-        firstName: 'Ada',
-        lastName: 'Lovelace',
-        phoneNumber1: '0550000000',
-        phoneNumber2: null,
-        delivery: 0,
-        state: 16,
-        city: 'Bab Ezzouar',
-        homeAddress: '12 rue des Outils',
-        note: 'Appeler avant livraison',
-        cartProducts: ['12', '12'],
-        deliveryFee: 600,
-        subtotalOverride: null,
-      },
+      { city: 'Bab Ezzouar', homeAddress: '12 rue des Outils' },
       actor,
     );
     expect(mocks.recreateShipment).not.toHaveBeenCalled();

@@ -566,6 +566,41 @@ describe('carrier mutation ownership and recovery', () => {
       productSubtotal: '1600.00',
       totalAmount: '1800.00',
     });
+    const linesBeforeNote = await db
+      .select()
+      .from(orderLineItems)
+      .where(eq(orderLineItems.orderId, row.id));
+    await db.update(products).set({ price: '3000' }).where(eq(products.id, product!.id));
+    await db
+      .update(productPromoCodes)
+      .set({ promoPrice: '2500' })
+      .where(eq(productPromoCodes.productId, product!.id));
+    // This edit lands after the assistant's earlier inspection, before its explicit note patch.
+    await db
+      .update(orders)
+      .set({
+        firstName: 'Current operator edit',
+        price: '1200',
+        totalAmount: '1400',
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, row.id));
+    await updatePostedEcotrackOrder(row.id, { note: 'Call after 17:00' }, actor);
+    expect(upstream.update.mock.lastCall![0]).toMatchObject({
+      client: 'Current operator edit',
+      montant: '1400',
+      remarque: 'Call after 17:00',
+    });
+    expect((await db.select().from(orders).where(eq(orders.id, row.id)))[0]).toMatchObject({
+      firstName: 'Current operator edit',
+      note: 'Call after 17:00',
+      price: '1200.00',
+      productSubtotal: '1600.00',
+      totalAmount: '1400.00',
+    });
+    expect(
+      await db.select().from(orderLineItems).where(eq(orderLineItems.orderId, row.id)),
+    ).toEqual(linesBeforeNote);
   });
 
   it('records actual reconciliation snapshots and keeps identical events from separate attempts', async () => {

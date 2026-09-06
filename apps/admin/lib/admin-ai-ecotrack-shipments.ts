@@ -7,7 +7,6 @@ import {
   dispatchEcotrackOrdersBatch,
   loadEcotrackOrderDetail,
   loadEcotrackOrdersPageData,
-  parseEcotrackShipmentUpdateDraft,
   recreatePostedEcotrackOrder,
   refreshEcotrackOrdersBatch,
   requestEcotrackReturn,
@@ -343,33 +342,8 @@ export async function manageAdminAiEcotrackShipments(
   };
 }
 
-function shipmentDraft(item: EcotrackShipmentDetail): EcotrackOrderUpdateDraft {
-  return parseEcotrackShipmentUpdateDraft({
-    firstName: item.firstName ?? '',
-    lastName: item.lastName ?? '',
-    phoneNumber1: item.phoneNumber1,
-    phoneNumber2: item.phoneNumber2,
-    delivery: item.delivery,
-    state: item.state,
-    city: item.city ?? '',
-    homeAddress: item.homeAddress ?? '',
-    note: item.note,
-    cartProducts: item.orderProducts.flatMap((product) =>
-      Array.from(
-        { length: product.quantity },
-        () => product.rawValue ?? String(product.productId ?? product.title),
-      ),
-    ),
-    deliveryFee: item.deliveryFee,
-    subtotalOverride: item.subtotalOverride,
-  });
-}
-
-function applyShipmentOperations(
-  current: EcotrackShipmentDetail,
-  operations: z.output<typeof shipmentChangeOperationSchema>[],
-) {
-  const draft = shipmentDraft(current);
+function applyShipmentOperations(operations: z.output<typeof shipmentChangeOperationSchema>[]) {
+  const draft: Partial<EcotrackOrderUpdateDraft> = {};
   for (const operation of operations) {
     switch (operation.field) {
       case 'delivery':
@@ -410,7 +384,7 @@ function applyShipmentOperations(
         break;
     }
   }
-  return parseEcotrackShipmentUpdateDraft(draft);
+  return draft;
 }
 
 export async function changeAdminAiEcotrackShipments(
@@ -436,7 +410,7 @@ export async function changeAdminAiEcotrackShipments(
       if (!operation) {
         throw new Error('This shipment can no longer be edited or recreated in its current state.');
       }
-      const draft = applyShipmentOperations(current, request.operations);
+      const draft = applyShipmentOperations(request.operations);
       const item =
         operation === 'edit'
           ? await updatePostedEcotrackOrder(request.orderId, draft, actor)

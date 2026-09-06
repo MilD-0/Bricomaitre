@@ -46,6 +46,7 @@ import { formatEcotrackActionError, toEcotrackFailureRecord } from './ecotrack-s
 import { providerRequestOptions } from './ecotrack-shipment-evidence';
 import {
   buildUpdatePayload,
+  parseEcotrackShipmentUpdateDraft,
   type EcotrackDispatchRequest,
   type EcotrackOrderUpdateDraft,
 } from './ecotrack-shipment-input';
@@ -102,9 +103,26 @@ async function executeCarrierCommand(
   return current ? buildEcotrackOrderDetailFromRow(db, current) : null;
 }
 
-async function prepareCarrierOrderChange(row: ShipmentRow, draft: EcotrackOrderUpdateDraft) {
+async function prepareCarrierOrderChange(
+  row: ShipmentRow,
+  changes: Partial<EcotrackOrderUpdateDraft>,
+) {
   const db = getDb();
   const now = new Date();
+  const draft = parseEcotrackShipmentUpdateDraft({
+    firstName: row.order.firstName ?? row.order.phoneNumber1,
+    lastName: row.order.lastName ?? '',
+    phoneNumber1: row.order.phoneNumber1,
+    phoneNumber2: row.order.phoneNumber2,
+    delivery: row.order.delivery,
+    state: row.order.state,
+    city: row.order.city ?? '',
+    homeAddress: row.order.homeAddress ?? '',
+    note: row.order.note,
+    deliveryFee: row.order.deliveryFee,
+    subtotalOverride: row.order.price,
+    ...Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined)),
+  });
   const deliveryFee = draft.deliveryFee ?? Number(row.order.deliveryFee ?? 0);
   const commercial =
     draft.cartProducts === undefined
@@ -167,7 +185,7 @@ async function prepareCarrierOrderChange(row: ShipmentRow, draft: EcotrackOrderU
 
 export async function updatePostedEcotrackOrder(
   orderId: number,
-  draft: EcotrackOrderUpdateDraft,
+  draft: Partial<EcotrackOrderUpdateDraft>,
   actor: ActionActor,
 ) {
   const row = await loadActionableShipment(orderId, 'canEdit', actor);
@@ -191,7 +209,7 @@ export async function updatePostedEcotrackOrder(
 
 export async function recreatePostedEcotrackOrder(
   orderId: number,
-  draft: EcotrackOrderUpdateDraft,
+  draft: Partial<EcotrackOrderUpdateDraft>,
   actor: ActionActor,
 ) {
   const row = await loadActionableShipment(orderId, 'canEditAndRecreate', actor);
