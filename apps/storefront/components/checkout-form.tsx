@@ -427,6 +427,33 @@ export function CheckoutForm({
       setRequestError(labels.quantityLimit);
       return;
     }
+    const parsed = checkoutFormSchema.safeParse({
+      phoneNumber1,
+      lastName,
+      firstName,
+      state,
+      city,
+      homeAddress,
+      email,
+      delivery,
+    });
+    if (!parsed.success) {
+      const nextErrors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const field = String(issue.path[0] ?? 'form');
+        nextErrors[field] =
+          issue.message === 'invalid_email'
+            ? labels.emailError
+            : issue.message === 'phone_invalid'
+              ? labels.phoneError
+              : labels.requiredError;
+      }
+      focusInvalid.current = true;
+      setErrors(nextErrors);
+      setRequestError('');
+      return;
+    }
+    setErrors({});
     validationLock.current = true;
     setValidating(true);
     setRequestError('');
@@ -446,33 +473,6 @@ export function CheckoutForm({
           return;
         }
       }
-      const parsed = checkoutFormSchema.safeParse({
-        phoneNumber1,
-        lastName,
-        firstName,
-        state,
-        city,
-        homeAddress,
-        email,
-        delivery,
-      });
-      if (!parsed.success) {
-        const nextErrors: Record<string, string> = {};
-        for (const issue of parsed.error.issues) {
-          const field = String(issue.path[0] ?? 'form');
-          nextErrors[field] =
-            issue.message === 'invalid_email'
-              ? labels.emailError
-              : issue.message === 'phone_invalid'
-                ? labels.phoneError
-                : labels.requiredError;
-        }
-        focusInvalid.current = true;
-        setErrors(nextErrors);
-        setRequestError('');
-        return;
-      }
-      setErrors({});
       const purchaseEventId = createId();
       let attribution: Pick<
         Parameters<typeof buildCheckoutOrderPayload>[0],

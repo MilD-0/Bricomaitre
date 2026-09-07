@@ -508,7 +508,8 @@ describe('CheckoutForm', () => {
     expect(mocks.create.mock.calls[1]).toEqual(attempt);
   });
 
-  it('announces validation errors and moves focus to the first required field', async () => {
+  it('validates and focuses required fields without waiting for an unavailable catalog', async () => {
+    mocks.reconcile.mockRejectedValue(new Error('catalog unavailable'));
     render(
       <CheckoutForm
         locale="fr"
@@ -522,6 +523,8 @@ describe('CheckoutForm', () => {
     const phone = screen.getByRole('textbox', { name: /phone/ });
     await waitFor(() => expect(phone).toHaveFocus());
     expect(phone).toHaveAttribute('aria-invalid', 'true');
+    expect(mocks.reconcile).not.toHaveBeenCalled();
+    expect(screen.queryByText('submitError')).not.toBeInTheDocument();
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
@@ -685,6 +688,13 @@ describe('CheckoutForm', () => {
           release = resolve;
         }),
     );
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     window.localStorage.setItem('bric:cart:v1', JSON.stringify([{ ...directItem, quantity: 3 }]));
     window.dispatchEvent(new Event('storage'));
@@ -811,6 +821,13 @@ describe('CheckoutForm', () => {
         embedded
       />,
     );
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     expect(screen.getByRole('button', { name: 'submitting' })).toBeDisabled();
     fail(new Error('Request timed out'));

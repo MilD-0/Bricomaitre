@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react';
 import type { Route } from 'next';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
@@ -49,17 +49,34 @@ export function CatalogLiveSearch({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [value, setValue] = useState(initialValue);
-  const [lastInitialValue, setLastInitialValue] = useState(initialValue);
-  const [committedValue, setCommittedValue] = useState(initialValue);
   const [queued, setQueued] = useState(false);
   const [isPending, startTransition] = useTransition();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const composingRef = useRef(false);
 
-  if (initialValue !== lastInitialValue) {
-    setLastInitialValue(initialValue);
-    if (initialValue !== committedValue) setValue(initialValue);
-  }
+  const queryString = searchParams.toString();
+  const locationRef = useRef({ pathname, queryString, initialValue });
+  const ownNavigations = useRef(new Set<string>());
+
+  useLayoutEffect(() => {
+    const previous = locationRef.current;
+    locationRef.current = { pathname, queryString, initialValue };
+    if (
+      previous.pathname === pathname &&
+      previous.queryString === queryString &&
+      previous.initialValue === initialValue
+    )
+      return;
+    const target = `${pathname}?${queryString}`;
+    if (ownNavigations.current.delete(target)) return;
+
+    // Back/forward and other filters supersede any queued search edit.
+    ownNavigations.current.clear();
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setQueued(false);
+    setValue(initialValue);
+  }, [pathname, queryString, initialValue]);
 
   useEffect(
     () => () => {
@@ -80,16 +97,18 @@ export function CatalogLiveSearch({
 
   function commit(nextValue: string) {
     timerRef.current = null;
-    const params = new URLSearchParams(searchParams.toString());
+    const current = locationRef.current;
+    const params = new URLSearchParams(current.queryString);
     const normalizedValue = nextValue.trim();
     if (normalizedValue) params.set('q', normalizedValue);
     else params.delete('q');
     params.delete('page');
-    setCommittedValue(normalizedValue);
     setQueued(false);
     const query = params.toString();
+    if (query === current.queryString) return;
+    ownNavigations.current.add(`${current.pathname}?${query}`);
     startTransition(() =>
-      router.replace(`${pathname}${query ? `?${query}` : ''}` as Route, { scroll: false }),
+      router.replace(`${current.pathname}${query ? `?${query}` : ''}` as Route, { scroll: false }),
     );
   }
 
