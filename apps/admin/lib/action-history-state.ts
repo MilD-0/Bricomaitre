@@ -188,13 +188,14 @@ async function restoreProductRelations(
   target: Snapshot,
   expected?: Snapshot,
 ) {
-  // Earlier stock-only actions did not capture merchandising state. Their
-  // allocation recovery remains valid and does not rewrite those relations.
+  // Earlier stock and category-only actions did not capture merchandising
+  // relations. Recover only these scalar changes without rewriting relations.
   if (!target.aggregateVersion) {
     if (
       expected &&
       Object.keys(snapshotChanges(target, expected)).every((key) =>
         [
+          'categoryId',
           'inventoryQuantity',
           'inStock',
           'availabilityStatus',

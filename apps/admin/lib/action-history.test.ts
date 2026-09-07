@@ -14,6 +14,7 @@ function createActionLogSelectBuilder(row: unknown) {
   return {
     from: vi.fn(() => ({
       where: vi.fn(() => ({
+        limit: vi.fn().mockResolvedValue(row ? [row] : []),
         for: vi.fn(() => ({ limit: vi.fn().mockResolvedValue(row ? [row] : []) })),
       })),
     })),
@@ -35,6 +36,7 @@ describe('action-history helpers', () => {
     const actionLogValues = vi.fn().mockResolvedValue(undefined);
     const tx = {
       insert: vi.fn(() => ({ values: actionLogValues })),
+      update: vi.fn(() => ({ set: () => ({ where: vi.fn().mockResolvedValue(undefined) }) })),
     };
 
     await recordExplicitActionLog(tx as never, {
@@ -94,6 +96,7 @@ describe('action-history helpers', () => {
       select: vi
         .fn()
         .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
+        .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
         .mockReturnValueOnce(
           createHistoryListSelectBuilder([
             { id: 7, isUndone: false },
@@ -147,6 +150,7 @@ describe('action-history helpers', () => {
       execute: vi.fn().mockResolvedValue({ rows: [] }),
       select: vi
         .fn()
+        .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
         .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))
         .mockReturnValueOnce(
           createHistoryListSelectBuilder([
@@ -333,4 +337,25 @@ describe('action-history helpers', () => {
       ]),
     ).toEqual({ nextAction: null, blockedReason: 'history_out_of_sync' });
   });
+});
+
+it('allows the new branch to recover while keeping abandoned redo actions unavailable', () => {
+  const history = [
+    { id: 1, isUndone: false },
+    { id: 2, isUndone: true },
+    { id: 3, isUndone: false },
+  ];
+  expect(
+    resolveActionHistoryRecovery({ id: 3, isReversible: true, isUndone: false }, history),
+  ).toEqual({ nextAction: 'undo', blockedReason: null });
+  expect(
+    resolveActionHistoryRecovery({ id: 2, isReversible: true, isUndone: true }, history),
+  ).toEqual({ nextAction: null, blockedReason: 'non_reversible' });
+  expect(
+    resolveActionHistoryRecovery({ id: 3, isReversible: true, isUndone: true }, [
+      { id: 1, isUndone: false },
+      { id: 2, isUndone: true, isReversible: false },
+      { id: 3, isUndone: true },
+    ]),
+  ).toEqual({ nextAction: 'redo', blockedReason: null });
 });

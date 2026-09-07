@@ -49,6 +49,7 @@ import {
   assertNoUnresolvedEcotrackMutation,
   EcotrackMutationConflictError,
 } from './ecotrack-mutations';
+import { assertCategoryParentAllowed, CategoryHierarchyError } from './category-hierarchy';
 import { parseSortRuleStrings } from './multi-sort';
 import { normalizePermissions } from './permissions';
 import {
@@ -692,14 +693,24 @@ function buildActionHistoryPreview(changes: ActionHistoryChange[]): {
 
 export function resolveActionHistoryRecovery(
   entry: Pick<ActionLogEntry, 'id' | 'isReversible' | 'isUndone'>,
-  entityHistory: Array<Pick<ActionLogEntry, 'id' | 'isUndone'>>,
+  entityHistory: Array<Pick<ActionLogEntry, 'id' | 'isUndone'> & { isReversible?: boolean }>,
 ): ActionHistoryRecovery {
   if (!entry.isReversible) {
     return { nextAction: null, blockedReason: 'non_reversible' };
   }
 
+  entityHistory = entityHistory.filter((item) => !item.isUndone || item.isReversible !== false);
+  const lastAppliedIndex = entityHistory.findLastIndex((item) => !item.isUndone);
+  const supersededIds = new Set(
+    entityHistory
+      .slice(0, Math.max(0, lastAppliedIndex))
+      .filter((item) => item.isUndone)
+      .map((item) => item.id),
+  );
+  if (supersededIds.has(entry.id)) return { nextAction: null, blockedReason: 'non_reversible' };
+  entityHistory = entityHistory.filter((item) => !supersededIds.has(item.id));
   const entryIndex = entityHistory.findIndex((historyEntry) => historyEntry.id === entry.id);
-  if (entryIndex === -1) {
+  if (entryIndex === -1 || entityHistory[entryIndex]?.isUndone !== entry.isUndone) {
     return { nextAction: null, blockedReason: 'history_out_of_sync' };
   }
 
@@ -731,7 +742,11 @@ export async function loadActionHistoryDetail(db: Database, actionLogId: number)
   if (!entry) return null;
 
   const entityHistory = await db
-    .select({ id: actionLogs.id, isUndone: actionLogs.isUndone })
+    .select({
+      id: actionLogs.id,
+      isUndone: actionLogs.isUndone,
+      isReversible: actionLogs.isReversible,
+    })
     .from(actionLogs)
     .where(
       and(eq(actionLogs.entityType, entry.entityType), eq(actionLogs.entityId, entry.entityId)),
@@ -763,6 +778,18 @@ async function fetchEntity(tx: Database | Transaction, entityType: string, entit
   return row ? (row as SnapshotRecord) : null;
 }
 
+async function validateCategoryRecovery(tx: Transaction, id: number, parentId: unknown) {
+  try {
+    await assertCategoryParentAllowed(tx, id, typeof parentId === 'number' ? parentId : null, {
+      lockHierarchy: true,
+    });
+  } catch (error) {
+    if (error instanceof CategoryHierarchyError)
+      throw new ActionHistoryConflictError(error.message);
+    throw error;
+  }
+}
+
 async function insertEntity(tx: Transaction, entityType: string, snapshot: SnapshotRecord) {
   const config = getActionEntityConfig(entityType);
 
@@ -779,6 +806,8 @@ async function insertEntity(tx: Transaction, entityType: string, snapshot: Snaps
     throw new Error(`Entity type ${entityType} does not support inserts`);
   }
 
+  if (entityType === 'categories')
+    await validateCategoryRecovery(tx, Number(snapshot.id), snapshot.parentId);
   await tx.insert(config.table).values(snapshotValues(config.table, snapshot) as never);
 }
 
@@ -813,10 +842,13 @@ async function updateEntity(
     throw new Error(`Entity type ${entityType} does not support updates`);
   }
 
+  const changes = snapshotChanges(snapshot, expected);
+  if (entityType === 'categories' && 'parentId' in changes)
+    await validateCategoryRecovery(tx, entityId, changes.parentId);
   await tx
     .update(config.table)
     .set({
-      ...snapshotValues(config.table, snapshotChanges(snapshot, expected)),
+      ...snapshotValues(config.table, changes),
       updatedAt: new Date(),
     } as never)
     .where(eq(config.table.id, entityId));
@@ -864,6 +896,18 @@ export async function recordExplicitActionLog(
   }
 
   const labelSource = params.afterState ?? params.beforeState ?? { id: params.entityId };
+
+  await tx
+    .update(actionLogs)
+    .set({ isReversible: false })
+    .where(
+      and(
+        eq(actionLogs.entityType, params.entityType),
+        eq(actionLogs.entityId, params.entityId),
+        eq(actionLogs.isUndone, true),
+        eq(actionLogs.isReversible, true),
+      ),
+    );
 
   await tx.insert(actionLogs).values({
     resource: config.resource,
@@ -1031,6 +1075,22 @@ export async function listActionHistory(
   };
 }
 
+function assertHistoryDirection(entry: ActionLogEntry, direction: 'undo' | 'redo') {
+  if (direction === 'undo' && entry.isUndone) {
+    throw new ActionHistoryConflictError('Action already undone');
+  }
+
+  if (direction === 'redo' && !entry.isUndone) {
+    throw new ActionHistoryConflictError('Action has not been undone');
+  }
+
+  if (!entry.isReversible) {
+    throw new ActionHistoryConflictError(
+      direction === 'undo' ? 'This action cannot be undone.' : 'This action cannot be redone.',
+    );
+  }
+}
+
 export async function applyHistoryAction(
   db: Database,
   params: {
@@ -1041,32 +1101,17 @@ export async function applyHistoryAction(
 ) {
   return db
     .transaction(async (tx) => {
-      const [entry] = await tx
+      let [entry] = await tx
         .select()
         .from(actionLogs)
         .where(eq(actionLogs.id, params.actionLogId))
-        .for('update')
         .limit(1);
 
       if (!entry) {
         throw new ActionHistoryConflictError('Action log not found');
       }
 
-      if (params.direction === 'undo' && entry.isUndone) {
-        throw new ActionHistoryConflictError('Action already undone');
-      }
-
-      if (params.direction === 'redo' && !entry.isUndone) {
-        throw new ActionHistoryConflictError('Action has not been undone');
-      }
-
-      if (!entry.isReversible) {
-        throw new ActionHistoryConflictError(
-          params.direction === 'undo'
-            ? 'This action cannot be undone.'
-            : 'This action cannot be redone.',
-        );
-      }
+      assertHistoryDirection(entry, params.direction);
 
       const config = getActionEntityConfig(entry.entityType);
 
@@ -1118,10 +1163,29 @@ export async function applyHistoryAction(
         );
       }
 
+      // Ordinary mutations lock the entity before retiring redo entries. Match
+      // that order, then reread the log because a waiting edit may supersede it.
+      const [lockedEntry] = await tx
+        .select()
+        .from(actionLogs)
+        .where(eq(actionLogs.id, params.actionLogId))
+        .for('update')
+        .limit(1);
+      if (
+        !lockedEntry ||
+        lockedEntry.entityType !== entry.entityType ||
+        lockedEntry.entityId !== entry.entityId
+      ) {
+        throw new ActionHistoryConflictError('Action log changed during recovery');
+      }
+      entry = lockedEntry;
+      assertHistoryDirection(entry, params.direction);
+
       const entityHistory = await tx
         .select({
           id: actionLogs.id,
           isUndone: actionLogs.isUndone,
+          isReversible: actionLogs.isReversible,
         })
         .from(actionLogs)
         .where(
@@ -1132,6 +1196,17 @@ export async function applyHistoryAction(
       if (!entityHistory.some((historyEntry) => historyEntry.id === entry.id)) {
         throw new ActionHistoryConflictError('Action log history is unavailable');
       }
+
+      const latestAppliedIndex = entityHistory.findLastIndex((item) => !item.isUndone);
+      const abandoned = entityHistory
+        .slice(0, Math.max(0, latestAppliedIndex))
+        .filter((item) => item.isUndone && item.isReversible)
+        .map((item) => item.id);
+      if (abandoned.length)
+        await tx
+          .update(actionLogs)
+          .set({ isReversible: false })
+          .where(inArray(actionLogs.id, abandoned));
 
       const recovery = resolveActionHistoryRecovery(entry, entityHistory);
       if (recovery.nextAction !== params.direction) {

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import { aiProposals, categories, products } from '@bric/db/schema';
+import { fetchProductState } from './action-history-state';
 import { recordExplicitActionLog } from './action-history';
 import { AiProposalReviewConflictError } from './ai-proposal-review';
 import { persistedProposalValuesMatch } from './ai-proposal-verification';
@@ -186,6 +187,7 @@ export async function reviewProductCategoryProposal(input: {
       );
     }
 
+    const beforeState = await fetchProductState(tx, product.id);
     const [persisted] = await tx
       .update(products)
       .set({ categoryId: changes.categoryId, updatedAt: new Date() })
@@ -201,8 +203,8 @@ export async function reviewProductCategoryProposal(input: {
       entityType: 'products',
       entityId: product.id,
       operation: 'update',
-      beforeState: product,
-      afterState: persisted,
+      beforeState,
+      afterState: await fetchProductState(tx, product.id),
       actor: { email: input.actorId, name: input.actorName },
     });
     const [applied] = await tx

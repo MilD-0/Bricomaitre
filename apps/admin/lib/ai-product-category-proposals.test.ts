@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getDb: vi.fn(), fetchProductState: vi.fn() }));
+vi.mock('./action-history-state', async (original) => ({
+  ...(await original<typeof import('./action-history-state')>()),
+  fetchProductState: mocks.fetchProductState,
+}));
 
 vi.mock('@bric/db/client', () => ({ getDb: mocks.getDb }));
 
@@ -14,7 +18,18 @@ describe('product category proposals', () => {
   const sourceUpdatedAt = new Date('2026-07-25T00:00:00.000Z');
   const categoryUpdatedAt = new Date('2026-07-24T00:00:00.000Z');
 
-  beforeEach(() => mocks.getDb.mockReset());
+  beforeEach(() => {
+    mocks.getDb.mockReset();
+    mocks.fetchProductState
+      .mockReset()
+      .mockResolvedValue({
+        id: 4,
+        aggregateVersion: 1,
+        promoCodes: [],
+        slugHistory: [],
+        landingPageSlugs: [],
+      });
+  });
 
   it('accepts only one exact category assignment', () => {
     expect(PRODUCT_CATEGORY_CHANGE_SCHEMA.parse({ categoryId: 10 })).toEqual({ categoryId: 10 });

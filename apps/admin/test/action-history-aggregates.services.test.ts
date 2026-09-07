@@ -180,7 +180,7 @@ describe('aggregate action recovery', () => {
     ).toHaveLength(2);
   });
 
-  it('restores product promotions and related slugs without reverting newer counters', async () => {
+  it('restores product promotions and related slugs without reverting a newer stock-availability flag', async () => {
     const row = await product();
     await db.insert(productPromoCodes).values({
       productId: row.id,
@@ -206,12 +206,15 @@ describe('aggregate action recovery', () => {
       },
       actor,
     );
-    await db.update(products).set({ viewCount: 7 }).where(eq(products.id, row.id));
+    await db
+      .update(products)
+      .set({ inStock: false, availabilityStatus: 'out_of_stock' })
+      .where(eq(products.id, row.id));
     await recover('products', row.id, 'undo');
     expect((await db.select().from(products).where(eq(products.id, row.id)))[0]).toMatchObject({
       slug: row.slug,
       price: '1000.00',
-      viewCount: 7,
+      inStock: false,
     });
     expect(
       (await db.select().from(productPromoCodes).where(eq(productPromoCodes.productId, row.id)))[0],
