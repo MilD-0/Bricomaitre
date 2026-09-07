@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { normalizeAlgerianPhoneNumber } from '@bric/storefront-core/settings';
 
 import type { OrderRecord } from './orders';
 
@@ -58,7 +59,7 @@ export const ORDER_EXPORT_HEADERS = [
 export const CONFIRMED_EXPORT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function formatPhoneForOrderExport(value: string | null | undefined) {
-  const trimmed = value?.trim() ?? '';
+  const trimmed = normalizeAlgerianPhoneNumber(value ?? '');
   if (!trimmed) {
     return '';
   }

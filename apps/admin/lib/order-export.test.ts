@@ -101,6 +101,23 @@ describe('buildOrderExportRows', () => {
 });
 
 describe('buildOrderExportWorkbook', () => {
+  it.each(['+213 550 907 101', '00213 550 907 101', '0550 907 101', '550907101', '٠٥٥٠٩٠٧١٠١'])(
+    'exports primary and secondary phone %s as the same usable local number',
+    (phone) => {
+      const workbook = buildOrderExportWorkbook(
+        buildOrderExportRows([{ ...order, phoneNumber1: phone, phoneNumber2: phone }], catalog),
+      );
+      const bytes = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      const decoded = XLSX.read(bytes, { type: 'buffer' });
+      const rows = XLSX.utils.sheet_to_json<string[]>(decoded.Sheets.Sheet1!, {
+        header: 1,
+        raw: false,
+      });
+      expect(rows[1]?.slice(2, 4)).toEqual(['0550907101', '0550907101']);
+      expect(rows[1]?.[10]).toBe('4200');
+    },
+  );
+
   it('writes the expected worksheet headers and row order', () => {
     const workbook = buildOrderExportWorkbook(buildOrderExportRows([order], catalog));
 
