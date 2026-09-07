@@ -41,6 +41,7 @@ import {
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
   ecotrackSyncRuns,
+  ecotrackWilayas,
   orderLineItems,
   orders,
 } from '@bric/db/schema';
@@ -134,13 +135,25 @@ function createDbMock(
     innerJoin: vi.fn(() => ({
       where: vi.fn((condition: Parameters<PgDialect['sqlToQuery']>[0]) => ({
         orderBy: vi.fn(() =>
-          Object.assign(Promise.resolve(rows.map((row) => ({ state: row, order: row.order }))), {
-            limit: (size: number) => {
-              const query = new PgDialect().sqlToQuery(condition);
-              expect(query.sql).toContain('"id" > $1');
-              return pageLimit(size, query.params[0] as number);
+          Object.assign(
+            Promise.resolve(
+              rows
+                .filter((row) => {
+                  const query = new PgDialect().sqlToQuery(condition);
+                  return (
+                    !query.sql.includes('"order_id" in') || query.params.includes(row.order.id)
+                  );
+                })
+                .map((row) => ({ state: row, order: row.order })),
+            ),
+            {
+              limit: (size: number) => {
+                const query = new PgDialect().sqlToQuery(condition);
+                expect(query.sql).toContain('"id" > $1');
+                return pageLimit(size, query.params[0] as number);
+              },
             },
-          }),
+          ),
         ),
         limit: vi.fn(async () => {
           const nextOrderId = limitSequence.shift();
@@ -300,28 +313,35 @@ describe('admin ecotrack shipment reconciliation', () => {
     expect(getEcotrackOrdersStatusMock).toHaveBeenCalledWith(['TRK-11'], 'all');
     expect(getEcotrackTrackingsInfoMock).toHaveBeenCalledWith(['TRK-11']);
     expect(getEcotrackMajMock).not.toHaveBeenCalled();
-    expect(updates).toHaveLength(2);
+    expect(
+      updates.filter((update) => update.target === orders || update.target === ecotrackOrderStates),
+    ).toHaveLength(2);
     expect(updates.some((update) => update.target === orders)).toBe(true);
     expect(updates.some((update) => update.target === ecotrackOrderStates)).toBe(true);
   });
 
-  it('applies both primary refreshes when one optional MAJ read fails', async () => {
+  it('hydrates a batch once without retrying primary requests after stale optional MAJ fails', async () => {
     const firstRow = createShipmentRow(11);
+    firstRow.lastMajSyncedAt = new Date(0);
     const secondRow = createShipmentRow(12);
     const { db } = createDbMock([firstRow, secondRow], { limitSequence: [11, 12, 11, 12] });
     getDbMock.mockReturnValue(db);
-    getEcotrackOrdersStatusMock.mockResolvedValue({
-      data: new Map([
-        ['TRK-11', { status: 'en_livraison', activity: [] }],
-        ['TRK-12', { status: 'en_livraison', activity: [] }],
-      ]),
-    });
-    getEcotrackTrackingsInfoMock.mockResolvedValue({
-      data: new Map([
-        ['TRK-11', { activity: [] }],
-        ['TRK-12', { activity: [] }],
-      ]),
-    });
+    getEcotrackOrdersStatusMock
+      .mockRejectedValue(new Error('unexpected second status round'))
+      .mockResolvedValueOnce({
+        data: new Map([
+          ['TRK-11', { status: 'en_livraison', activity: [] }],
+          ['TRK-12', { status: 'en_livraison', activity: [] }],
+        ]),
+      });
+    getEcotrackTrackingsInfoMock
+      .mockRejectedValue(new Error('unexpected second tracking round'))
+      .mockResolvedValueOnce({
+        data: new Map([
+          ['TRK-11', { activity: [] }],
+          ['TRK-12', { activity: [] }],
+        ]),
+      });
     getEcotrackMajMock
       .mockRejectedValueOnce(new Error('MAJ failed for TRK-11'))
       .mockResolvedValueOnce({ data: [] });
@@ -329,6 +349,15 @@ describe('admin ecotrack shipment reconciliation', () => {
     const result = await refreshEcotrackOrdersBatch([11, 12]);
 
     expect(getEcotrackMajMock).toHaveBeenCalledTimes(2);
+    expect(getEcotrackOrdersStatusMock).toHaveBeenCalledOnce();
+    expect(getEcotrackTrackingsInfoMock).toHaveBeenCalledOnce();
+    const tables = db.select.mock.results.flatMap(({ value }) =>
+      value.from.mock.calls.map(([table]: [unknown]) => table),
+    );
+    expect(tables.filter((selected) => selected === ecotrackOrderStates)).toHaveLength(2);
+    for (const table of [ecotrackWilayas, ecotrackOrderMajEntries, ecotrackOrderTrackingEvents]) {
+      expect(tables.filter((selected) => selected === table)).toHaveLength(1);
+    }
     expect(result).toMatchObject({
       ok: true,
       successCount: 2,
@@ -611,7 +640,9 @@ describe('admin ecotrack shipment reconciliation', () => {
       batchFailed: 0,
       majFailed: 0,
     });
-    expect(updates).toHaveLength(2);
+    expect(
+      updates.filter((update) => update.target === orders || update.target === ecotrackOrderStates),
+    ).toHaveLength(2);
     expect(updates.find((update) => update.target === orders)?.values).toMatchObject({
       ecotrackStatus: null,
       ecotrackStatusLastUpdate: null,

@@ -32,6 +32,10 @@ import {
 } from './ecotrack-shipment-status';
 import type { EcotrackShipmentRow as ShipmentRow } from './ecotrack-shipment-types';
 import { getOrderProductLookup } from './order-records';
+import {
+  buildEcotrackOrderDetailsFromRows,
+  loadShipmentRowsByOrderIds,
+} from './admin-ecotrack-shipment-view';
 
 export type {
   EcotrackOrderDetail,
@@ -83,7 +87,7 @@ export async function loadEcotrackOrdersPageData(
       .map((item) => item.orderId);
 
     if (staleVisibleIds.length > 0) {
-      await refreshEcotrackOrdersBatch(staleVisibleIds, options.actor);
+      await refreshEcotrackOrderStates(staleVisibleIds, options.actor);
       const refreshedPage = await loadActiveShipmentPageRows(db, query);
       return {
         writable,
@@ -135,11 +139,18 @@ export async function refreshEcotrackOrdersBatch(
   orderIds: number[],
   actor?: ActionActor | null,
 ): Promise<EcotrackRefreshBatchResult> {
+  const { refreshedOrderIds, ...outcome } = await refreshEcotrackOrderStates(orderIds, actor);
   const db = getDb();
-  const rows = (
-    await Promise.all(orderIds.map((orderId) => loadShipmentRowByOrderId(db, orderId)))
-  ).filter(Boolean) as ShipmentRow[];
-  const refreshed: EcotrackOrderDetail[] = [];
+  const rows = await loadShipmentRowsByOrderIds(db, refreshedOrderIds);
+  // Read the state we just persisted. Optional MAJ failure must not start a
+  // second provider round while assembling the response.
+  return { ...outcome, items: await buildEcotrackOrderDetailsFromRows(db, rows) };
+}
+
+async function refreshEcotrackOrderStates(orderIds: number[], actor?: ActionActor | null) {
+  const db = getDb();
+  const rows = await loadShipmentRowsByOrderIds(db, orderIds);
+  const refreshedOrderIds: number[] = [];
   const failures: EcotrackRefreshFailure[] = [];
 
   const batches: ShipmentRow[][] = [];
@@ -213,10 +224,7 @@ export async function refreshEcotrackOrdersBatch(
           },
           actor,
         );
-        const detail = await loadEcotrackOrderDetail(row.order.id);
-        if (detail) {
-          refreshed.push(detail);
-        }
+        refreshedOrderIds.push(row.order.id);
       } catch (error) {
         failures.push(toEcotrackFailureRecord('refresh', row, error));
       }
@@ -227,7 +235,7 @@ export async function refreshEcotrackOrdersBatch(
 
   return {
     ok: successCount > 0 || rows.length === 0,
-    items: refreshed,
+    refreshedOrderIds,
     failures,
     successCount,
     failureCount: failures.length,

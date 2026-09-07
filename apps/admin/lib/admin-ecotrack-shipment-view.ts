@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import {
   ecotrackOrderMajEntries,
@@ -308,23 +308,56 @@ export async function loadShipmentRowByOrderId(db: Database, orderId: number) {
   return row ? ({ ...row.state, order: row.order } as ShipmentRow) : undefined;
 }
 
+export async function loadShipmentRowsByOrderIds(db: Database, orderIds: number[]) {
+  const ids = [...new Set(orderIds)];
+  if (!ids.length) return [];
+  const rows = await db
+    .select({ state: ecotrackOrderStates, order: orders })
+    .from(ecotrackOrderStates)
+    .innerJoin(orders, eq(ecotrackOrderStates.orderId, orders.id))
+    .where(and(inArray(ecotrackOrderStates.orderId, ids), isNull(ecotrackOrderStates.deletedAt)))
+    .orderBy(asc(ecotrackOrderStates.orderId));
+  const byId = new Map(
+    rows.map(({ state, order }) => [order.id, { ...state, order } as ShipmentRow]),
+  );
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
 export async function buildEcotrackOrderDetailFromRow(
   db: Database,
   row: ShipmentRow,
 ): Promise<EcotrackOrderDetail> {
+  const [detail] = await buildEcotrackOrderDetailsFromRows(db, [row]);
+  return detail!;
+}
+
+export async function buildEcotrackOrderDetailsFromRows(
+  db: Database,
+  rows: ShipmentRow[],
+): Promise<EcotrackOrderDetail[]> {
+  if (!rows.length) return [];
   const [productLookup, catalog] = await Promise.all([
-    getOrderProductLookup(db, [row.order]),
+    getOrderProductLookup(
+      db,
+      rows.map((row) => row.order),
+    ),
     readEcotrackCatalog(db),
   ]);
-  const record = toOrderRecord(row.order, [], productLookup);
   const [majRows, trackingRows] = await Promise.all([
     db
       .select()
       .from(ecotrackOrderMajEntries)
       .where(
-        and(
-          eq(ecotrackOrderMajEntries.orderId, row.order.id),
-          eq(ecotrackOrderMajEntries.trackingNumber, row.trackingNumber),
+        or(
+          ...rows.map((row) =>
+            and(
+              eq(ecotrackOrderMajEntries.orderId, row.order.id),
+              eq(ecotrackOrderMajEntries.trackingNumber, row.trackingNumber),
+            ),
+          ),
         ),
       )
       .orderBy(desc(ecotrackOrderMajEntries.remoteCreatedAt), desc(ecotrackOrderMajEntries.id)),
@@ -332,9 +365,13 @@ export async function buildEcotrackOrderDetailFromRow(
       .select()
       .from(ecotrackOrderTrackingEvents)
       .where(
-        and(
-          eq(ecotrackOrderTrackingEvents.orderId, row.order.id),
-          eq(ecotrackOrderTrackingEvents.trackingNumber, row.trackingNumber),
+        or(
+          ...rows.map((row) =>
+            and(
+              eq(ecotrackOrderTrackingEvents.orderId, row.order.id),
+              eq(ecotrackOrderTrackingEvents.trackingNumber, row.trackingNumber),
+            ),
+          ),
         ),
       )
       .orderBy(
@@ -344,21 +381,29 @@ export async function buildEcotrackOrderDetailFromRow(
       ),
   ]);
 
-  return {
-    ...toListItem(row, record, catalog),
-    majEntries: majRows.map((entry) => ({
-      id: entry.id,
-      remarque: entry.remarque,
-      station: entry.station,
-      livreur: entry.livreur,
-      remoteCreatedAt: entry.remoteCreatedAt.toISOString(),
-    })),
-    trackingEvents: trackingRows.map((entry) => ({
-      id: entry.id,
-      eventDate: entry.eventDate,
-      eventTime: entry.eventTime,
-      status: entry.status,
-      scanLocation: entry.scanLocation,
-    })),
-  };
+  return rows.map((row) => ({
+    ...toListItem(row, toOrderRecord(row.order, [], productLookup), catalog),
+    majEntries: majRows
+      .filter(
+        (entry) => entry.orderId === row.order.id && entry.trackingNumber === row.trackingNumber,
+      )
+      .map((entry) => ({
+        id: entry.id,
+        remarque: entry.remarque,
+        station: entry.station,
+        livreur: entry.livreur,
+        remoteCreatedAt: entry.remoteCreatedAt.toISOString(),
+      })),
+    trackingEvents: trackingRows
+      .filter(
+        (entry) => entry.orderId === row.order.id && entry.trackingNumber === row.trackingNumber,
+      )
+      .map((entry) => ({
+        id: entry.id,
+        eventDate: entry.eventDate,
+        eventTime: entry.eventTime,
+        status: entry.status,
+        scanLocation: entry.scanLocation,
+      })),
+  }));
 }
