@@ -101,7 +101,7 @@ describe('production packaging and release runtime', () => {
           expect(source).toContain(`COPY ${manifests.get(name)?.path} `);
         }
       }
-      expect(source).toContain('COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ./');
+      expect(source).toContain('COPY --chown=bric:bric LICENSE NOTICE ./');
       expect(source).toContain(
         'COPY --chown=bric:bric third_party/licenses ./third_party/licenses',
       );
@@ -126,9 +126,9 @@ describe('production packaging and release runtime', () => {
       expect(
         source.match(/org[.]opencontainers[.]image[.]licenses="AGPL-3[.]0-only"/g),
       ).toHaveLength(runtimeStages);
-      expect(
-        source.match(/COPY --chown=bric:bric LICENSE NOTICE SECURITY[.]md [.][/]/g),
-      ).toHaveLength(runtimeStages);
+      expect(source.match(/COPY --chown=bric:bric LICENSE NOTICE [.][/]/g)).toHaveLength(
+        runtimeStages,
+      );
       expect(source.match(/COPY --chown=bric:bric third_party[/]licenses/g)).toHaveLength(
         runtimeStages,
       );
@@ -288,7 +288,7 @@ describe('production packaging and release runtime', () => {
       expect(existsSync(resolve(workspaceRoot, assetPath))).toBe(true);
     }
 
-    for (const releaseFile of ['LICENSE', 'NOTICE', 'SECURITY.md']) {
+    for (const releaseFile of ['LICENSE', 'NOTICE']) {
       expect(release).toContain(releaseFile);
       expect(deployVerifier).toContain(`$release_dir/${releaseFile}`);
     }

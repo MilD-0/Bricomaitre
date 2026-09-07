@@ -184,8 +184,7 @@ function fixture() {
     cpSync(join(root, 'third_party/licenses'), join(path, 'third_party/licenses'), {
       recursive: true,
     });
-    for (const file of ['LICENSE', 'NOTICE', 'SECURITY.md'])
-      cpSync(join(root, file), join(path, file));
+    for (const file of ['LICENSE', 'NOTICE']) cpSync(join(root, file), join(path, file));
     writeFileSync(
       join(path, '.bric-release.env'),
       `BRIC_RELEASE_ID=${name}\nBRIC_RELEASE_COMMIT=${generation.repeat(40)}\nBRIC_RELEASE_SIGNER_IDENTITY=https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main\n`,

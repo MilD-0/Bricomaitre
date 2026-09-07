@@ -90,7 +90,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
   && rm -f /usr/local/bin/npm /usr/local/bin/npx \
   && groupadd --gid 10001 bric \
   && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
-COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ./
+COPY --chown=bric:bric LICENSE NOTICE ./
 COPY --chown=bric:bric third_party/licenses ./third_party/licenses
 COPY --from=build --chown=bric:bric /workspace/apps/storefront-api/.next/standalone ./
 COPY --from=build --chown=bric:bric /workspace/apps/storefront-api/.next/static ./apps/storefront-api/.next/static
@@ -126,7 +126,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
   && rm -f /usr/local/bin/npm /usr/local/bin/npx \
   && groupadd --gid 10001 bric \
   && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
-COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ./
+COPY --chown=bric:bric LICENSE NOTICE ./
 COPY --chown=bric:bric third_party/licenses ./third_party/licenses
 COPY --from=worker --chown=bric:bric /workspace/apps/storefront-api/dist/run-meta-worker.cjs ./apps/storefront-api/dist/run-meta-worker.cjs
 COPY --from=build --chown=bric:bric /workspace/apps/storefront-api/.next/standalone/RUNTIME_THIRD_PARTY_LICENSES.txt ./

@@ -428,7 +428,6 @@ verify_release_dir() {
   local public_legal_files=(
     "$release_dir/LICENSE"
     "$release_dir/NOTICE"
-    "$release_dir/SECURITY.md"
     "$release_dir/third_party/licenses/GPL-3.0-only.txt"
     "$release_dir/third_party/licenses/LGPL-3.0-or-later.txt"
     "$release_dir/third_party/licenses/SHARP-LIBVIPS-THIRD-PARTY-NOTICES.md"

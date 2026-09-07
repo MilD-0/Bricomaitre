@@ -22,7 +22,6 @@ const commonReleaseFiles = [
 const publicLegalFiles = [
   'LICENSE',
   'NOTICE',
-  'SECURITY.md',
   'third_party/licenses/GPL-3.0-only.txt',
   'third_party/licenses/LGPL-3.0-or-later.txt',
   'third_party/licenses/SHARP-LIBVIPS-THIRD-PARTY-NOTICES.md',
