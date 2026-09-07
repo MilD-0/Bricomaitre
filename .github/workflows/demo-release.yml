@@ -32,6 +32,8 @@ jobs:
     name: Prepare shared catalog media
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,6 +42,12 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      - name: Reserve publication tag before building
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEMO_VERSION: ${{ inputs.version }}
+        run: node ops/demo/release/github-release.mjs prepare "$DEMO_VERSION" "$GITHUB_SHA"
       - run: corepack enable && pnpm install --frozen-lockfile
       - name: Prepare one media set for every architecture
         run: |
@@ -173,9 +181,5 @@ jobs:
           node ops/demo/release/archive.mjs "$RUNNER_TEMP/release/bricomaitre-demo"
       - name: Create the reviewable release
         run: |
-          gh release create "demo-$DEMO_VERSION" \
-            "$RUNNER_TEMP/release/bricomaitre-demo-$DEMO_VERSION.tar.gz" \
-            "$RUNNER_TEMP/release/bricomaitre-demo-$DEMO_VERSION.tar.gz.sha256" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
-            --title "Bricomaitre demo $DEMO_VERSION" \
-            --notes-file docs/demo.md
+          node ops/demo/release/github-release.mjs publish \
+            "$RUNNER_TEMP/release/bricomaitre-demo" docs/demo.md
