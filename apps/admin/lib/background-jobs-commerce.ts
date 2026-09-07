@@ -642,9 +642,11 @@ export async function runAdminReportingRefreshJob(payload: ReportingRefreshPaylo
 export async function runAdCostsImportJob(
   payload: AdCostsImportPayload,
   helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
     updateSummary: (summary: Record<string, unknown>) => Promise<void>;
   },
 ) {
+  await helpers.updateProgress({ phase: 'importing', current: 0, total: 1 });
   const result = await importAdCostsSpreadsheet(
     Buffer.from(payload.fileBufferBase64, 'base64'),
     payload.rate,
@@ -659,6 +661,7 @@ export async function runAdCostsImportJob(
     imported: result.imported,
     updated: result.updated,
   });
+  await helpers.updateProgress({ phase: 'completed', current: 1, total: 1 });
 
   return {
     fileName: payload.fileName,

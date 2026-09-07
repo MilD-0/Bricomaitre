@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
     db: {},
     refreshFacts: vi.fn(),
     importStats: vi.fn(),
+    importAdCosts: vi.fn(),
     globalConcurrency: vi.fn(),
     redis: {
       incr: vi.fn(async (key: string) => {
@@ -36,13 +37,19 @@ vi.mock('@bric/runtime/jobs', async (importOriginal) => ({
 vi.mock('./reporting-db', () => ({ getReportingDb: () => mocks.db }));
 vi.mock('./analytics-facts', () => ({ refreshAnalyticsFacts: mocks.refreshFacts }));
 vi.mock('./stats-order-import', () => ({ importStatsSpreadsheet: mocks.importStats }));
+vi.mock('./stats-ad-costs', () => ({ importAdCostsSpreadsheet: mocks.importAdCosts }));
 
 import {
   runAdminReportingRefreshJob,
+  runAdCostsImportJob,
   runStatsImportJob,
   startAdminReportingRefreshJob,
 } from './background-jobs-commerce';
-import type { ReportingRefreshPayload, StatsImportPayload } from './background-job-contract';
+import type {
+  AdCostsImportPayload,
+  ReportingRefreshPayload,
+  StatsImportPayload,
+} from './background-job-contract';
 
 function queuedPayload(index: number): ReportingRefreshPayload {
   return {
@@ -103,6 +110,53 @@ describe('reporting refresh revisions', () => {
     await runStatsImportJob(payload, { updateProgress, updateSummary });
     expect(updateProgress).toHaveBeenLastCalledWith({ phase: 'completed', current: 2, total: 2 });
     expect(mocks.jobs.at(-1)?.data).toMatchObject({ trigger: 'stats-import' });
+  });
+
+  it('completes ad-cost progress only after the import and reporting schedule succeed', async () => {
+    const payload: AdCostsImportPayload = {
+      fileName: 'costs.xlsx',
+      fileBufferBase64: 'YQ==',
+      rate: 151,
+      actor: { email: 'operator' },
+      __jobMeta: {
+        id: 'ad-import',
+        queueName: 'admin-ad-cost-import',
+        ownerKey: 'operator',
+        activeScope: 'owner',
+      },
+    };
+    const updateProgress = vi.fn();
+    const updateSummary = vi.fn();
+    mocks.importAdCosts.mockRejectedValueOnce(new Error('Invalid spreadsheet'));
+    await expect(runAdCostsImportJob(payload, { updateProgress, updateSummary })).rejects.toThrow(
+      'Invalid spreadsheet',
+    );
+    expect(updateProgress.mock.calls.map(([progress]) => progress)).toEqual([
+      { phase: 'importing', current: 0, total: 1 },
+    ]);
+    expect(updateSummary).not.toHaveBeenCalled();
+    expect(mocks.jobs).toHaveLength(0);
+
+    updateProgress.mockClear();
+    mocks.importAdCosts.mockResolvedValue({ batchId: 'saved', total: 1, imported: 3, updated: 0 });
+    await expect(runAdCostsImportJob(payload, { updateProgress, updateSummary })).resolves.toEqual({
+      fileName: 'costs.xlsx',
+      batchId: 'saved',
+      total: 1,
+      imported: 3,
+      updated: 0,
+    });
+    expect(mocks.jobs.at(-1)?.data).toMatchObject({ trigger: 'ad-cost-import' });
+    expect(updateProgress).toHaveBeenLastCalledWith({ phase: 'completed', current: 1, total: 1 });
+
+    updateProgress.mockClear();
+    updateSummary.mockRejectedValueOnce(new Error('Summary unavailable'));
+    await expect(runAdCostsImportJob(payload, { updateProgress, updateSummary })).rejects.toThrow(
+      'Summary unavailable',
+    );
+    expect(updateProgress.mock.calls.map(([progress]) => progress)).toEqual([
+      { phase: 'importing', current: 0, total: 1 },
+    ]);
   });
 
   it('coalesces queued requests while retaining successors for edits during every active pass', async () => {
