@@ -5,6 +5,7 @@ import { afterAll, expect, it, vi } from 'vitest';
 import { getDb, getPool } from '@bric/db/client';
 import {
   actionLogs,
+  adminMutationIdempotency,
   ecotrackOrderMajEntries,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
@@ -322,6 +323,67 @@ it('creates captured order economics, public token and audit before deleting the
       .delete(orders)
       .where(inArray(orders.id, [duplicate!.id, ...(createdId ? [createdId] : [])]));
     await db.delete(actionLogs).where(eq(actionLogs.createdBy, actor.email));
+    await db.delete(products).where(eq(products.id, product!.id));
+  }
+});
+
+it('commits phone creation once per attempt, including concurrent and lost-response replays, while allowing a new order', async () => {
+  const db = getDb();
+  const marker = randomUUID();
+  const actor = { email: `phone-retry-${marker}@example.invalid`, name: 'Phone operator' };
+  const requestId = randomUUID();
+  const otherRequestId = randomUUID();
+  const [product] = await db
+    .insert(products)
+    .values({ title: marker, slug: marker, price: '1200' })
+    .returning();
+  const input = {
+    firstName: marker,
+    phoneNumber1: '+213 550 123 456',
+    cartProducts: [String(product!.id)],
+    delivery: 0 as const,
+  };
+  const ids = new Set<number>();
+  try {
+    const [first, concurrent] = await Promise.all([
+      createAdminOrder(db, input, actor, new Date(), requestId),
+      createAdminOrder(db, input, actor, new Date(), requestId),
+    ]);
+    ids.add(first.item.id);
+    ids.add(concurrent.item.id);
+    expect(concurrent.item.id).toBe(first.item.id);
+    await db.update(products).set({ price: '2400' }).where(eq(products.id, product!.id));
+    const replay = await createAdminOrder(db, input, actor, new Date(), requestId);
+    expect(replay.item.id).toBe(first.item.id);
+    expect(replay.item.totalAmount).toBe(1200);
+    expect(replay.duplicateCandidates).toEqual(first.duplicateCandidates);
+    await expect(
+      createAdminOrder(db, { ...input, note: 'changed payload' }, actor, new Date(), requestId),
+    ).rejects.toThrow('different operation');
+    const next = await createAdminOrder(db, input, actor, new Date(), otherRequestId);
+    ids.add(next.item.id);
+    expect(next.item.id).not.toBe(first.item.id);
+    expect(next.item.totalAmount).toBe(2400);
+    expect(next.duplicateCandidates).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: first.item.id })]),
+    );
+    const records = await db.select().from(orders).where(eq(orders.firstName, marker));
+    expect(records).toHaveLength(2);
+    expect(
+      await db.select().from(actionLogs).where(eq(actionLogs.createdBy, actor.email)),
+    ).toHaveLength(2);
+    expect(
+      await db
+        .select()
+        .from(orderLineItems)
+        .where(inArray(orderLineItems.orderId, [...ids])),
+    ).toHaveLength(2);
+  } finally {
+    await db
+      .delete(adminMutationIdempotency)
+      .where(eq(adminMutationIdempotency.scope, `phone-order-create:${actor.email}`));
+    await db.delete(actionLogs).where(eq(actionLogs.createdBy, actor.email));
+    await db.delete(orders).where(eq(orders.firstName, marker));
     await db.delete(products).where(eq(products.id, product!.id));
   }
 });

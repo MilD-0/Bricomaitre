@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { AdminMutationIdempotencyConflictError } from '../../../lib/admin-mutation-idempotency';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
@@ -71,7 +73,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const parsed = storefrontOrderCreateSchema.safeParse(await req.json().catch(() => null));
+  const parsed = storefrontOrderCreateSchema
+    .extend({ requestId: z.string().uuid().optional() })
+    .safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
@@ -79,6 +83,19 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const result = await createAdminOrder(db, parsed.data, actor);
-  return NextResponse.json({ ok: true, ...result }, { status: 201 });
+  try {
+    const result = await createAdminOrder(
+      db,
+      parsed.data,
+      actor,
+      new Date(),
+      parsed.data.requestId,
+    );
+    return NextResponse.json({ ok: true, ...result }, { status: 201 });
+  } catch (error) {
+    if (error instanceof AdminMutationIdempotencyConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
 }

@@ -6,7 +6,7 @@ import { requirePageAccess } from '../../../../lib/page-access';
 
 export default async function OrdersPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  await requirePageAccess(locale, 'orders');
+  const session = await requirePageAccess(locale, 'orders');
   const [initialOrders, initialCatalog] = await Promise.all([
     loadOrdersPageData(
       { page: 1, limit: 25, search: '', sortKey: 'createdAt', sortDirection: 'desc' },
@@ -23,5 +23,11 @@ export default async function OrdersPage({ params }: { params: Promise<{ locale:
       : Promise.resolve(undefined),
   ]);
 
-  return <OrdersWorkspace initialOrders={initialOrders} initialCatalog={initialCatalog} />;
+  return (
+    <OrdersWorkspace
+      operatorId={session?.user.id}
+      initialOrders={initialOrders}
+      initialCatalog={initialCatalog}
+    />
+  );
 }

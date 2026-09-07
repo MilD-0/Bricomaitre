@@ -439,6 +439,81 @@ describe('OrdersWorkspace', () => {
     },
   );
 
+  it('locks phone capture during creation and reuses the accepted attempt after a lost response', async () => {
+    const user = userEvent.setup();
+    const requests: Array<Record<string, unknown>> = [];
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get('/api/products', () =>
+        HttpResponse.json({ items: [{ id: 1, title: 'Audit drill', price: 4000, images: [] }] }),
+      ),
+      http.post('/api/orders', async ({ request }) => {
+        requests.push((await request.json()) as Record<string, unknown>);
+        if (requests.length === 1) {
+          await pending;
+          return HttpResponse.error();
+        }
+        return HttpResponse.json({ ok: true, item: orders[0], duplicateCandidates: [] });
+      }),
+    );
+    const renderDesk = () =>
+      render(
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        >
+          <NextIntlClientProvider locale="en" messages={messages}>
+            <OrderSalesDesk
+              operatorId="phone-recovery-operator"
+              writable
+              onOpenOrder={vi.fn()}
+              onCreated={async () => undefined}
+            />
+          </NextIntlClientProvider>
+        </QueryClientProvider>,
+      );
+    let mounted = renderDesk();
+    const fillCapture = async () => {
+      await user.click(screen.getByRole('button', { name: 'Phone order' }));
+      await user.type(screen.getByLabelText('Customer name'), 'Operator test');
+      await user.type(screen.getByLabelText('Telephone'), '+213 550 123 456');
+      await user.type(screen.getByPlaceholderText('Search title, SKU, or barcode'), 'Audit');
+      await user.click(await screen.findByRole('button', { name: /Audit drill/ }));
+    };
+    await fillCapture();
+    await user.click(screen.getByRole('button', { name: 'Create order' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(screen.getByLabelText('Telephone')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Close$/ })).toBeDisabled();
+    await user.type(screen.getByLabelText('Telephone'), '999');
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    release();
+    await screen.findByText(messages.salesDesk.retryUnconfirmed);
+    expect(screen.getByLabelText('Telephone')).toHaveValue('+213 550 123 456');
+    expect(screen.getByLabelText('Telephone')).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: /^Close$/ }));
+    mounted.unmount();
+    mounted = renderDesk();
+    await user.click(screen.getByRole('button', { name: 'Phone order' }));
+    expect(screen.getByLabelText('Telephone')).toHaveValue('+213 550 123 456');
+    await user.click(screen.getByRole('button', { name: 'Create order' }));
+    await screen.findByRole('button', { name: 'Open created order' });
+    expect(requests[1]).toEqual(requests[0]);
+    expect(
+      window.sessionStorage.getItem('bric:phone-order-attempt:phone-recovery-operator'),
+    ).toBeNull();
+    expect(requests[0]?.requestId).toEqual(expect.any(String));
+    expect(screen.getByLabelText('Telephone')).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: /^Close$/ }));
+    await fillCapture();
+    await user.click(screen.getByRole('button', { name: 'Create order' }));
+    await screen.findByRole('button', { name: 'Open created order' });
+    expect(requests[2]?.requestId).not.toBe(requests[0]?.requestId);
+  });
+
   it('generates the established shopping-list workflow from selected orders', async () => {
     const user = userEvent.setup();
     renderWorkspace();

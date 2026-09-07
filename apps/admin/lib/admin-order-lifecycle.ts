@@ -11,11 +11,11 @@ import { resolveOrderCommercialState } from '@bric/storefront-core/order-commerc
 import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
 import { insertCanonicalOrder } from '@bric/storefront-core/order-write';
 
+import { mutateEntityWithHistoryTransaction, type ActionActor } from './action-history';
 import {
-  mutateEntityWithHistory,
-  mutateEntityWithHistoryTransaction,
-  type ActionActor,
-} from './action-history';
+  runIdempotentAdminMutation,
+  type AdminMutationTransaction,
+} from './admin-mutation-idempotency';
 import { loadOrderDetail } from './admin-orders-data';
 import { readEcotrackCatalog, resolveEcotrackDeliveryFee } from './ecotrack';
 import { assertNoUnresolvedEcotrackMutation } from './ecotrack-mutations';
@@ -45,79 +45,93 @@ export async function createAdminOrder(
   input: unknown,
   actor?: ActionActor,
   now = new Date(),
+  requestId?: string,
 ) {
   const data = storefrontOrderCreateSchema.parse(input);
-  const normalizedPhone = normalizeAlgeriaPhone(data.phoneNumber1);
-  const [commercial, catalog] = await Promise.all([
-    resolveOrderCommercialState(db, {
-      cartProducts: data.cartProducts,
-      promoCode: data.promoCode,
-      now,
-    }),
-    data.state == null ? Promise.resolve(null) : readEcotrackCatalog(db),
-  ]);
-  const deliveryFee = catalog ? resolveEcotrackDeliveryFee(catalog, data.state, data.delivery) : 0;
-  const degraded =
-    commercial.lines.length === 0 ||
-    data.state == null ||
-    !data.city ||
-    (data.delivery === 0 && !data.homeAddress);
-  const duplicateCandidates = normalizedPhone
-    ? await db
-        .select({ id: orders.id, createdAt: orders.createdAt })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.normalizedPhone, normalizedPhone),
-            gte(orders.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1_000)),
-          ),
-        )
-        .orderBy(desc(orders.createdAt))
-        .limit(5)
-    : [];
-
-  const created = await mutateEntityWithHistory(db, {
-    entityType: 'orders',
-    operation: 'create',
-    actor,
-    execute: (tx) =>
-      insertCanonicalOrder(tx, {
-        commercial,
-        deliveryFee,
+  const create = async (tx: AdminMutationTransaction) => {
+    const normalizedPhone = normalizeAlgeriaPhone(data.phoneNumber1);
+    const [commercial, catalog] = await Promise.all([
+      resolveOrderCommercialState(tx, {
+        cartProducts: data.cartProducts,
+        promoCode: data.promoCode,
         now,
-        actor,
-        values: {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          phoneNumber1: data.phoneNumber1,
-          phoneNumber2: data.phoneNumber2,
-          publicToken: createPublicOrderToken(),
-          publicTokenExpiresAt: createPublicOrderTokenExpiry(now),
-          visitId: data.visitId,
-          journeyId: data.journeyId,
-          sessionId: data.sessionId,
-          delivery: data.delivery,
-          state: data.state,
-          city: data.city,
-          homeAddress: data.homeAddress,
-          note: data.note,
-          price: null,
-          variant: degraded ? 'degraded_capture' : null,
-        },
       }),
-    resolveEntityId: (result) => result.order.id,
-  });
-  const item = await loadOrderDetail(created.order.id, db);
-  if (!item) throw new AdminOrderLifecycleNotFoundError(created.order.id);
-  await triggerAdminReportingRefresh('order-create');
-  return {
-    item,
-    duplicateCandidates: duplicateCandidates.map((candidate) => ({
-      id: candidate.id,
-      createdAt: candidate.createdAt.toISOString(),
-    })),
+      data.state == null ? Promise.resolve(null) : readEcotrackCatalog(tx),
+    ]);
+    const deliveryFee = catalog
+      ? resolveEcotrackDeliveryFee(catalog, data.state, data.delivery)
+      : 0;
+    const degraded =
+      commercial.lines.length === 0 ||
+      data.state == null ||
+      !data.city ||
+      (data.delivery === 0 && !data.homeAddress);
+    const duplicateCandidates = normalizedPhone
+      ? await tx
+          .select({ id: orders.id, createdAt: orders.createdAt })
+          .from(orders)
+          .where(
+            and(
+              eq(orders.normalizedPhone, normalizedPhone),
+              gte(orders.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1_000)),
+            ),
+          )
+          .orderBy(desc(orders.createdAt))
+          .limit(5)
+      : [];
+
+    const created = await mutateEntityWithHistoryTransaction(tx, {
+      entityType: 'orders',
+      operation: 'create',
+      actor,
+      execute: (tx) =>
+        insertCanonicalOrder(tx, {
+          commercial,
+          deliveryFee,
+          now,
+          actor,
+          values: {
+            firstName: data.firstName,
+            lastName: data.lastName,
+            email: data.email,
+            phoneNumber1: data.phoneNumber1,
+            phoneNumber2: data.phoneNumber2,
+            publicToken: createPublicOrderToken(),
+            publicTokenExpiresAt: createPublicOrderTokenExpiry(now),
+            visitId: data.visitId,
+            journeyId: data.journeyId,
+            sessionId: data.sessionId,
+            delivery: data.delivery,
+            state: data.state,
+            city: data.city,
+            homeAddress: data.homeAddress,
+            note: data.note,
+            price: null,
+            variant: degraded ? 'degraded_capture' : null,
+          },
+        }),
+      resolveEntityId: (result) => result.order.id,
+    });
+    return {
+      orderId: created.order.id,
+      duplicateCandidates: duplicateCandidates.map((candidate) => ({
+        id: candidate.id,
+        createdAt: candidate.createdAt.toISOString(),
+      })),
+    };
   };
+  const result = requestId
+    ? await runIdempotentAdminMutation(db, {
+        scope: `phone-order-create:${actor?.email ?? 'operator'}`,
+        requestId,
+        payload: data,
+        execute: create,
+      })
+    : { value: await db.transaction(create), replayed: false };
+  const item = await loadOrderDetail(result.value.orderId, db);
+  if (!item) throw new AdminOrderLifecycleNotFoundError(result.value.orderId);
+  if (!result.replayed) await triggerAdminReportingRefresh('order-create');
+  return { item, duplicateCandidates: result.value.duplicateCandidates };
 }
 
 export async function deleteAdminOrder(db: Database, orderId: number, actor?: ActionActor) {

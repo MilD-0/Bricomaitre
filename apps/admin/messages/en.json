@@ -120,6 +120,8 @@
     "pageOf": "Page {page} of {total}"
   },
   "salesDesk": {
+    "retryUnconfirmed": "Creation could not be confirmed. Retry to check the same order. Closing keeps this attempt for your next visit.",
+    "refreshError": "The order was created, but the order list could not refresh. Open the created order or reload.",
     "newOrder": "Phone order",
     "newOrderTitle": "Create a phone-assisted order",
     "newOrderDescription": "Creates the same canonical order, snapshots, delivery total, tracking token, and audit trail as storefront checkout.",

@@ -120,6 +120,8 @@
     "pageOf": "Page {page} sur {total}"
   },
   "salesDesk": {
+    "retryUnconfirmed": "La création n’a pas pu être confirmée. Réessayez pour vérifier la même commande. Cette tentative sera conservée si vous fermez.",
+    "refreshError": "La commande a été créée, mais la liste n’a pas pu être actualisée. Ouvrez la commande créée ou rechargez la page.",
     "newOrder": "Commande téléphone",
     "newOrderTitle": "Créer une commande assistée par téléphone",
     "newOrderDescription": "Crée la même commande canonique, les snapshots, le total de livraison, le jeton de suivi et l’audit que le checkout boutique.",

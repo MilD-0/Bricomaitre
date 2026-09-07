@@ -71,10 +71,12 @@ const ordersOverviewQueryKey = ['orders-overview'] as const;
 
 export function OrdersWorkspace({
   initialOrders,
+  operatorId,
   initialCatalog,
   initialOverview,
 }: {
   initialOrders: OrdersResponse;
+  operatorId?: string;
   initialCatalog?: EcotrackCatalogResponse;
   initialOverview?: DailyOrderStatusOverview;
 }) {
@@ -372,6 +374,7 @@ export function OrdersWorkspace({
           />
           <WorkspaceActions>
             <OrderSalesDesk
+              operatorId={operatorId}
               catalog={initialCatalog}
               writable={writable}
               onOpenOrder={(id) => void openOrderById(id)}

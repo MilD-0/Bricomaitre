@@ -122,15 +122,52 @@ describe('app/api/orders/route', () => {
     );
 
     expect(response.status).toBe(201);
-    expect(createAdminOrderMock).toHaveBeenCalledWith(db, input, {
-      email: 'admin@example.com',
-      name: 'Admin',
-    });
+    expect(createAdminOrderMock).toHaveBeenCalledWith(
+      db,
+      input,
+      {
+        email: 'admin@example.com',
+        name: 'Admin',
+      },
+      expect.any(Date),
+      undefined,
+    );
     await expect(response.json()).resolves.toEqual({
       ok: true,
       item: { id: 91 },
       duplicateCandidates: [],
     });
+  });
+
+  it('passes a valid creation attempt ID and rejects malformed attempt IDs before creating', async () => {
+    hasDbMock.mockReturnValue(true);
+    const db = { marker: 'attempt-database' };
+    getDbMock.mockReturnValue(db);
+    const requestId = '7f26f194-a92d-4b61-beb0-a57d550d4e91';
+    const input = { phoneNumber1: '0550123456', cartProducts: ['12'], requestId };
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(createAdminOrderMock).toHaveBeenLastCalledWith(
+      db,
+      expect.objectContaining(input),
+      expect.any(Object),
+      expect.any(Date),
+      requestId,
+    );
+    createAdminOrderMock.mockClear();
+    const invalid = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({ ...input, requestId: 'bad' }),
+      }),
+    );
+    expect(invalid.status).toBe(400);
+    expect(createAdminOrderMock).not.toHaveBeenCalled();
   });
 
   it('serializes orders with status history and amounts', async () => {
