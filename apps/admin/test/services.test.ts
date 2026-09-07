@@ -100,20 +100,20 @@ describe('real PostgreSQL and Redis contracts', () => {
     await Promise.allSettled([getRedis().quit(), getPool().end(), getReportingDb().$client.end()]);
   });
 
-  it('queues snapshot queries separately from interactive reads with one nonparallel connection', async () => {
+  it('queues snapshot queries separately from interactive reads with two nonparallel connections', async () => {
     const reporting = getReportingDb();
-    const held = await reporting.$client.connect();
+    const held = await Promise.all([reporting.$client.connect(), reporting.$client.connect()]);
     const computation = getAnalyticsSnapshot(
       { view: 'storefront', range: '7d', grain: 'auto' },
       { refresh: true, remember: false },
     );
     try {
       await vi.waitFor(() => expect(reporting.$client.waitingCount).toBeGreaterThan(0));
-      expect(reporting.$client.totalCount).toBe(1);
+      expect(reporting.$client.totalCount).toBe(2);
       const interactive = await getDb().execute(sql`select 42 as value`);
       expect(interactive.rows).toEqual([{ value: 42 }]);
     } finally {
-      held.release();
+      held.forEach((connection) => connection.release());
     }
     const result = await computation;
     expect(result.filters.range).toBe('7d');
@@ -128,7 +128,7 @@ describe('real PostgreSQL and Redis contracts', () => {
       { refresh: true, remember: false },
     );
     expect(analytics.diagnostics.cache?.state).toBe('miss');
-    expect(reporting.$client.totalCount).toBe(1);
+    expect(reporting.$client.totalCount).toBe(2);
   });
 
   it('saves loads and resets a thousand-order selected scope with a bounded database identity', async () => {

@@ -25,23 +25,26 @@ import {
   stateAwareContributionSql,
 } from './loaders-shared';
 
-export async function loadBasketPairs(db: Database, filters: AnalyticsFilters) {
+export async function loadBasketPairs(db: Pick<Database, 'execute'>, filters: AnalyticsFilters) {
   const result = await db.execute(sql`
-    select least(left_item.title_snapshot, right_item.title_snapshot) as left_title,
-      greatest(left_item.title_snapshot, right_item.title_snapshot) as right_title,
-      count(distinct left_item.order_id)::int as orders
-    from ${orderLineItems} left_item
-    inner join ${orderLineItems} right_item
-      on right_item.order_id = left_item.order_id
-      and right_item.id > left_item.id
-      and right_item.content_id <> left_item.content_id
-      and coalesce(right_item.product_id::text, right_item.raw_value) <>
-        coalesce(left_item.product_id::text, left_item.raw_value)
-    inner join ${orders} on ${orders.id} = left_item.order_id
-    where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)}
-    group by least(left_item.title_snapshot, right_item.title_snapshot),
-      greatest(left_item.title_snapshot, right_item.title_snapshot)
-    order by count(distinct left_item.order_id) desc, left_title, right_title
+    with distinct_pairs as materialized (
+      select distinct left_item.order_id,
+        least(left_item.title_snapshot, right_item.title_snapshot) as left_title,
+        greatest(left_item.title_snapshot, right_item.title_snapshot) as right_title
+      from ${orderLineItems} left_item
+      inner join ${orderLineItems} right_item
+        on right_item.order_id = left_item.order_id
+        and right_item.id > left_item.id
+        and right_item.content_id <> left_item.content_id
+        and coalesce(right_item.product_id::text, right_item.raw_value) <>
+          coalesce(left_item.product_id::text, left_item.raw_value)
+      inner join ${orders} on ${orders.id} = left_item.order_id
+      where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)}
+    )
+    select left_title, right_title, count(*)::int as orders
+    from distinct_pairs
+    group by left_title, right_title
+    order by count(*) desc, left_title, right_title
     limit 20
   `);
   return result.rows.map((raw: unknown) => {

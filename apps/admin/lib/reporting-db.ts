@@ -3,10 +3,10 @@ import { createDb } from '@bric/db/client';
 let db: ReturnType<typeof createDb> | undefined;
 
 export function getReportingDb() {
-  // Snapshot reads share one connection and cannot spawn extra PostgreSQL workers.
-  // Their nested query fan-out must leave capacity for orders and public catalog reads.
+  // Allow two reporting queries to overlap without spawning parallel PostgreSQL workers.
+  // Keep the pool separate and bounded so orders and public catalog reads retain capacity.
   return (db ??= createDb({
-    max: 1,
+    max: 2,
     application_name: 'bric-admin-reporting',
     options: '-c max_parallel_workers_per_gather=0',
   }));
