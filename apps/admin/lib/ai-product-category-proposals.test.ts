@@ -20,15 +20,13 @@ describe('product category proposals', () => {
 
   beforeEach(() => {
     mocks.getDb.mockReset();
-    mocks.fetchProductState
-      .mockReset()
-      .mockResolvedValue({
-        id: 4,
-        aggregateVersion: 1,
-        promoCodes: [],
-        slugHistory: [],
-        landingPageSlugs: [],
-      });
+    mocks.fetchProductState.mockReset().mockResolvedValue({
+      id: 4,
+      aggregateVersion: 1,
+      promoCodes: [],
+      slugHistory: [],
+      landingPageSlugs: [],
+    });
   });
 
   it('accepts only one exact category assignment', () => {
