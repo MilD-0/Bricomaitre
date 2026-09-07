@@ -123,4 +123,18 @@ describe('CatalogLiveSearch', () => {
       scroll: false,
     });
   });
+  it('does not mistake a cancelled older search for a later external navigation', () => {
+    const props = { label: 'Search', placeholder: 'Tool', searchingLabel: 'Searching' };
+    const { rerender } = render(<CatalogLiveSearch {...props} initialValue="" />);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'drill' } });
+    act(() => vi.advanceTimersByTime(240));
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'saw' } });
+    act(() => vi.advanceTimersByTime(240));
+    navigation.query = 'brand=2&q=saw';
+    rerender(<CatalogLiveSearch {...props} initialValue="saw" />);
+    navigation.query = 'brand=2&q=drill';
+    rerender(<CatalogLiveSearch {...props} initialValue="drill" />);
+    expect(screen.getByRole('searchbox')).toHaveValue('drill');
+    expect(navigation.replace).toHaveBeenCalledTimes(2);
+  });
 });

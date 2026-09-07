@@ -68,7 +68,15 @@ export function CatalogLiveSearch({
     )
       return;
     const target = `${pathname}?${queryString}`;
-    if (ownNavigations.current.delete(target)) return;
+    if (ownNavigations.current.has(target)) {
+      // A newer completed search also supersedes earlier navigations that Next
+      // cancelled. Those targets must not swallow a later Back/forward action.
+      for (const pendingTarget of ownNavigations.current) {
+        ownNavigations.current.delete(pendingTarget);
+        if (pendingTarget === target) break;
+      }
+      return;
+    }
 
     // Back/forward and other filters supersede any queued search edit.
     ownNavigations.current.clear();
@@ -106,7 +114,9 @@ export function CatalogLiveSearch({
     setQueued(false);
     const query = params.toString();
     if (query === current.queryString) return;
-    ownNavigations.current.add(`${current.pathname}?${query}`);
+    const target = `${current.pathname}?${query}`;
+    ownNavigations.current.delete(target);
+    ownNavigations.current.add(target);
     startTransition(() =>
       router.replace(`${current.pathname}${query ? `?${query}` : ''}` as Route, { scroll: false }),
     );
