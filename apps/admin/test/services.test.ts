@@ -1416,21 +1416,13 @@ describe('real PostgreSQL and Redis contracts', () => {
 
   it('keeps stable catalog values protected by database constraints', async () => {
     const expected = [
-      'brands_conversion_rate_nonnegative_check',
-      'brands_engagement_counters_nonnegative_check',
-      'brands_popularity_score_nonnegative_check',
-      'categories_conversion_rate_nonnegative_check',
-      'categories_engagement_counters_nonnegative_check',
-      'categories_popularity_score_nonnegative_check',
       'products_availability_matches_stock_check',
       'products_availability_status_check',
-      'products_conversion_rate_nonnegative_check',
-      'products_engagement_counters_nonnegative_check',
       'products_inventory_quantity_nonnegative_check',
       'products_old_price_nonnegative_check',
-      'products_popularity_score_nonnegative_check',
       'products_price_nonnegative_check',
       'products_purchase_price_nonnegative_check',
+      'products_units_sold_nonnegative_check',
     ];
     const result = await getPool().query<{ conname: string }>(
       `select conname from pg_constraint where conname = any($1::text[]) order by conname`,

@@ -210,38 +210,32 @@ it('retains legacy UTC totals, excludes their overlapping hour and exposes the h
       .insert(analyticsAcquisitionDailyRollups)
       .values({ day: priorDay, channel: 'direct', evidence: 'none', sessions: 1 });
     for (const [suffix, at] of [['legacy', instant]] as const) {
-      await db
-        .insert(analyticsEvents)
-        .values({
-          eventId: `${id}-${suffix}`,
-          journeyId: id,
-          sessionId: `${id}-${suffix}`,
-          eventName: 'page_view',
-          occurredAt: at,
-        });
-      await db
-        .insert(analyticsSessions)
-        .values({
-          id: `${id}-${suffix}`,
-          journeyId: id,
-          startedAt: at,
-          lastSeenAt: at,
-          entryPath: '/',
-          channel: 'direct',
-          evidence: 'none',
-        });
+      await db.insert(analyticsEvents).values({
+        eventId: `${id}-${suffix}`,
+        journeyId: id,
+        sessionId: `${id}-${suffix}`,
+        eventName: 'page_view',
+        occurredAt: at,
+      });
+      await db.insert(analyticsSessions).values({
+        id: `${id}-${suffix}`,
+        journeyId: id,
+        startedAt: at,
+        lastSeenAt: at,
+        entryPath: '/',
+        channel: 'direct',
+        evidence: 'none',
+      });
     }
     // The old session continues after UTC midnight. It remains one session,
     // even when the first local-day rollup contains its later page view.
-    await db
-      .insert(analyticsEvents)
-      .values({
-        eventId: `${id}-continuation`,
-        journeyId: id,
-        sessionId: `${id}-legacy`,
-        eventName: 'page_view',
-        occurredAt: new Date(`${day}T01:30:00+01:00`),
-      });
+    await db.insert(analyticsEvents).values({
+      eventId: `${id}-continuation`,
+      journeyId: id,
+      sessionId: `${id}-legacy`,
+      eventName: 'page_view',
+      occurredAt: new Date(`${day}T01:30:00+01:00`),
+    });
     expect(await loadStorefrontOrderConversion(db, filters(priorDay, day))).toMatchObject({
       sessions: 1,
     });
@@ -332,15 +326,13 @@ it('focused posted projections match the full report including a settlement-only
         actionReportTime: 'conversion',
       })),
     );
-    await db
-      .insert(processedOrders)
-      .values({
-        orderId: id,
-        tracking: id,
-        importBatchId: id,
-        encaissedAt: new Date(`${saturday}T12:00:00Z`),
-        profit: '25',
-      });
+    await db.insert(processedOrders).values({
+      orderId: id,
+      tracking: id,
+      importBatchId: id,
+      encaissedAt: new Date(`${saturday}T12:00:00Z`),
+      profit: '25',
+    });
     for (const [startDate, endDate] of [
       [friday, sunday],
       [friday, friday],

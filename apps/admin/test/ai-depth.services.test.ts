@@ -428,63 +428,82 @@ describe('durable AI evidence', () => {
     }
   });
 
-  it('combines retained shopping days and the raw UTC tail without losing coverage or double counting', async () => {
-    const db = getDb(),
-      journeyId = randomUUID();
-    await db.insert(analyticsJourneys).values({ id: journeyId });
-    const [rollup] = await db
-      .insert(analyticsAiDailyRollups)
-      .values({
-        day: '2093-02-01',
-        dimension: 'overall',
-        dimensionKey: '',
-        opens: 5,
-        messages: 7,
-        runs: 1,
-        completed: 1,
-        errors: 2,
-      })
-      .returning();
-    try {
-      await db.insert(analyticsEvents).values(
-        ['2093-01-31T23:30:00Z', '2093-02-01T23:30:00Z', '2093-02-02T23:30:00Z'].map(
-          (occurredAt) => ({
-            eventId: randomUUID(),
-            journeyId,
-            sessionId: journeyId,
-            eventName: 'ai_assistant_message',
-            occurredAt: new Date(occurredAt),
-            metadata: { storefrontProject: STOREFRONT_ANALYTICS_PROJECT },
-          }),
-        ),
-      );
-      const query = {
-        surface: 'shopping' as const,
-        range: 'custom' as const,
-        startDate: '2093-02-01',
-        endDate: '2093-02-02',
-        grain: 'day' as const,
-      };
-      const report = await getAiStatsData(query, { db, now: new Date('2093-02-02T12:00:00Z') });
-      expect(report.data.kind).toBe('shopping');
-      if (report.data.kind !== 'shopping') throw new Error('Expected shopping stats');
-      expect(report.data.summary).toMatchObject({ opens: 5, messages: 8 });
-      expect(report.data.trend.map(({ bucket, messages }) => ({ bucket, messages }))).toEqual([
+  it.each([
+    {
+      dayTimezone: 'UTC',
+      expectedTrend: [{ bucket: '2093-02-01', messages: 8 }],
+      throughDate: '2093-02-01',
+    },
+    {
+      dayTimezone: 'Africa/Algiers',
+      expectedTrend: [
         { bucket: '2093-02-01', messages: 7 },
         { bucket: '2093-02-02', messages: 1 },
-      ]);
-      expect(report.coverage).toEqual({
-        fromDate: '2093-02-01',
-        throughDate: '2093-02-02',
-        records: 16,
-      });
-      const compact = await getLiveStorefrontAiStats(db, query);
-      expect(compact).toMatchObject({ opens: 5, messages: 8 });
-    } finally {
-      await db.delete(analyticsAiDailyRollups).where(eq(analyticsAiDailyRollups.id, rollup!.id));
-      await db.delete(analyticsJourneys).where(eq(analyticsJourneys.id, journeyId));
-    }
-  });
+      ],
+      throughDate: '2093-02-02',
+    },
+  ])(
+    'combines retained $dayTimezone shopping days with raw Algeria days without double counting',
+    async ({ dayTimezone, expectedTrend, throughDate }) => {
+      const db = getDb(),
+        journeyId = randomUUID();
+      await db.insert(analyticsJourneys).values({ id: journeyId });
+      const [rollup] = await db
+        .insert(analyticsAiDailyRollups)
+        .values({
+          day: '2093-02-01',
+          dayTimezone,
+          dimension: 'overall',
+          dimensionKey: '',
+          opens: 5,
+          messages: 7,
+          runs: 1,
+          completed: 1,
+          errors: 2,
+        })
+        .returning();
+      try {
+        await db.insert(analyticsEvents).values(
+          ['2093-01-31T23:30:00Z', '2093-02-01T23:30:00Z', '2093-02-02T23:30:00Z'].map(
+            (occurredAt) => ({
+              eventId: randomUUID(),
+              journeyId,
+              sessionId: journeyId,
+              eventName: 'ai_assistant_message',
+              occurredAt: new Date(occurredAt),
+              metadata: { storefrontProject: STOREFRONT_ANALYTICS_PROJECT },
+            }),
+          ),
+        );
+        const query = {
+          surface: 'shopping' as const,
+          range: 'custom' as const,
+          startDate: '2093-02-01',
+          endDate: '2093-02-02',
+          grain: 'day' as const,
+        };
+        const report = await getAiStatsData(query, { db, now: new Date('2093-02-02T12:00:00Z') });
+        expect(report.data.kind).toBe('shopping');
+        if (report.data.kind !== 'shopping') throw new Error('Expected shopping stats');
+        expect(report.data.summary).toMatchObject({ opens: 5, messages: 8 });
+        // A legacy UTC row covers Feb 1 at 23:30Z; a local row instead covers
+        // Jan 31 at 23:30Z. The remaining raw event keeps its Algeria day.
+        expect(report.data.trend.map(({ bucket, messages }) => ({ bucket, messages }))).toEqual(
+          expectedTrend,
+        );
+        expect(report.coverage).toEqual({
+          fromDate: '2093-02-01',
+          throughDate,
+          records: 16,
+        });
+        const compact = await getLiveStorefrontAiStats(db, query);
+        expect(compact).toMatchObject({ opens: 5, messages: 8 });
+      } finally {
+        await db.delete(analyticsAiDailyRollups).where(eq(analyticsAiDailyRollups.id, rollup!.id));
+        await db.delete(analyticsJourneys).where(eq(analyticsJourneys.id, journeyId));
+      }
+    },
+  );
 
   it('respects an explicit all-history cutoff rather than broadening the report to today', async () => {
     const db = getDb();
