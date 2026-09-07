@@ -166,7 +166,9 @@ function renderWorkspace(
   );
 }
 
-describe('OrdersWorkspace', () => {
+// These workflows include several network waits, dialogs, and retries. Allow the
+// whole journey more time than an individual assertion on shared CI runners.
+describe('OrdersWorkspace', { timeout: 15_000 }, () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
