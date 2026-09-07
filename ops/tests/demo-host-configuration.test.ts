@@ -17,6 +17,54 @@ type DemoService = {
   ports?: unknown[];
 };
 
+it('restores AI settings from dotenv without evaluating spaces or shell syntax', () => {
+  const root = resolve(import.meta.dirname, '../..');
+  const runtime = mkdtempSync(join(tmpdir(), 'bric-demo-ai-settings-'));
+  const marker = join(runtime, 'must-not-exist');
+  const model = `model with spaces $(touch ${marker})`;
+  const fallback = `fallback; touch ${marker}`;
+  const configure = readFileSync(join(root, 'demo'), 'utf8')
+    .split('configure_ai_assistant() {')[1]!
+    .split('\nclear_application_caches() {')[0]!;
+  const run = () =>
+    JSON.parse(
+      execFileSync(
+        'bash',
+        [
+          '-c',
+          `set -Eeuo pipefail
+repo_root="$1"
+runtime_dir="$2"
+compose() { node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$@"; }
+configure_ai_assistant() {${configure}
+configure_ai_assistant`,
+          'test',
+          root,
+          runtime,
+        ],
+        { encoding: 'utf8' },
+      ),
+    ) as string[];
+  try {
+    writeFileSync(
+      join(runtime, 'ai.env'),
+      `AI_ENABLED=1\nAI_OPERATOR_NAME=Public demo operator\nAI_STOREFRONT_MODEL=${model}\nAI_STOREFRONT_FALLBACK_MODEL="${fallback}"\nUNUSED_SECRET=\`touch ${marker}\`\n`,
+    );
+    expect(run()).toEqual(
+      expect.arrayContaining(['enabled=true', `model=${model}`, `fallback=${fallback}`]),
+    );
+    expect(existsSync(marker)).toBe(false);
+    writeFileSync(join(runtime, 'ai.env'), 'AI_ENABLED=false\n');
+    expect(run()).toEqual(
+      expect.arrayContaining(['enabled=false', 'model=openai/gpt-5.6-luna', 'fallback=']),
+    );
+    writeFileSync(join(runtime, 'ai.env'), 'AI_STOREFRONT_MODEL="invalid\nmodel"\n');
+    expect(run).toThrow();
+  } finally {
+    rmSync(runtime, { recursive: true });
+  }
+});
+
 it('keeps host origins and secrets across preparation without affecting another runtime', () => {
   const root = resolve(import.meta.dirname, '../..');
   const runtime = mkdtempSync(join(tmpdir(), 'bric-demo-host-test-'));

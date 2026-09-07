@@ -403,15 +403,13 @@ start_applications() {
 
 configure_ai_assistant() {
   [[ -f "$runtime_dir/ai.env" ]] || return 0
-  local AI_ENABLED=false AI_STOREFRONT_MODEL=openai/gpt-5.6-luna AI_STOREFRONT_FALLBACK_MODEL=
-  # Operator-owned shell-compatible environment file, like host.env.
-  # shellcheck disable=SC1090
-  source "$runtime_dir/ai.env"
-  local enabled=false
-  if [[ "$AI_ENABLED" = true || "$AI_ENABLED" = 1 ]]; then enabled=true; fi
+  local settings
+  settings="$(node "$repo_root/ops/demo/scripts/read-ai-settings.mjs" "$runtime_dir/ai.env")"
+  local -a ai_settings
+  mapfile -t ai_settings <<< "$settings"
   compose exec -T postgres psql -U bricomaitre_demo_owner -d bricomaitre_demo \
-    -v ON_ERROR_STOP=1 -v enabled="$enabled" -v model="$AI_STOREFRONT_MODEL" \
-    -v fallback="$AI_STOREFRONT_FALLBACK_MODEL" <<'SQL'
+    -v ON_ERROR_STOP=1 -v enabled="${ai_settings[0]}" -v model="${ai_settings[1]}" \
+    -v fallback="${ai_settings[2]:-}" <<'SQL'
 UPDATE storefront_settings
 SET ai_assistant_enabled = :'enabled'::boolean,
     ai_model = :'model', ai_fallback_model = nullif(:'fallback', ''), updated_at = now()
