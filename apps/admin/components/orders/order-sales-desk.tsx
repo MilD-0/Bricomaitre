@@ -82,7 +82,7 @@ export function OrderSalesDesk({
     enabled: createOpen && deferredSearch.length > 0,
     queryFn: () =>
       request<ProductSearchResponse>(
-        `/api/products?page=1&limit=8&search=${encodeURIComponent(deferredSearch)}`,
+        `/api/orders/product-options?limit=8&search=${encodeURIComponent(deferredSearch)}`,
       ),
     staleTime: 30_000,
   });

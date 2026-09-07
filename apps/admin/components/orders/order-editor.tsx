@@ -175,7 +175,7 @@ function OrderEditorBody({
     enabled: deferredProductSearch.length > 0,
     queryFn: async () => {
       const result = await request<ProductSearchResponse>(
-        `/api/products?page=1&limit=6&search=${encodeURIComponent(deferredProductSearch)}`,
+        `/api/orders/product-options?limit=6&search=${encodeURIComponent(deferredProductSearch)}`,
       );
       return result.items.map((product) => ({
         ...product,

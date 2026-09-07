@@ -26,8 +26,6 @@ import {
   recalculateShoppingListInventory,
   resetShoppingListDraft,
   saveShoppingListDraft,
-  type BrandLookupResponse,
-  type ProductLookupResponse,
 } from './orders-shopping-list';
 import {
   EcotrackPostingWorkspaceDialog,
@@ -167,13 +165,28 @@ export function OrdersWorkflows({
   });
   const addShoppingListProductMutation = useMutation({
     mutationFn: async (product: ProductSearchItem) => {
-      const detail = await request<ProductLookupResponse>(`/api/products/${product.id}`);
-      const brandId = detail.item.brandId ?? null;
-      const brandName =
-        brandId === null
-          ? t('labels.noBrand')
-          : (await request<BrandLookupResponse>(`/api/brands/${brandId}`)).name;
-      return { product: detail.item, brandName };
+      const brandId = product.brandId ?? null;
+      const details = await request<{
+        products: Array<{
+          id: number;
+          inventoryQuantity: number;
+          purchasePrice: number | string | null;
+        }>;
+        brands: Array<{ id: number; name: string }>;
+      }>('/api/orders/shopping-list-details', {
+        method: 'POST',
+        body: JSON.stringify({
+          productIds: [product.id],
+          brandIds: brandId === null ? [] : [brandId],
+        }),
+      });
+      const detail = details.products.find((item) => item.id === product.id);
+      if (!detail) throw new Error(t('ordersManager.shoppingList.addProductError'));
+      return {
+        product: { ...product, ...detail, brandId },
+        brandName:
+          details.brands.find((brand) => brand.id === brandId)?.name ?? t('labels.noBrand'),
+      };
     },
   });
   type InventoryRequest = {

@@ -96,7 +96,7 @@ export function ShoppingListWorkspaceDialog({
     enabled: open && deferredSearch.trim().length > 0,
     queryFn: async () => {
       const response = await request<ProductSearchResponse>(
-        `/api/products?page=1&limit=8&search=${encodeURIComponent(deferredSearch)}`,
+        `/api/orders/product-options?limit=8&search=${encodeURIComponent(deferredSearch)}`,
       );
       return response.items.map((item) => ({
         ...item,

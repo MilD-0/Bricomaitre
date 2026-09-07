@@ -398,7 +398,7 @@ describe('OrdersWorkspace', () => {
       const user = userEvent.setup();
       const onOpenOrder = vi.fn();
       server.use(
-        http.get('/api/products', () =>
+        http.get('/api/orders/product-options', () =>
           HttpResponse.json({ items: [{ id: 1, title: 'Audit drill', price: 4000, images: [] }] }),
         ),
         http.post('/api/orders', () =>
@@ -447,7 +447,7 @@ describe('OrdersWorkspace', () => {
       release = resolve;
     });
     server.use(
-      http.get('/api/products', () =>
+      http.get('/api/orders/product-options', () =>
         HttpResponse.json({ items: [{ id: 1, title: 'Audit drill', price: 4000, images: [] }] }),
       ),
       http.post('/api/orders', async ({ request }) => {
@@ -555,6 +555,44 @@ describe('OrdersWorkspace', () => {
     await user.keyboard('{Escape}');
     await screen.findByRole('dialog', { name: 'Shopping list for 1 selected orders' });
     await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
+    const detailsRequests: unknown[] = [];
+    server.use(
+      http.get('/api/products', () => HttpResponse.json({ error: 'Forbidden' }, { status: 403 })),
+      http.get('/api/products/99', () =>
+        HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      ),
+      http.get('/api/brands', () => HttpResponse.json({ error: 'Forbidden' }, { status: 403 })),
+      http.get('/api/orders/product-options', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 99,
+              title: 'Manual spare',
+              slug: 'manual-spare',
+              price: '1200',
+              images: [],
+              brandId: 8,
+            },
+          ],
+        }),
+      ),
+      http.post('/api/orders/shopping-list-details', async ({ request }) => {
+        detailsRequests.push(await request.json());
+        return HttpResponse.json({
+          products: [{ id: 99, inventoryQuantity: 3, purchasePrice: '800' }],
+          brands: [{ id: 8, name: 'Spare brand' }],
+        });
+      }),
+    );
+    await user.type(screen.getByPlaceholderText('Search catalog products'), 'Manual spare');
+    await user.click(await screen.findByRole('button', { name: 'Add product' }));
+    await waitFor(() =>
+      expect(detailsRequests).toContainEqual({ productIds: [99], brandIds: [8] }),
+    );
+    expect(await screen.findByText('Spare brand')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Increase quantity for Manual spare' }),
+    ).toBeInTheDocument();
   });
 
   it('keeps the unfulfilled quantity visible after a partial stock deduction exhausts inventory', async () => {

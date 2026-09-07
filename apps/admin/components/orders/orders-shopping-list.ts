@@ -23,20 +23,6 @@ function formatCurrency(locale: string, value: number) {
     maximumFractionDigits: 0,
   }).format(value);
 }
-export type BrandLookupResponse = { id: number; name: string };
-export type ProductLookupResponse = {
-  item: {
-    id: number;
-    inventoryQuantity: number;
-    brandId?: number | null;
-    slug?: string | null;
-    title?: string;
-    price?: number | string | null;
-    purchasePrice?: number | string | null;
-    images?: string[];
-  };
-};
-
 export function buildShoppingListDraftRequest(
   sourceMode: ShoppingListSourceMode,
   orderIds: readonly number[],
