@@ -1,7 +1,7 @@
 import Image from 'next/image';
-import Link from 'next/link';
 
 import { FooterContactLink } from '@/components/footer-contact-link';
+import { FooterLocaleNavigation } from '@/components/locale-navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import logo from '../public/logo.png';
@@ -207,14 +207,11 @@ export async function PageShell({
           </section>
         </div>
         <div className="site-footer-bottom">
-          <div aria-label={t('language')}>
-            <Link href="/fr" hrefLang="fr" aria-current={locale === 'fr' ? 'page' : undefined}>
-              FR
-            </Link>
-            <Link href="/ar" hrefLang="ar" aria-current={locale === 'ar' ? 'page' : undefined}>
-              العربية
-            </Link>
-          </div>
+          <FooterLocaleNavigation
+            locale={locale}
+            alternatePath={alternatePath}
+            label={t('language')}
+          />
         </div>
       </footer>
       {contactSettings.aiAssistantEnabled ? (

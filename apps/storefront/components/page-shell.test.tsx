@@ -8,6 +8,10 @@ vi.mock('next-intl/server', () => ({
   getLocale: vi.fn().mockResolvedValue('fr'),
   getTranslations: vi.fn().mockResolvedValue((key: string) => key),
 }));
+vi.mock('next/navigation', () => ({
+  usePathname: () => window.location.pathname,
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
 vi.mock('next/image', () => ({
   default: ({
     alt,
@@ -108,4 +112,34 @@ describe('PageShell storefront AI setting', () => {
     expect(mocks.settings).not.toHaveBeenCalled();
     expect(screen.getByText('0795 34 28 26')).toBeInTheDocument();
   });
+
+  it.each([
+    ['/fr/products/drill?promo=OFFER', 'fr', undefined, '/ar/products/drill?promo=OFFER'],
+    [
+      '/fr/landing/drill?source=campaign',
+      'fr',
+      '/ar/landing/drill-ar',
+      '/ar/landing/drill-ar?source=campaign',
+    ],
+    ['/ar/thank-you?token=signed-token', 'ar', undefined, '/fr/thank-you?token=signed-token'],
+  ] as const)(
+    'preserves the footer language destination for %s',
+    async (path, locale, alternatePath, expected) => {
+      window.history.replaceState({}, '', path);
+      render(
+        await PageShell({
+          locale,
+          alternatePath,
+          children: <p>Page</p>,
+          contactSettings: defaultStorefrontSettingsResponse,
+        }),
+      );
+      expect(
+        screen.getByRole('link', { name: locale === 'fr' ? 'العربية' : 'FR', exact: true }),
+      ).toHaveAttribute('href', expected);
+      expect(
+        screen.getByRole('link', { name: locale === 'fr' ? 'FR' : 'العربية', exact: true }),
+      ).toHaveAttribute('href', path);
+    },
+  );
 });

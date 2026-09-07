@@ -1,11 +1,11 @@
 'use client';
 
 import { ChevronDown, ChevronRight, Menu, ShoppingCart } from 'lucide-react';
-import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { CartDrawer, type CartDrawerLabels } from '@/components/cart-drawer';
 import { MobileSheet } from '@/components/mobile-sheet';
+import { useLocaleHref } from '@/components/locale-navigation';
 import {
   SupportContactActions,
   type StorefrontSupportContact,
@@ -54,9 +54,7 @@ export function NavigationActions({
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const { meta, failed, retry } = useNavigationMeta();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const alternateHref = `${alternatePath ?? pathname.replace(/^\/(fr|ar)(?=\/|$)/, `/${alternateLocale}`)}${searchParams.size ? `?${searchParams}` : ''}`;
+  const alternateHref = useLocaleHref(alternateLocale, alternatePath);
   const [visualLocale, setVisualLocale] = useState<Locale>(locale);
   const cartButtonRef = useRef<HTMLButtonElement>(null);
   const cartCount = getCartItemCount(cartItems);
