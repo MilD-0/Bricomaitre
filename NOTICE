@@ -1,0 +1,100 @@
+Bricomaitre
+Copyright (C) 2024-2026 MilD-0
+
+LICENSE
+
+Except for the excluded assets and separately licensed third-party material
+listed below, this repository is licensed under the GNU Affero General Public
+License, version 3 only (AGPL-3.0-only). See LICENSE.
+
+The AGPL grant covers the application source, shared packages, operational
+source, tests, and project documentation authored for this repository. It does
+not grant rights to production data, customer data, credentials, backups, or
+other material that is not included in the repository.
+
+The AGPL does not grant trademark rights. The Bricomaitre name may be used as
+reasonably necessary to identify the origin of the software, but no affiliation
+or endorsement may be implied.
+
+EXCLUDED VISUAL IDENTITY
+
+The AGPL grant does not apply to the existing Bricomaitre logo or the icon
+files derived from it:
+
+- apps/admin/app/icon.png
+- apps/admin/app/apple-icon.png
+- apps/admin/app/favicon.ico
+- apps/admin/public/android-chrome-192x192.png
+- apps/admin/public/android-chrome-512x512.png
+- apps/admin/public/favicon-16x16.png
+- apps/admin/public/favicon-32x32.png
+- apps/admin/public/favicon-48x48.png
+- apps/admin/public/mask-icon-512.png
+- apps/storefront/public/logo.png
+- apps/storefront/app/icon.png
+- apps/storefront/app/apple-icon.png
+- apps/storefront/app/favicon.ico
+- apps/storefront/public/icons/icon-192.png
+- apps/storefront/public/icons/icon-512.png
+- apps/storefront/public/icons/icon-maskable-512.png
+
+No copyright or trademark license is granted for those files. They remain in
+the repository to reproduce the current application. Redistributors must
+remove or replace them unless they have separate permission.
+
+Other repository-authored test fixtures, placeholders, and interface artwork
+are covered by the repository license unless a file or notice says otherwise.
+
+PUBLIC HISTORY
+
+The public Git history is a curated reconstruction from private source
+archives.
+
+The graph omits credentials, production records, generated exports, obsolete
+private policy material, historical business assets, and partial or immediately
+superseded fixups.
+
+THIRD-PARTY SOFTWARE AND FONTS
+
+Third-party software and fonts remain under their own licenses. The lockfile is
+the exact dependency inventory for a source checkout. Every application image
+also contains a generated RUNTIME_THIRD_PARTY_LICENSES.txt for packages in that
+runtime, and release images publish BuildKit SBOM attestations.
+
+Material distributed at runtime:
+
+| Component                            | Version       | Use                             | License material                                                                |
+| ------------------------------------ | ------------- | ------------------------------- | ------------------------------------------------------------------------------- |
+| Inter                                | 5.3.0 package | Storefront webfont              | third_party/licenses/OFL-1.1-Inter.txt                                          |
+| IBM Plex Sans Arabic                 | 5.3.0 package | Storefront webfont              | third_party/licenses/OFL-1.1-IBM-Plex-Sans-Arabic.txt                           |
+| Sharp and its Linux x64 native addon | 0.35.4        | Storefront image optimization   | third_party/licenses/Apache-2.0-Sharp.txt                                       |
+| sharp-libvips Linux x64 bundle       | 1.3.3         | Native image-processing runtime | LGPL-3.0-or-later and third_party/licenses/SHARP-LIBVIPS-THIRD-PARTY-NOTICES.md |
+
+The Sharp runtime bundle contains libvips 8.18.6 and supporting shared
+libraries. Exact bundled versions are recorded in
+third_party/licenses/SHARP-LIBVIPS-VERSIONS.json. The LGPL and incorporated GPL
+license texts are included at third_party/licenses/LGPL-3.0-or-later.txt and
+third_party/licenses/GPL-3.0-only.txt.
+
+Corresponding source and reproducible packaging inputs for that unmodified
+bundle are available from:
+
+- sharp-libvips 1.3.3: https://github.com/lovell/sharp-libvips/tree/v1.3.3
+- libvips 8.18.6: https://github.com/libvips/libvips/tree/v8.18.6
+
+The Bricomaitre release images do not modify those native libraries. Anyone
+redistributing an image must preserve the notices and provide corresponding
+source as required by the applicable licenses.
+
+Build-time tools and data:
+
+| Component     | Version in current lockfile | Role                 | License material                                |
+| ------------- | --------------------------- | -------------------- | ----------------------------------------------- |
+| Sentry CLI    | 2.58.6                      | Source-map upload    | third_party/licenses/FSL-1.1-MIT-Sentry-CLI.txt |
+| Lightning CSS | 1.32.0 and 1.33.0           | CSS transformation   | third_party/licenses/MPL-2.0-Lightning-CSS.txt  |
+| caniuse-lite  | 1.0.30001810                | Browser-support data | third_party/licenses/CC-BY-4.0-Caniuse-Lite.txt |
+
+Dependency packages may carry additional notices. Preserve those notices when
+redistributing the corresponding package or object code.
+
+
