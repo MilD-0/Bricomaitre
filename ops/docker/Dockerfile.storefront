@@ -73,6 +73,7 @@ ARG BRIC_BUILD_CPUS=""
 RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared \
   --mount=type=cache,id=bricomaitre-storefront-next-build,target=/workspace/apps/storefront/.next/cache,sharing=locked \
   --mount=type=secret,id=sentry_auth_token \
+  pnpm_config_verify_deps_before_run=false \
   CIRCLE_NODE_TOTAL="${BRIC_BUILD_CPUS}" \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
   pnpm --filter @bric/storefront build \

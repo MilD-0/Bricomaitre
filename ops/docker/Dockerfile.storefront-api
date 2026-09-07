@@ -44,6 +44,7 @@ COPY third_party/licenses ./third_party/licenses
 
 RUN mkdir -p apps/storefront-api/public
 RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared \
+  pnpm_config_verify_deps_before_run=false \
   BRIC_WORKER_SOURCEMAPS=1 pnpm --filter @bric/storefront-api build:worker
 
 FROM base AS worker
@@ -57,6 +58,7 @@ ARG BRIC_BUILD_CPUS=""
 RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared \
   --mount=type=cache,id=bricomaitre-storefront-api-next-build,target=/workspace/apps/storefront-api/.next/cache,sharing=locked \
   --mount=type=secret,id=sentry_auth_token \
+  pnpm_config_verify_deps_before_run=false \
   CIRCLE_NODE_TOTAL="${BRIC_BUILD_CPUS}" \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
   pnpm --filter @bric/storefront-api build \
