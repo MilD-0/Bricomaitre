@@ -253,7 +253,14 @@ def verify_entries(
             errors.append(f"historical migration was edited, removed, or reordered: {name}")
 
     added = candidate[len(previous) :]
-    used_exceptions: set[tuple[str, str]] = set()
+    # Exact-hash reviews remain valid audit records after a migration is applied.
+    # The prefix check above still rejects edits to historical SQL; exceptions
+    # never authorize such edits. Only newly added migrations need review below.
+    used_exceptions: set[tuple[str, str]] = {
+        (str(migration["migration"]), str(migration["sha256"]))
+        for migration in candidate[: len(previous)]
+        if migration["rollbackIncompatible"]
+    }
     for migration in added:
         name = str(migration["migration"])
         digest = str(migration["sha256"])

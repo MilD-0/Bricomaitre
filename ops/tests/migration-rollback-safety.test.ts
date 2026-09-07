@@ -133,7 +133,7 @@ describe('migration rollback-safety verification', () => {
     expect(result.stderr).toContain('reviewed rollback-safety exception');
   });
 
-  it('rejects an exception after its migration becomes historical', () => {
+  it.each(['source', 'state'])('retains exact historical reviews for %s releases', (mode) => {
     const sql = 'ALTER TABLE products ADD CONSTRAINT positive_price CHECK (price >= 0);';
     const digest = createHash('sha256').update(sql).digest('hex');
     const exception = {
@@ -153,11 +153,77 @@ describe('migration rollback-safety verification', () => {
       [exception],
     );
 
+    if (mode === 'state') {
+      for (const directory of [previous, candidate]) {
+        writeFileSync(
+          join(directory, '.bric-release.env'),
+          `BRIC_RELEASE_COMMIT=${'a'.repeat(40)}\n`,
+        );
+        writeFileSync(
+          join(directory, '.bric-migrations.json'),
+          JSON.stringify({
+            version: 1,
+            sourceCommit: 'a'.repeat(40),
+            migrations: [
+              {
+                migration: '0000_base.sql',
+                sha256: createHash('sha256').update('SELECT 1;').digest('hex'),
+                rollbackIncompatible: [],
+              },
+              {
+                migration: '0001_constraint.sql',
+                sha256: digest,
+                rollbackIncompatible: ['add a table constraint'],
+              },
+            ],
+            exceptions: [exception],
+          }),
+        );
+        rmSync(join(directory, 'apps'), { recursive: true });
+      }
+    }
     const result = run(previous, candidate);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('2 historical and 0 new migration');
+    expect(result.stderr).not.toContain('reviewed rollback-safety exception');
+  });
 
+  it.each([
+    ['missing migration', '0002_missing.sql', 'DROP TABLE obsolete;'],
+    ['changed hash', '0001_review.sql', 'DROP TABLE different_table;'],
+    ['unnecessary review', '0000_base.sql', 'SELECT 1;'],
+  ])('rejects a stale historical exception with %s', (_name, migration, reviewedSql) => {
+    const migrations = { '0000_base.sql': 'SELECT 1;', '0001_review.sql': 'DROP TABLE obsolete;' };
+    const previous = release(migrations);
+    const candidate = release(migrations, [
+      {
+        migration,
+        sha256: createHash('sha256').update(reviewedSql).digest('hex'),
+        reason: 'The earlier runtime never referenced this retired table.',
+      },
+    ]);
+    const result = run(previous, candidate);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('unused or stale rollback-safety exception');
+  });
+
+  it('does not let a historical exception approve new destructive SQL', () => {
+    const reviewed = 'DROP TABLE obsolete;';
+    const previous = release({ '0000_review.sql': reviewed });
+    const candidate = release(
+      { '0000_review.sql': reviewed, '0001_unreviewed.sql': 'DROP TABLE products;' },
+      [
+        {
+          migration: '0000_review.sql',
+          sha256: createHash('sha256').update(reviewed).digest('hex'),
+          reason: 'The earlier runtime never referenced this retired table.',
+        },
+      ],
+    );
+    const result = run(previous, candidate);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      `unused or stale rollback-safety exception: 0001_constraint.sql ${digest}`,
+      'new migration 0001_unreviewed.sql contains rollback-incompatible DDL',
     );
   });
 
