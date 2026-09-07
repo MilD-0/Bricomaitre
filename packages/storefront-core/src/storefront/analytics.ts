@@ -7,9 +7,6 @@ import {
   analyticsJourneys,
   analyticsPaidClickVisits,
   analyticsSessions,
-  brands,
-  categories,
-  products,
 } from '@bric/db/schema';
 import { classifyAcquisition } from './acquisition';
 
@@ -71,17 +68,6 @@ const nullablePositiveNumber = z
     const parsed = typeof value === 'number' ? value : Number(String(value));
     return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1_000_000_000 ? parsed : null;
   });
-
-const analyticsItemSchema = z.object({
-  productId: nullablePositiveInt,
-  productSlug: nullableTrimmedString(180),
-  categoryId: nullablePositiveInt,
-  categorySlug: nullableTrimmedString(180),
-  brandId: nullablePositiveInt,
-  brandSlug: nullableTrimmedString(180),
-  quantity: nullableQuantity,
-  price: nullablePositiveNumber,
-});
 
 function validateAnalyticsMetadata(value: unknown) {
   let nodes = 0;
@@ -505,150 +491,22 @@ async function upsertPaidClickVisit(
     .where(eq(analyticsPaidClickVisits.visitId, visitId));
 }
 
-function computePopularitySql(
-  table: typeof products | typeof categories | typeof brands,
-  addView: number,
-  addCart: number,
-  addCheckout: number,
-  addPurchase: number,
-) {
-  return sql`(
-    (${table.viewCount} + ${addView})::numeric
-    + ((${table.addToCartCount} + ${addCart})::numeric * 3)
-    + ((${table.checkoutCount} + ${addCheckout})::numeric * 5)
-    + ((${table.purchaseCount} + ${addPurchase})::numeric * 8)
+// One engagement per product per event. Cart quantities do not multiply checkout
+// starts, and legacy top-level IDs remain supported without double counting.
+export function analyticsEventProductIdsSql() {
+  return sql`lateral (
+    select distinct product_id from (
+      select ${analyticsEvents.productId} as product_id
+      union all
+      select case when item->>'productId' ~ '^[0-9]{1,16}$'
+        then case when (item->>'productId')::numeric between 1 and 9007199254740991
+          then (item->>'productId')::bigint end end
+      from jsonb_array_elements(case
+        when ${analyticsEvents.eventName} = 'begin_checkout'
+          and jsonb_typeof(${analyticsEvents.metadata}->'items') = 'array'
+        then ${analyticsEvents.metadata}->'items' else '[]'::jsonb end) item
+    ) attributed where product_id is not null
   )`;
-}
-
-function computeConversionSql(
-  table: typeof products | typeof categories | typeof brands,
-  addView: number,
-  addPurchase: number,
-) {
-  return sql`case
-    when (${table.viewCount} + ${addView}) > 0
-      then ((${table.purchaseCount} + ${addPurchase})::numeric / (${table.viewCount} + ${addView})::numeric)
-    else 0
-  end`;
-}
-
-function extractMetricItem(event: StorefrontAnalyticsEvent) {
-  if (!event.productId && !event.productSlug) {
-    return null;
-  }
-
-  return analyticsItemSchema.parse({
-    productId: event.productId,
-    productSlug: event.productSlug,
-    categoryId: event.categoryId,
-    categorySlug: event.categorySlug,
-    brandId: event.brandId,
-    brandSlug: event.brandSlug,
-    quantity: event.quantity ?? 1,
-    price: event.value,
-  });
-}
-
-async function updateCatalogMetrics(
-  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
-  event: StorefrontAnalyticsEvent,
-) {
-  const item = extractMetricItem(event);
-  const metricBump = {
-    view: event.eventName === 'view_item' ? 1 : 0,
-    cart: event.eventName === 'add_to_cart' ? 1 : 0,
-    checkout: event.eventName === 'begin_checkout' ? 1 : 0,
-    purchase: 0,
-  };
-
-  if (
-    metricBump.view === 0 &&
-    metricBump.cart === 0 &&
-    metricBump.checkout === 0 &&
-    metricBump.purchase === 0
-  ) {
-    return;
-  }
-
-  if (item) {
-    const quantity = Math.max(1, item.quantity ?? 1);
-    const productView = metricBump.view;
-    const productCart = metricBump.cart * quantity;
-    const productCheckout = metricBump.checkout * quantity;
-    const productPurchase = metricBump.purchase * quantity;
-
-    if (item.productId) {
-      await tx
-        .update(products)
-        .set({
-          viewCount: sql`${products.viewCount} + ${productView}`,
-          addToCartCount: sql`${products.addToCartCount} + ${productCart}`,
-          checkoutCount: sql`${products.checkoutCount} + ${productCheckout}`,
-          purchaseCount: sql`${products.purchaseCount} + ${productPurchase}`,
-          popularityScore: computePopularitySql(
-            products,
-            productView,
-            productCart,
-            productCheckout,
-            productPurchase,
-          ),
-          conversionRate: computeConversionSql(products, productView, productPurchase),
-          lastViewedAt:
-            metricBump.view > 0
-              ? sql`greatest(coalesce(${products.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})`
-              : undefined,
-        })
-        .where(eq(products.id, item.productId));
-    }
-
-    if (item.categoryId) {
-      await tx
-        .update(categories)
-        .set({
-          viewCount: sql`${categories.viewCount} + ${productView}`,
-          addToCartCount: sql`${categories.addToCartCount} + ${productCart}`,
-          checkoutCount: sql`${categories.checkoutCount} + ${productCheckout}`,
-          purchaseCount: sql`${categories.purchaseCount} + ${productPurchase}`,
-          popularityScore: computePopularitySql(
-            categories,
-            productView,
-            productCart,
-            productCheckout,
-            productPurchase,
-          ),
-          conversionRate: computeConversionSql(categories, productView, productPurchase),
-          lastViewedAt:
-            metricBump.view > 0
-              ? sql`greatest(coalesce(${categories.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})`
-              : undefined,
-        })
-        .where(eq(categories.id, item.categoryId));
-    }
-
-    if (item.brandId) {
-      await tx
-        .update(brands)
-        .set({
-          viewCount: sql`${brands.viewCount} + ${productView}`,
-          addToCartCount: sql`${brands.addToCartCount} + ${productCart}`,
-          checkoutCount: sql`${brands.checkoutCount} + ${productCheckout}`,
-          purchaseCount: sql`${brands.purchaseCount} + ${productPurchase}`,
-          popularityScore: computePopularitySql(
-            brands,
-            productView,
-            productCart,
-            productCheckout,
-            productPurchase,
-          ),
-          conversionRate: computeConversionSql(brands, productView, productPurchase),
-          lastViewedAt:
-            metricBump.view > 0
-              ? sql`greatest(coalesce(${brands.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})`
-              : undefined,
-        })
-        .where(eq(brands.id, item.brandId));
-    }
-  }
 }
 
 export async function ingestStorefrontAnalyticsEvent(
@@ -743,8 +601,6 @@ export async function ingestStorefrontAnalyticsEvent(
         })
         .where(eq(analyticsJourneys.id, event.journeyId));
     }
-
-    await updateCatalogMetrics(tx, event);
 
     return { ok: true as const, deduped: false };
   });

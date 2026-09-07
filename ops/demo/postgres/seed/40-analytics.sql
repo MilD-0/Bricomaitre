@@ -497,58 +497,13 @@ FROM admin.analytics_order_cohort_facts cohort
 LEFT JOIN admin.profit_tracker_days day_cost ON day_cost.day = cohort.posted_day
 GROUP BY cohort.posted_day;
 
-WITH counters AS (
-  SELECT dimension_key::bigint product_id, sum(product_views) views,
-    sum(add_to_carts) carts, sum(checkout_starts) checkouts,
-    sum(purchases) purchases
-  FROM analytics_daily_rollups WHERE dimension = 'product' GROUP BY dimension_key
-), units AS (
+WITH units AS (
   SELECT line.product_id, sum(line.quantity) units
   FROM order_line_items line JOIN orders ON orders.id = line.order_id
   WHERE orders.confirmed IN (4, 10) GROUP BY line.product_id
 )
-UPDATE products SET view_count = counters.views, add_to_cart_count = counters.carts,
-  checkout_count = counters.checkouts, purchase_count = counters.purchases,
-  units_sold = coalesce(units.units, 0),
-  popularity_score = round((counters.views * 0.02 + counters.carts * 0.8 + counters.purchases * 3)::numeric, 2),
-  conversion_rate = round(counters.purchases * 100.0 / nullif(counters.views, 0), 4),
-  last_viewed_at = now()
-FROM counters LEFT JOIN units ON units.product_id = counters.product_id
-WHERE products.id = counters.product_id;
-
-UPDATE brands SET view_count = totals.views, add_to_cart_count = totals.carts,
-  checkout_count = totals.checkouts, purchase_count = totals.purchases,
-  popularity_score = totals.score,
-  conversion_rate = round(totals.purchases * 100.0 / nullif(totals.views, 0), 4),
-  last_viewed_at = now()
-FROM (
-  SELECT brand_id, sum(view_count) views, sum(add_to_cart_count) carts,
-    sum(checkout_count) checkouts, sum(purchase_count) purchases,
-    sum(popularity_score) score FROM products GROUP BY brand_id
-) totals WHERE brands.id = totals.brand_id;
-
-UPDATE categories SET view_count = totals.views, add_to_cart_count = totals.carts,
-  checkout_count = totals.checkouts, purchase_count = totals.purchases,
-  popularity_score = totals.score,
-  conversion_rate = round(totals.purchases * 100.0 / nullif(totals.views, 0), 4),
-  last_viewed_at = now()
-FROM (
-  SELECT category_id, sum(view_count) views, sum(add_to_cart_count) carts,
-    sum(checkout_count) checkouts, sum(purchase_count) purchases,
-    sum(popularity_score) score FROM products GROUP BY category_id
-) totals WHERE categories.id = totals.category_id;
-
-UPDATE categories parent SET view_count = totals.views, add_to_cart_count = totals.carts,
-  checkout_count = totals.checkouts, purchase_count = totals.purchases,
-  popularity_score = totals.score,
-  conversion_rate = round(totals.purchases * 100.0 / nullif(totals.views, 0), 4),
-  last_viewed_at = now()
-FROM (
-  SELECT child.parent_id, sum(child.view_count) views, sum(child.add_to_cart_count) carts,
-    sum(child.checkout_count) checkouts, sum(child.purchase_count) purchases,
-    sum(child.popularity_score) score
-  FROM categories child WHERE child.parent_id IS NOT NULL GROUP BY child.parent_id
-) totals WHERE parent.id = totals.parent_id;
+UPDATE products SET units_sold = units.units
+FROM units WHERE products.id = units.product_id;
 
 INSERT INTO analytics_paid_click_daily_rollups (
   day, variant, paid_source, has_order, landing_path, visits, landed_only,
@@ -630,9 +585,19 @@ SELECT :'storefront_origin' || '/fr/products/' || product.slug,
   timeline.history_end::timestamptz - interval '1 day' + interval '8 hours'
 FROM products product
 CROSS JOIN demo_runtime.timeline timeline
-ORDER BY popularity_score DESC, id LIMIT 120;
+ORDER BY units_sold DESC, id LIMIT 120;
 
 INSERT INTO demo_runtime.dataset_metrics VALUES
   ('generated_historical_sessions', 12000000, 'Sessions represented in durable rollups'),
   ('generated_historical_events', 72000000, 'Six-event equivalent represented in durable rollups'),
   ('analytics_rollup_days', 1680, 'Continuous history before the reset-relative live window');
+
+UPDATE analytics_daily_rollups SET day_timezone = 'Africa/Algiers';
+
+UPDATE analytics_acquisition_daily_rollups SET day_timezone = 'Africa/Algiers';
+
+UPDATE analytics_ai_daily_rollups SET day_timezone = 'Africa/Algiers';
+
+UPDATE analytics_distinct_daily_members SET day_timezone = 'Africa/Algiers';
+
+UPDATE analytics_paid_click_daily_rollups SET day_timezone = 'Africa/Algiers';

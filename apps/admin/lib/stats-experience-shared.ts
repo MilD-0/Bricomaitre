@@ -115,6 +115,19 @@ export function dateCondition(column: SQLWrapper, filters: ExperienceStatsFilter
   return conditions.length ? and(...conditions) : undefined;
 }
 
+export function timestampCondition(column: SQLWrapper, filters: ExperienceStatsFilters) {
+  const conditions = [];
+  if (filters.startDate)
+    conditions.push(
+      sql`${column} >= (${filters.startDate}::date::timestamp at time zone 'Africa/Algiers')`,
+    );
+  if (filters.endDate)
+    conditions.push(
+      sql`${column} < ((${filters.endDate}::date + interval '1 day') at time zone 'Africa/Algiers')`,
+    );
+  return conditions.length ? and(...conditions) : undefined;
+}
+
 function addIsoDays(value: string, amount: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + amount);

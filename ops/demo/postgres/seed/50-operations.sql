@@ -174,8 +174,8 @@ WITH order_sample AS (
     'checked', mod(id, 3) = 0,
     'isCustom', false,
     'generatedAt', to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-  ) ORDER BY popularity_score DESC, id) items
-  FROM (SELECT * FROM products WHERE active ORDER BY popularity_score DESC, id LIMIT 18) products
+  ) ORDER BY units_sold DESC, id) items
+  FROM (SELECT * FROM products WHERE active ORDER BY units_sold DESC, id LIMIT 18) products
 )
 INSERT INTO admin.shopping_list_drafts (
   scope_key, source_mode, order_ids, title, draft_items, generated_items,
@@ -403,3 +403,5 @@ INSERT INTO demo_runtime.dataset_metrics VALUES
   ('ai_runs', (SELECT count(*) FROM ai_runs), 'Seeded assistant runs across both surfaces'),
   ('landing_pages', (SELECT count(*) FROM landing_pages), 'French and Arabic campaign pages'),
   ('bulletin_posts', (SELECT count(*) FROM admin.bulletin_posts), 'Internal coordination history');
+
+UPDATE meta_event_daily_rollups SET day_timezone = 'Africa/Algiers';

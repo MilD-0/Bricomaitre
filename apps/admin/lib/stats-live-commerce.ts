@@ -1,3 +1,4 @@
+import { analyticsEventProductIdsSql } from '@bric/storefront-core/analytics';
 import { and, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
@@ -5,6 +6,7 @@ import {
   analyticsAcquisitionDailyRollups,
   analyticsDailyRollups,
   analyticsEvents,
+  analyticsSessions,
   brands,
   categories,
   orderLineItems,
@@ -75,12 +77,14 @@ export function buildAnalyticsWhere(filters: StatsFilters | Required<StatsFilter
   const conditions = [];
 
   if (filters.startDate) {
-    conditions.push(sql`${analyticsEvents.occurredAt} >= ${filters.startDate}::date`);
+    conditions.push(
+      sql`${analyticsEvents.occurredAt} >= (${filters.startDate}::date::timestamp at time zone 'Africa/Algiers')`,
+    );
   }
 
   if (filters.endDate) {
     conditions.push(
-      sql`${analyticsEvents.occurredAt} < (${filters.endDate}::date + interval '1 day')`,
+      sql`${analyticsEvents.occurredAt} < ((${filters.endDate}::date + interval '1 day') at time zone 'Africa/Algiers')`,
     );
   }
 
@@ -109,6 +113,7 @@ export function buildCanonicalStorefrontSessionsQuery(filters: Required<StatsFil
         select ${analyticsDailyRollups.day}, ${analyticsDailyRollups.sessions}
         from ${analyticsDailyRollups}
         where ${analyticsDailyRollups.dimension} = 'overall'
+          and ${analyticsDailyRollups.dayTimezone} = 'UTC'
           and ${analyticsDailyRollups.dimensionKey} = ''
           and ${
             filters.startDate
@@ -123,30 +128,30 @@ export function buildCanonicalStorefrontSessionsQuery(filters: Required<StatsFil
           and not exists (
             select 1 from ${analyticsAcquisitionDailyRollups} acquisition
             where acquisition.day = ${analyticsDailyRollups.day}
+              and acquisition.day_timezone = ${analyticsDailyRollups.dayTimezone}
           )
       ) rolled), 0)
-      + coalesce((select count(distinct ${analyticsEvents.sessionId})::int
-        from ${analyticsEvents}
+      + coalesce((select count(distinct ${analyticsSessions.id})::int
+        from ${analyticsSessions}
         where ${
           filters.startDate
-            ? sql`${analyticsEvents.occurredAt} >= ${filters.startDate}::date`
+            ? sql`${analyticsSessions.startedAt} >= (${filters.startDate}::date::timestamp at time zone 'Africa/Algiers')`
             : sql`true`
         }
           and ${
             filters.endDate
-              ? sql`${analyticsEvents.occurredAt} < (${filters.endDate}::date + interval '1 day')`
+              ? sql`${analyticsSessions.startedAt} < ((${filters.endDate}::date + interval '1 day') at time zone 'Africa/Algiers')`
               : sql`true`
           }
-          and ${analyticsEvents.eventName} = 'page_view'
           and not exists (
             select 1 from ${analyticsDailyRollups} rollup
-            where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+            where rollup.day = (${analyticsSessions.startedAt} at time zone rollup.day_timezone)::date
               and rollup.dimension = 'overall'
               and rollup.dimension_key = ''
           )
           and not exists (
             select 1 from ${analyticsAcquisitionDailyRollups} acquisition
-            where acquisition.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+            where acquisition.day = (${analyticsSessions.startedAt} at time zone acquisition.day_timezone)::date
           )), 0)
     )::int as sessions
   `;
@@ -255,7 +260,7 @@ export function buildWebsiteProductMetricsQuery(filters: Required<StatsFilters>)
     analyticsWhere,
     sql`not exists (
       select 1 from ${analyticsDailyRollups} rollup
-      where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+      where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
         and rollup.dimension = 'overall'
         and rollup.dimension_key = ''
     )`,
@@ -263,14 +268,14 @@ export function buildWebsiteProductMetricsQuery(filters: Required<StatsFilters>)
 
   return sql`
     with raw_product_engagement as (
-      select ${analyticsEvents.productId} as product_id,
+      select attributed.product_id,
         count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int as view_count,
         count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int as add_to_cart_count,
         count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int as checkout_count
       from ${analyticsEvents}
+      cross join ${analyticsEventProductIdsSql()} attributed
       where ${unrolledAnalyticsWhere ?? sql`true`}
-        and ${analyticsEvents.productId} is not null
-      group by ${analyticsEvents.productId}
+      group by attributed.product_id
     ), rollup_product_engagement as (
       select case when ${analyticsDailyRollups.dimensionKey} ~ '^[0-9]+$'
           then ${analyticsDailyRollups.dimensionKey}::bigint end as product_id,

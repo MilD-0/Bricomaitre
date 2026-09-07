@@ -207,9 +207,7 @@ describe('production packaging and release runtime', () => {
     expect(roleProvisioner).toContain("'public.storefront_order_idempotency'");
     expect(roleProvisioner).toContain("'admin.ecotrack_service_fees'");
     expect(roleProvisioner).toContain('GRANT USAGE ON SCHEMA admin');
-    expect(roleProvisioner).toContain(
-      'GRANT UPDATE (view_count, add_to_cart_count, checkout_count, purchase_count, popularity_score, conversion_rate, last_viewed_at)',
-    );
+    expect(roleProvisioner).toContain('GRANT SELECT ON TABLE %s TO %I');
     expect(roleProvisioner).toContain(
       'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM :"storefront_user"',
     );

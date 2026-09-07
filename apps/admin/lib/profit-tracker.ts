@@ -434,6 +434,25 @@ async function loadMetaDayEconomics(db: Database, startDate: string | null, endD
   });
 }
 
+async function loadRealizedDayDates(db: Database, startDate: string | null, endDate: string) {
+  // Settlement-only dates consume Friday carry too, even when projection callers
+  // do not need settlement amounts or operating-cost/adset reports.
+  const result = await db.execute(sql`
+    select distinct (coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
+      at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)})::date::text as date
+    from ${processedOrders}
+    where (coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
+      at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)})::date <= ${endDate}::date
+      and ${
+        startDate
+          ? sql`(coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
+        at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)})::date >= ${startDate}::date`
+          : sql`true`
+      }
+  `);
+  return (result.rows as Array<{ date: string }>).map((row) => row.date);
+}
+
 async function loadRealizedDayEconomics(db: Database, startDate: string | null, endDate: string) {
   const result = await db.execute(sql`
     with realized as (
@@ -965,28 +984,32 @@ export async function getProfitTrackerReport(
 
 // Canonical reporting clips already-validated source windows. A source with no
 // overlapping coverage intentionally supplies an empty start > end interval.
-export async function loadProfitTrackerReportForRange(
-  db: Database,
-  filters: Pick<AnalyticsFilters, 'range' | 'startDate' | 'endDate'>,
-) {
-  const settings = await getProfitTrackerSettings(db);
-  const queryStartDate = filters.startDate
+function profitTrackerQueryStartDate(filters: Pick<AnalyticsFilters, 'startDate' | 'endDate'>) {
+  return filters.startDate
     ? filters.startDate > filters.endDate
       ? filters.startDate
       : addDays(filters.startDate, -7)
     : null;
+}
+
+async function loadProfitTrackerCalculationDays(
+  db: Database,
+  filters: Pick<AnalyticsFilters, 'range' | 'startDate' | 'endDate'>,
+  settlementDates?: Promise<string[]>,
+) {
+  const settings = await getProfitTrackerSettings(db);
+  const queryStartDate = profitTrackerQueryStartDate(filters);
   const dayConditions = [lte(profitTrackerDays.day, filters.endDate)];
   if (queryStartDate) dayConditions.push(gte(profitTrackerDays.day, queryStartDate));
-  const [dayRows, costs, automaticDays, metaDays, realizedDays] = await Promise.all([
+  const [dayRows, automaticDays, metaDays, realizedDates] = await Promise.all([
     db
       .select()
       .from(profitTrackerDays)
       .where(and(...dayConditions))
       .orderBy(asc(profitTrackerDays.day)),
-    listProfitTrackerCosts(db),
     loadAutomaticDayEconomics(db, queryStartDate, filters.endDate),
     loadMetaDayEconomics(db, queryStartDate, filters.endDate),
-    loadRealizedDayEconomics(db, queryStartDate, filters.endDate),
+    settlementDates ?? loadRealizedDayDates(db, queryStartDate, filters.endDate),
   ]);
 
   const unsupportedCurrency = metaDays.find(
@@ -1001,12 +1024,11 @@ export async function loadProfitTrackerReportForRange(
   const manualByDate = new Map(dayRows.map((row) => [row.day, mapDay(row)]));
   const automaticByDate = new Map(automaticDays.map((day) => [day.date, day]));
   const metaByDate = indexMetaDays(metaDays, dayRows);
-  const realizedByDate = new Map(realizedDays.map((day) => [day.date, day]));
   const dates = new Set<string>([
     ...manualByDate.keys(),
     ...automaticByDate.keys(),
     ...metaByDate.keys(),
-    ...realizedByDate.keys(),
+    ...realizedDates,
   ]);
   const canonicalDays = [...dates].sort().map((date): ProfitTrackerDayInput =>
     resolveProfitTrackerDaySources({
@@ -1021,6 +1043,25 @@ export async function loadProfitTrackerReportForRange(
   const selected = rolled.filter(
     (day) => (!filters.startDate || day.date >= filters.startDate) && day.date <= filters.endDate,
   );
+  return { settings, selected, metaDays };
+}
+
+export async function loadProfitTrackerReportForRange(
+  db: Database,
+  filters: Pick<AnalyticsFilters, 'range' | 'startDate' | 'endDate'>,
+) {
+  const queryStartDate = profitTrackerQueryStartDate(filters);
+  const realizedPromise = loadRealizedDayEconomics(db, queryStartDate, filters.endDate);
+  const [{ settings, selected, metaDays }, costs, realizedDays] = await Promise.all([
+    loadProfitTrackerCalculationDays(
+      db,
+      filters,
+      realizedPromise.then((days) => days.map((day) => day.date)),
+    ),
+    listProfitTrackerCosts(db),
+    realizedPromise,
+  ]);
+  const realizedByDate = new Map(realizedDays.map((day) => [day.date, day]));
   const effectiveStartDate = filters.startDate ?? selected.at(-1)?.date ?? null;
   const effectiveEndDate = selected[0]?.date ?? filters.endDate;
   const profitsSuppressed = settings.defaultReturnRate === 100;
@@ -1229,21 +1270,26 @@ export async function getCanonicalOrderProjectionDays(
   const dates = inclusiveDateRange(input.startDate, input.endDate);
 
   if (input.basis === 'posted') {
-    const report = await getProfitTrackerReport(
+    const filters = resolveAnalyticsFilters(
       {
-        range: 'custom',
-        startDate: input.startDate,
-        endDate: input.endDate,
+        ...profitTrackerRangeSchema.parse({
+          range: 'custom',
+          startDate: input.startDate,
+          endDate: input.endDate,
+        }),
+        view: 'money',
+        grain: 'auto',
       },
-      { db, ...(options.now ? { now: options.now } : {}) },
+      options.now,
     );
-    const byDate = new Map(report.days.map((day) => [day.date, day]));
+    const { settings, selected } = await loadProfitTrackerCalculationDays(db, filters);
+    const byDate = new Map(selected.map((day) => [day.date, day]));
     return dates.map((reportDay) =>
       toCanonicalOrderProjectionDay({
         basis: input.basis,
         reportDay,
         day: byDate.get(reportDay),
-        defaultReturnRate: report.settings.defaultReturnRate,
+        defaultReturnRate: settings.defaultReturnRate,
       }),
     );
   }

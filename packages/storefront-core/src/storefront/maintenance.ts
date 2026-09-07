@@ -1,3 +1,4 @@
+import { analyticsEventProductIdsSql } from './analytics';
 import { sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
@@ -70,16 +71,16 @@ export async function deleteExpiredOrderIdempotencyBatch(
 export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Date() } = {}) {
   const cutoff = daysBefore(now, ANALYTICS_RAW_RETENTION_DAYS);
   const dayResult = await db.execute(sql`
-    select (${analyticsEvents.occurredAt} at time zone 'UTC')::date::text as day
+    select (${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date::text as day
     from ${analyticsEvents}
     where ${analyticsEvents.occurredAt} < ${cutoff}
       and not exists (
         select 1 from ${analyticsDailyRollups} rollup
-        where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
           and rollup.dimension = 'overall'
           and rollup.dimension_key = ''
       )
-    order by (${analyticsEvents.occurredAt} at time zone 'UTC')::date asc
+    order by (${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date asc
     limit 1
   `);
   const day = (dayResult.rows[0] as { day?: string } | undefined)?.day;
@@ -89,36 +90,31 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`
-      insert into ${analyticsDistinctDailyMembers} (day, metric, dimension_key, member_id)
-      select ${day}::date, metric, dimension_key, member_id
+      insert into ${analyticsDistinctDailyMembers} (day, metric, dimension_key, member_id, day_timezone)
+      select ${day}::date, metric, dimension_key, member_id, 'Africa/Algiers'
       from (
-        select distinct 'journey'::text as metric, ''::text as dimension_key, journey_id as member_id
+        select distinct 'ai_journey'::text as metric, ''::text as dimension_key, journey_id as member_id
         from ${analyticsEvents}
-        where occurred_at >= (${day}::date::timestamp at time zone 'UTC')
-          and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
-        union all
-        select distinct 'session', '', session_id
-        from ${analyticsEvents}
-        where occurred_at >= (${day}::date::timestamp at time zone 'UTC')
-          and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
-          and event_name = 'page_view'
-        union all
-        select distinct 'ai_journey', '', journey_id
-        from ${analyticsEvents}
-        where occurred_at >= (${day}::date::timestamp at time zone 'UTC')
-          and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
+        where occurred_at >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+          and occurred_at < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (
+          select 1 from ${analyticsDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.dimension = 'overall'
+            and legacy.dimension_key = ''
+            and legacy.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        )
           and event_name in (
             'ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click',
             'ai_assistant_feedback', 'ai_assistant_error', 'ai_assistant_run'
           )
       ) members
-      on conflict (day, metric, dimension_key, member_id) do nothing
+      on conflict (day, metric, dimension_key, member_id, day_timezone) do nothing
     `);
 
     await tx.execute(sql`
       insert into ${analyticsDailyRollups} (
         day, dimension, dimension_key, sessions, journeys, page_views, product_views,
-        add_to_carts, checkout_starts, purchases, searches, zero_result_searches, updated_at
+        add_to_carts, checkout_starts, purchases, searches, zero_result_searches, updated_at, day_timezone
       )
       select
         ${day}::date, 'overall', '',
@@ -139,16 +135,22 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
               else null
             end = 0
         )::int,
-        now()
+        now(), 'Africa/Algiers'
       from ${analyticsEvents}
-      where ${analyticsEvents.occurredAt} >= (${day}::date::timestamp at time zone 'UTC')
-        and ${analyticsEvents.occurredAt} < ((${day}::date + 1)::timestamp at time zone 'UTC')
-      on conflict (day, dimension, dimension_key) do nothing
+      where ${analyticsEvents.occurredAt} >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+        and ${analyticsEvents.occurredAt} < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (
+          select 1 from ${analyticsDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.dimension = 'overall'
+            and legacy.dimension_key = ''
+            and legacy.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        )
+      on conflict (day, dimension, dimension_key, day_timezone) do nothing
     `);
 
     await tx.execute(sql`
       insert into ${analyticsDailyRollups} (
-        day, dimension, dimension_key, searches, zero_result_searches, updated_at
+        day, dimension, dimension_key, searches, zero_result_searches, updated_at, day_timezone
       )
       select
         ${day}::date, 'search', trim(search_term), count(*)::int,
@@ -159,50 +161,64 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
             else null
           end = 0
         )::int,
-        now()
+        now(), 'Africa/Algiers'
       from ${analyticsEvents}
-      where ${analyticsEvents.occurredAt} >= (${day}::date::timestamp at time zone 'UTC')
-        and ${analyticsEvents.occurredAt} < ((${day}::date + 1)::timestamp at time zone 'UTC')
+      where ${analyticsEvents.occurredAt} >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+        and ${analyticsEvents.occurredAt} < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (
+          select 1 from ${analyticsDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.dimension = 'overall'
+            and legacy.dimension_key = ''
+            and legacy.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        )
         and event_name = 'search'
         and coalesce(trim(search_term), '') <> ''
       group by 3
-      on conflict (day, dimension, dimension_key) do nothing
+      on conflict (day, dimension, dimension_key, day_timezone) do nothing
     `);
 
     await tx.execute(sql`
       insert into ${analyticsDailyRollups} (
         day, dimension, dimension_key, product_views, add_to_carts,
-        checkout_starts, purchases, updated_at
+        checkout_starts, purchases, updated_at, day_timezone
       )
       select
         ${day}::date,
         'product',
-        product_id::text,
+        attributed.product_id::text,
         count(*) filter (where event_name = 'view_item')::int,
         count(*) filter (where event_name = 'add_to_cart')::int,
         count(*) filter (where event_name = 'begin_checkout')::int,
         count(distinct coalesce(order_id::text, event_id))
           filter (where event_name = 'purchase')::int,
-        now()
+        now(), 'Africa/Algiers'
       from ${analyticsEvents}
-      where ${analyticsEvents.occurredAt} >= (${day}::date::timestamp at time zone 'UTC')
-        and ${analyticsEvents.occurredAt} < ((${day}::date + 1)::timestamp at time zone 'UTC')
-        and ${analyticsEvents.productId} is not null
+      cross join ${analyticsEventProductIdsSql()} attributed
+      where ${analyticsEvents.occurredAt} >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+        and ${analyticsEvents.occurredAt} < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (
+          select 1 from ${analyticsDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.dimension = 'overall'
+            and legacy.dimension_key = ''
+            and legacy.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        )
         and ${analyticsEvents.eventName} in ('view_item', 'add_to_cart', 'begin_checkout', 'purchase')
       group by 3
-      on conflict (day, dimension, dimension_key) do nothing
+      on conflict (day, dimension, dimension_key, day_timezone) do nothing
     `);
 
     await tx.execute(sql`
       insert into ${analyticsAcquisitionDailyRollups} (
-        day, channel, evidence, sessions, updated_at
+        day, channel, evidence, sessions, updated_at, day_timezone
       )
-      select ${day}::date, channel, evidence, count(*)::int, now()
+      select ${day}::date, channel, evidence, count(*)::int, now(), 'Africa/Algiers'
       from ${analyticsSessions}
-      where started_at >= (${day}::date::timestamp at time zone 'UTC')
-        and started_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
+      where started_at >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+        and started_at < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (select 1 from ${analyticsAcquisitionDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.day = (started_at at time zone 'UTC')::date)
       group by channel, evidence
-      on conflict (day, channel, evidence) do nothing
+      on conflict (day, channel, evidence, day_timezone) do nothing
     `);
 
     await tx.execute(sql`
@@ -210,7 +226,7 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
         day, dimension, dimension_key, opens, messages, result_clicks, errors,
         runs, completed, failed, cancelled, helpful, not_helpful,
         input_tokens, output_tokens, total_tokens,
-        duration_ms_total, duration_samples, tool_calls, updated_at
+        duration_ms_total, duration_samples, tool_calls, updated_at, day_timezone
       )
       select ${day}::date, 'overall', '',
         count(*) filter (where event_name = 'ai_assistant_open')::int,
@@ -229,22 +245,28 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
         coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'durationMs' ~ '^[0-9]+$' then (metadata->>'durationMs')::bigint else 0 end), 0)::bigint,
         count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'durationMs' ~ '^[0-9]+$')::int,
         coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'toolCalls' ~ '^[0-9]+$' then (metadata->>'toolCalls')::int else 0 end), 0)::int,
-        now()
+        now(), 'Africa/Algiers'
       from ${analyticsEvents}
-      where occurred_at >= (${day}::date::timestamp at time zone 'UTC')
-        and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
+      where occurred_at >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+        and occurred_at < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (
+          select 1 from ${analyticsDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.dimension = 'overall'
+            and legacy.dimension_key = ''
+            and legacy.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        )
         and event_name in (
           'ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click',
           'ai_assistant_feedback', 'ai_assistant_error', 'ai_assistant_run'
         )
-      on conflict (day, dimension, dimension_key) do nothing
+      on conflict (day, dimension, dimension_key, day_timezone) do nothing
     `);
 
     await tx.execute(sql`
       insert into ${analyticsAiDailyRollups} (
         day, dimension, dimension_key, messages, result_clicks, runs, completed, failed, cancelled,
         input_tokens, output_tokens, total_tokens, duration_ms_total,
-        duration_samples, tool_calls, updated_at
+        duration_samples, tool_calls, updated_at, day_timezone
       )
       select ${day}::date, 'intent', coalesce(nullif(metadata->>'intent', ''), 'other'),
         count(*) filter (where event_name = 'ai_assistant_message')::int,
@@ -259,19 +281,25 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
         coalesce(sum(case when metadata->>'durationMs' ~ '^[0-9]+$' then (metadata->>'durationMs')::bigint else 0 end), 0)::bigint,
         count(*) filter (where metadata->>'durationMs' ~ '^[0-9]+$')::int,
         coalesce(sum(case when metadata->>'toolCalls' ~ '^[0-9]+$' then (metadata->>'toolCalls')::int else 0 end), 0)::int,
-        now()
+        now(), 'Africa/Algiers'
       from ${analyticsEvents}
-      where occurred_at >= (${day}::date::timestamp at time zone 'UTC')
-        and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
+      where occurred_at >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+        and occurred_at < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (
+          select 1 from ${analyticsDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.dimension = 'overall'
+            and legacy.dimension_key = ''
+            and legacy.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        )
         and event_name in ('ai_assistant_message', 'ai_assistant_run', 'ai_assistant_result_click')
       group by 3
-      on conflict (day, dimension, dimension_key) do nothing
+      on conflict (day, dimension, dimension_key, day_timezone) do nothing
     `);
 
     await tx.execute(sql`
       insert into ${analyticsAiDailyRollups} (
         day, dimension, dimension_key, runs, completed, failed, cancelled, input_tokens,
-        output_tokens, total_tokens, duration_ms_total, duration_samples, tool_calls, updated_at
+        output_tokens, total_tokens, duration_ms_total, duration_samples, tool_calls, updated_at, day_timezone
       )
       select ${day}::date, 'model', coalesce(nullif(metadata->>'model', ''), 'unknown'),
         count(*)::int,
@@ -284,13 +312,19 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
         coalesce(sum(case when metadata->>'durationMs' ~ '^[0-9]+$' then (metadata->>'durationMs')::bigint else 0 end), 0)::bigint,
         count(*) filter (where metadata->>'durationMs' ~ '^[0-9]+$')::int,
         coalesce(sum(case when metadata->>'toolCalls' ~ '^[0-9]+$' then (metadata->>'toolCalls')::int else 0 end), 0)::int,
-        now()
+        now(), 'Africa/Algiers'
       from ${analyticsEvents}
-      where occurred_at >= (${day}::date::timestamp at time zone 'UTC')
-        and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
+      where occurred_at >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+        and occurred_at < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+        and not exists (
+          select 1 from ${analyticsDailyRollups} legacy
+          where legacy.day_timezone = 'UTC' and legacy.dimension = 'overall'
+            and legacy.dimension_key = ''
+            and legacy.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        )
         and event_name = 'ai_assistant_run'
       group by 3
-      on conflict (day, dimension, dimension_key) do nothing
+      on conflict (day, dimension, dimension_key, day_timezone) do nothing
     `);
   });
 
@@ -300,14 +334,14 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
 export async function rollUpNextExpiredPaidClickDay(db: Database, { now = new Date() } = {}) {
   const cutoff = daysBefore(now, ANALYTICS_RAW_RETENTION_DAYS);
   const dayResult = await db.execute(sql`
-    select (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date::text as day
+    select (${analyticsPaidClickVisits.firstSeenAt} at time zone 'Africa/Algiers')::date::text as day
     from ${analyticsPaidClickVisits}
     where ${analyticsPaidClickVisits.firstSeenAt} < ${cutoff}
       and not exists (
         select 1 from ${analyticsPaidClickDailyRollups} rollup
-        where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date
+        where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone rollup.day_timezone)::date
       )
-    order by (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date asc
+    order by (${analyticsPaidClickVisits.firstSeenAt} at time zone 'Africa/Algiers')::date asc
     limit 1
   `);
   const day = (dayResult.rows[0] as { day?: string } | undefined)?.day;
@@ -331,7 +365,7 @@ export async function rollUpNextExpiredPaidClickDay(db: Database, { now = new Da
     )
     insert into ${analyticsPaidClickDailyRollups} (
       day, variant, paid_source, has_order, landing_path, visits, landed_only,
-      viewed_product, added_to_cart, began_checkout, created_order, purchased, errored, updated_at
+      viewed_product, added_to_cart, began_checkout, created_order, purchased, errored, updated_at, day_timezone
     )
     select ${day}::date,
       'storefront',
@@ -351,14 +385,16 @@ export async function rollUpNextExpiredPaidClickDay(db: Database, { now = new Da
       count(*) filter (where coalesce(order_flags.order_count, 0) > 0 and visits.purchase_count = 0)::int,
       count(*) filter (where visits.purchase_count > 0)::int,
       count(*) filter (where coalesce(flags.errored, false))::int,
-      now()
+      now(), 'Africa/Algiers'
     from ${analyticsPaidClickVisits} visits
     left join flags on flags.visit_id = visits.visit_id
     left join order_flags on order_flags.visit_id = visits.visit_id
-    where visits.first_seen_at >= (${day}::date::timestamp at time zone 'UTC')
-      and visits.first_seen_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
+    where visits.first_seen_at >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+      and visits.first_seen_at < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+      and not exists (select 1 from ${analyticsPaidClickDailyRollups} legacy
+        where legacy.day_timezone = 'UTC' and legacy.day = (visits.first_seen_at at time zone 'UTC')::date)
     group by 2, 3, 4, 5
-    on conflict (day, variant, paid_source, has_order, landing_path) do nothing
+    on conflict (day, variant, paid_source, has_order, landing_path, day_timezone) do nothing
   `);
   return day;
 }
@@ -378,7 +414,7 @@ export async function normalizeNextPaidClickRollupDays(db: Database) {
         and position('?' in rollups.landing_path) > 0
       returning rollups.*
     ), aggregated as (
-      select day, variant, paid_source, has_order,
+      select day, day_timezone, variant, paid_source, has_order,
         coalesce(nullif(split_part(landing_path, '?', 1), ''), '/') as landing_path,
         sum(visits)::int as visits,
         sum(landed_only)::int as landed_only,
@@ -389,16 +425,16 @@ export async function normalizeNextPaidClickRollupDays(db: Database) {
         sum(purchased)::int as purchased,
         sum(errored)::int as errored
       from deleted
-      group by 1, 2, 3, 4, 5
+      group by 1, 2, 3, 4, 5, 6
     )
     insert into ${analyticsPaidClickDailyRollups} (
-      day, variant, paid_source, has_order, landing_path, visits, landed_only,
+      day, day_timezone, variant, paid_source, has_order, landing_path, visits, landed_only,
       viewed_product, added_to_cart, began_checkout, created_order, purchased, errored, updated_at
     )
-    select day, variant, paid_source, has_order, landing_path, visits, landed_only,
+    select day, day_timezone, variant, paid_source, has_order, landing_path, visits, landed_only,
       viewed_product, added_to_cart, began_checkout, created_order, purchased, errored, now()
     from aggregated
-    on conflict (day, variant, paid_source, has_order, landing_path) do update set
+    on conflict (day, variant, paid_source, has_order, landing_path, day_timezone) do update set
       visits = ${analyticsPaidClickDailyRollups.visits} + excluded.visits,
       landed_only = ${analyticsPaidClickDailyRollups.landedOnly} + excluded.landed_only,
       viewed_product = ${analyticsPaidClickDailyRollups.viewedProduct} + excluded.viewed_product,
@@ -582,7 +618,7 @@ export async function deleteExpiredPaidClickVisitsBatch(
         )
         and exists (
           select 1 from ${analyticsPaidClickDailyRollups} rollup
-          where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date
+          where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone rollup.day_timezone)::date
         )
       order by ${analyticsPaidClickVisits.firstSeenAt} asc
       limit ${Math.max(1, limit)}
@@ -599,20 +635,20 @@ export async function deleteExpiredPaidClickVisitsBatch(
 export async function rollUpNextExpiredMetaOutboxDay(db: Database, { now = new Date() } = {}) {
   const cutoff = daysBefore(now, META_DELIVERED_RETENTION_DAYS);
   const dayResult = await db.execute(sql`
-    select (${metaEventOutbox.eventTime} at time zone 'UTC')::date::text as day
+    select (${metaEventOutbox.eventTime} at time zone 'Africa/Algiers')::date::text as day
     from ${metaEventOutbox}
     where ${metaEventOutbox.eventTime} < ${cutoff}
       and ${metaEventOutbox.status} in ('delivered', 'failed', 'skipped')
       and not exists (
         select 1 from ${metaEventDailyRollups} rollup
-        where rollup.day = (${metaEventOutbox.eventTime} at time zone 'UTC')::date
+        where rollup.day = (${metaEventOutbox.eventTime} at time zone rollup.day_timezone)::date
       )
       and not exists (
         select 1 from ${metaEventOutbox} active
-        where (active.event_time at time zone 'UTC')::date = (${metaEventOutbox.eventTime} at time zone 'UTC')::date
+        where (active.event_time at time zone 'Africa/Algiers')::date = (${metaEventOutbox.eventTime} at time zone 'Africa/Algiers')::date
           and active.status in ('pending', 'retryable', 'processing')
       )
-    order by (${metaEventOutbox.eventTime} at time zone 'UTC')::date asc
+    order by (${metaEventOutbox.eventTime} at time zone 'Africa/Algiers')::date asc
     limit 1
   `);
   const day = (dayResult.rows[0] as { day?: string } | undefined)?.day;
@@ -623,7 +659,7 @@ export async function rollUpNextExpiredMetaOutboxDay(db: Database, { now = new D
   await db.execute(sql`
     insert into ${metaEventDailyRollups} (
       day, event_name, total, pixel_fired, capi_sent, delivered, failed, skipped,
-      last_occurred_at, updated_at
+      last_occurred_at, updated_at, day_timezone
     )
     select
       ${day}::date,
@@ -637,13 +673,15 @@ export async function rollUpNextExpiredMetaOutboxDay(db: Database, { now = new D
       count(*) filter (where outbox.status = 'failed')::int,
       count(*) filter (where outbox.status = 'skipped')::int,
       max(outbox.event_time),
-      now()
+      now(), 'Africa/Algiers'
     from ${metaEventOutbox} outbox
     left join ${analyticsEvents} events on events.event_id = outbox.event_id
-    where outbox.event_time >= (${day}::date::timestamp at time zone 'UTC')
-      and outbox.event_time < ((${day}::date + 1)::timestamp at time zone 'UTC')
+    where outbox.event_time >= (${day}::date::timestamp at time zone 'Africa/Algiers')
+      and outbox.event_time < ((${day}::date + 1)::timestamp at time zone 'Africa/Algiers')
+      and not exists (select 1 from ${metaEventDailyRollups} legacy
+        where legacy.day_timezone = 'UTC' and legacy.day = (outbox.event_time at time zone 'UTC')::date)
     group by outbox.event_name
-    on conflict (day, event_name) do nothing
+    on conflict (day, event_name, day_timezone) do nothing
   `);
 
   return day;
@@ -670,7 +708,7 @@ export async function deleteTerminalMetaOutboxBatch(
       )
       and exists (
         select 1 from ${metaEventDailyRollups} rollup
-        where rollup.day = (${metaEventOutbox.eventTime} at time zone 'UTC')::date
+        where rollup.day = (${metaEventOutbox.eventTime} at time zone rollup.day_timezone)::date
       )
       order by ${metaEventOutbox.id} asc
       limit ${Math.max(1, limit)}
@@ -806,7 +844,7 @@ export async function deleteExpiredAnalyticsEventsBatch(
         )
         and exists (
           select 1 from ${analyticsDailyRollups} rollup
-          where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+          where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
             and rollup.dimension = 'overall'
             and rollup.dimension_key = ''
         )
@@ -842,7 +880,7 @@ export async function deleteExpiredAnalyticsSessionsBatch(
         )
         and exists (
           select 1 from ${analyticsAcquisitionDailyRollups} rollup
-          where rollup.day = (${analyticsSessions.startedAt} at time zone 'UTC')::date
+          where rollup.day = (${analyticsSessions.startedAt} at time zone rollup.day_timezone)::date
             and rollup.channel = ${analyticsSessions.channel}
             and rollup.evidence = ${analyticsSessions.evidence}
         )
@@ -928,10 +966,27 @@ export async function compactRetainedAnalyticsJourneysBatch(
   return deletedCount(result);
 }
 
+export async function deleteUnusedAnalyticsMembersBatch(
+  db: Database,
+  { limit = STOREFRONT_MAINTENANCE_BATCH_SIZE }: { limit?: number } = {},
+) {
+  const result = await db.execute(sql`
+    with unused as (
+      select id from ${analyticsDistinctDailyMembers}
+      where metric in ('journey', 'session')
+      order by id limit ${Math.max(1, limit)} for update skip locked
+    )
+    delete from ${analyticsDistinctDailyMembers} members using unused
+    where members.id = unused.id returning members.id
+  `);
+  return deletedCount(result);
+}
+
 export async function runStorefrontDataMaintenanceBatch(
   db: Database,
   options: { now?: Date; limit?: number } = {},
 ) {
+  const unusedAnalyticsMembers = await deleteUnusedAnalyticsMembersBatch(db, options);
   const orderIdempotency = await deleteExpiredOrderIdempotencyBatch(db, options);
   const orderAcquisitionBackfilled = await backfillOrderAcquisitionAttributionBatch(db, options);
   const orderAiInfluenceBackfilled = await backfillOrderAiInfluenceBatch(db, options);
@@ -950,6 +1005,7 @@ export async function runStorefrontDataMaintenanceBatch(
   const analyticsJourneysDeleted = await deleteInactiveAnalyticsJourneysBatch(db, options);
 
   return {
+    unusedAnalyticsMembers,
     orderIdempotency,
     orderAcquisitionBackfilled,
     orderAiInfluenceBackfilled,

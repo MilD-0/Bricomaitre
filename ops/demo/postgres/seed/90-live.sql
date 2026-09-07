@@ -1263,3 +1263,7 @@ JOIN LATERAL (
   WHERE candidate.active AND candidate.category_id = product.category_id AND candidate.id <> product.id
   ORDER BY candidate.id DESC LIMIT 1
 ) alternative ON true;
+
+UPDATE analytics_daily_rollups SET day_timezone = 'Africa/Algiers';
+
+UPDATE analytics_ai_daily_rollups SET day_timezone = 'Africa/Algiers';

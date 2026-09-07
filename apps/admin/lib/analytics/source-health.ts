@@ -2,7 +2,11 @@ import { sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
+  analyticsAcquisitionDailyRollups,
+  analyticsAiDailyRollups,
   analyticsDailyRollups,
+  analyticsPaidClickDailyRollups,
+  metaEventDailyRollups,
   analyticsEvents,
   ecotrackOrderStates,
   metaAdsDailyInsights,
@@ -87,6 +91,25 @@ export async function loadSourceHealth(
         (select max(${metaAdsDailyInsights.syncedAt}) from ${metaAdsDailyInsights}),
         (select max(${profitTrackerDays.metaSyncedAt}) from ${profitTrackerDays})
       ) as meta_updated_at,
+      (select count(distinct day)::int from (
+        select ${analyticsDailyRollups.day} as day from ${analyticsDailyRollups}
+          where ${analyticsDailyRollups.dayTimezone} = 'UTC'
+        union all
+        select ${analyticsAcquisitionDailyRollups.day} from ${analyticsAcquisitionDailyRollups}
+          where ${analyticsAcquisitionDailyRollups.dayTimezone} = 'UTC'
+        union all
+        select ${analyticsAiDailyRollups.day} from ${analyticsAiDailyRollups}
+          where ${analyticsAiDailyRollups.dayTimezone} = 'UTC'
+        union all
+        select ${analyticsPaidClickDailyRollups.day} from ${analyticsPaidClickDailyRollups}
+          where ${analyticsPaidClickDailyRollups.dayTimezone} = 'UTC'
+        union all
+        select ${metaEventDailyRollups.day} from ${metaEventDailyRollups}
+          where ${metaEventDailyRollups.dayTimezone} = 'UTC'
+      ) legacy_days
+        where day <= ${filters.endDate}::date
+          and ${filters.startDate ? sql`day >= ${filters.startDate}::date - 1` : sql`true`}
+      ) as legacy_utc_days,
       (select count(*)::int from ${analyticsDailyRollups}
         where ${analyticsDailyRollups.dimension} = 'overall'
           and ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)})
@@ -153,6 +176,7 @@ export async function loadSourceHealth(
     },
     {
       key: 'storefront',
+      dateBasis: numeric(row.legacy_utc_days) > 0 ? 'includes_legacy_utc' : 'Africa/Algiers',
       state: freshnessState(storefrontThrough, filters.endDate),
       updatedAt: isoValue(row.storefront_updated_at),
       throughDate: storefrontThrough,

@@ -71,7 +71,7 @@ export async function loadAcquisitionView(
         statsInput(performanceFilters.startDate, performanceFilters.endDate),
       ),
       loadSourceHealth(db, filters, current, cutoffs.orders ?? undefined),
-      loadMetaBreakdowns(db, performanceFilters, current),
+      loadMetaBreakdowns(db, performanceFilters),
       loadLeadingOrderForecast(db, performanceFilters, current.settings),
     ]);
   const summary = performance.summary;

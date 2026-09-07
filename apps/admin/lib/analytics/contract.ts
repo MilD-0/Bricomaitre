@@ -97,6 +97,7 @@ export type AnalyticsMetric = {
 };
 
 export type AnalyticsSource = {
+  dateBasis?: 'Africa/Algiers' | 'includes_legacy_utc';
   key:
     'orders' | 'ecotrack' | 'meta' | 'storefront' | 'searchConsole' | 'settlements' | 'assumptions';
   state: 'live' | 'current' | 'lagged' | 'manual' | 'partial' | 'missing';

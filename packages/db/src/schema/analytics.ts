@@ -204,6 +204,8 @@ export const analyticsDailyRollups = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     day: date('day').notNull(),
+    // Existing retained aggregates keep their recorded UTC calendar.
+    dayTimezone: text('day_timezone').notNull().default('UTC'),
     dimension: text('dimension').notNull(),
     dimensionKey: text('dimension_key').notNull().default(''),
     sessions: integer('sessions').notNull().default(0),
@@ -221,6 +223,7 @@ export const analyticsDailyRollups = pgTable(
   (t) => [
     uniqueIndex('analytics_daily_rollups_day_dimension_key_unique').on(
       t.day,
+      t.dayTimezone,
       t.dimension,
       t.dimensionKey,
     ),
@@ -233,6 +236,8 @@ export const analyticsAcquisitionDailyRollups = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     day: date('day').notNull(),
+    // Existing retained aggregates keep their recorded UTC calendar.
+    dayTimezone: text('day_timezone').notNull().default('UTC'),
     channel: text('channel').notNull(),
     evidence: text('evidence').notNull(),
     sessions: integer('sessions').notNull().default(0),
@@ -242,6 +247,7 @@ export const analyticsAcquisitionDailyRollups = pgTable(
   (t) => [
     uniqueIndex('analytics_acquisition_rollups_day_channel_evidence_unique').on(
       t.day,
+      t.dayTimezone,
       t.channel,
       t.evidence,
     ),
@@ -254,6 +260,8 @@ export const analyticsAiDailyRollups = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     day: date('day').notNull(),
+    // Existing retained aggregates keep their recorded UTC calendar.
+    dayTimezone: text('day_timezone').notNull().default('UTC'),
     dimension: text('dimension').notNull(),
     dimensionKey: text('dimension_key').notNull().default(''),
     opens: integer('opens').notNull().default(0),
@@ -278,6 +286,7 @@ export const analyticsAiDailyRollups = pgTable(
   (t) => [
     uniqueIndex('analytics_ai_rollups_day_dimension_key_unique').on(
       t.day,
+      t.dayTimezone,
       t.dimension,
       t.dimensionKey,
     ),
@@ -293,6 +302,8 @@ export const analyticsDistinctDailyMembers = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     day: date('day').notNull(),
+    // Existing retained aggregates keep their recorded UTC calendar.
+    dayTimezone: text('day_timezone').notNull().default('UTC'),
     metric: text('metric').notNull(),
     dimensionKey: text('dimension_key').notNull().default(''),
     memberId: text('member_id').notNull(),
@@ -301,6 +312,7 @@ export const analyticsDistinctDailyMembers = pgTable(
   (t) => [
     uniqueIndex('analytics_distinct_members_day_metric_key_member_unique').on(
       t.day,
+      t.dayTimezone,
       t.metric,
       t.dimensionKey,
       t.memberId,
@@ -314,6 +326,8 @@ export const analyticsPaidClickDailyRollups = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     day: date('day').notNull(),
+    // Existing retained aggregates keep their recorded UTC calendar.
+    dayTimezone: text('day_timezone').notNull().default('UTC'),
     // Historical schema key; current rollups always use the canonical `storefront` value.
     variant: text('variant').notNull(),
     paidSource: text('paid_source').notNull(),
@@ -333,6 +347,7 @@ export const analyticsPaidClickDailyRollups = pgTable(
   (t) => [
     uniqueIndex('analytics_paid_click_rollups_dimensions_unique').on(
       t.day,
+      t.dayTimezone,
       t.variant,
       t.paidSource,
       t.hasOrder,

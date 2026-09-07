@@ -47,9 +47,9 @@ exec ops/scripts/run-with-ci-services.sh "$postgres_port" "$redis_port" "$databa
         psql --host 127.0.0.1 --port "$BRIC_CI_POSTGRES_PORT" \
           --username "$POSTGRES_STOREFRONT_USER" --dbname "$POSTGRES_DB" \
           --tuples-only --no-align \
-          --command "SELECT has_table_privilege(current_user, '\''public.orders'\'', '\''INSERT'\''), has_table_privilege(current_user, '\''admin.ecotrack_service_fees'\'', '\''SELECT'\''), has_table_privilege(current_user, '\''admin.users'\'', '\''SELECT'\''), has_schema_privilege(current_user, '\''public'\'', '\''CREATE'\''), has_column_privilege(current_user, '\''public.products'\'', '\''view_count'\'', '\''UPDATE'\''), has_column_privilege(current_user, '\''public.products'\'', '\''price'\'', '\''UPDATE'\'');"
+          --command "SELECT has_table_privilege(current_user, '\''public.orders'\'', '\''INSERT'\''), has_table_privilege(current_user, '\''admin.ecotrack_service_fees'\'', '\''SELECT'\''), has_table_privilege(current_user, '\''admin.users'\'', '\''SELECT'\''), has_schema_privilege(current_user, '\''public'\'', '\''CREATE'\''), has_column_privilege(current_user, '\''public.products'\'', '\''units_sold'\'', '\''UPDATE'\''), has_column_privilege(current_user, '\''public.products'\'', '\''price'\'', '\''UPDATE'\'');"
     )"
-    if [[ "$role_contract" != "t|t|f|f|t|f" ]]; then
+    if [[ "$role_contract" != "t|t|f|f|f|f" ]]; then
       echo "restricted Storefront database role contract failed: $role_contract" >&2
       exit 1
     fi

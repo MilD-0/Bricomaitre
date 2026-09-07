@@ -21,7 +21,7 @@ import {
   resolveAnalyticsFilters,
   resolveAnalyticsReferenceNow,
 } from './date-range';
-import { previousFiltersWithCoverage } from './economics-data';
+import { previousFiltersWithCoverage, sourceWarnings } from './economics-data';
 import { type Database, effectiveRange, metric, statsInput } from './loaders-shared';
 import { loadSourceHealth } from './source-health';
 
@@ -158,7 +158,7 @@ export async function loadStorefrontView(
       ),
     ],
     sources,
-    warnings: [],
+    warnings: sourceWarnings(sources.filter((source) => source.key === 'storefront')),
   };
 }
 

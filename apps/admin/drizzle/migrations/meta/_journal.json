@@ -743,6 +743,13 @@
       "when": 1788758428407,
       "tag": "0105_preserve_calculator_day",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1788769754311,
+      "tag": "0106_align_analytics_reporting_contracts",
+      "breakpoints": true
     }
   ]
 }

@@ -17,6 +17,7 @@ import {
 import {
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   dateCondition,
+  timestampCondition,
   numberValue,
   reportingTimestampCondition,
   round,
@@ -92,7 +93,7 @@ export async function getLiveStorefrontAiStats(
   filters: ExperienceStatsFilters,
 ): Promise<StorefrontAiStats> {
   const eventWhere = and(
-    dateCondition(analyticsEvents.occurredAt, filters),
+    timestampCondition(analyticsEvents.occurredAt, filters),
     sql`${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`,
   );
   const rollupWhere = dateCondition(analyticsAiDailyRollups.day, filters);
@@ -100,7 +101,7 @@ export async function getLiveStorefrontAiStats(
     eventWhere,
     sql`not exists (
       select 1 from ${analyticsAiDailyRollups} rollup
-      where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+      where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
         and rollup.dimension = 'overall' and rollup.dimension_key = ''
     )`,
   );

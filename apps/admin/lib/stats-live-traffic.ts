@@ -71,7 +71,7 @@ export async function getWebsiteAnalyticsData(
     analyticsWhere,
     sql`not exists (
       select 1 from ${analyticsDailyRollups} rollup
-      where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+      where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
         and rollup.dimension = 'overall'
         and rollup.dimension_key = ''
     )`,
@@ -188,12 +188,14 @@ export async function getMetaAdsTrackingData(
   const conditions = [];
   const rollupConditions = [];
   if (filters.startDate) {
-    conditions.push(sql`${metaEventOutbox.eventTime} >= ${filters.startDate}::date`);
+    conditions.push(
+      sql`${metaEventOutbox.eventTime} >= (${filters.startDate}::date::timestamp at time zone 'Africa/Algiers')`,
+    );
     rollupConditions.push(sql`${metaEventDailyRollups.day} >= ${filters.startDate}::date`);
   }
   if (filters.endDate) {
     conditions.push(
-      sql`${metaEventOutbox.eventTime} < (${filters.endDate}::date + interval '1 day')`,
+      sql`${metaEventOutbox.eventTime} < ((${filters.endDate}::date + interval '1 day') at time zone 'Africa/Algiers')`,
     );
     rollupConditions.push(sql`${metaEventDailyRollups.day} <= ${filters.endDate}::date`);
   }
@@ -203,7 +205,7 @@ export async function getMetaAdsTrackingData(
     metaWhere,
     sql`not exists (
     select 1 from ${metaEventDailyRollups} rollup
-    where rollup.day = (${metaEventOutbox.eventTime} at time zone 'UTC')::date
+    where rollup.day = (${metaEventOutbox.eventTime} at time zone rollup.day_timezone)::date
   )`,
   );
   const pixelInvoked = sql`coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->>'invoked', 'false') = 'true'`;
@@ -278,12 +280,14 @@ export async function getMetaAttributedOrderCount(
   const rawConditions = [];
   const rollupConditions = [];
   if (filters.startDate) {
-    rawConditions.push(sql`${analyticsPaidClickVisits.firstSeenAt} >= ${filters.startDate}::date`);
+    rawConditions.push(
+      sql`${analyticsPaidClickVisits.firstSeenAt} >= (${filters.startDate}::date::timestamp at time zone 'Africa/Algiers')`,
+    );
     rollupConditions.push(sql`${analyticsPaidClickDailyRollups.day} >= ${filters.startDate}::date`);
   }
   if (filters.endDate) {
     rawConditions.push(
-      sql`${analyticsPaidClickVisits.firstSeenAt} < (${filters.endDate}::date + interval '1 day')`,
+      sql`${analyticsPaidClickVisits.firstSeenAt} < ((${filters.endDate}::date + interval '1 day') at time zone 'Africa/Algiers')`,
     );
     rollupConditions.push(sql`${analyticsPaidClickDailyRollups.day} <= ${filters.endDate}::date`);
   }
@@ -293,7 +297,7 @@ export async function getMetaAttributedOrderCount(
     rawWhere,
     sql`not exists (
       select 1 from ${analyticsPaidClickDailyRollups} rollup
-      where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date
+      where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone rollup.day_timezone)::date
     )`,
   );
   const [rawResult, rollupRows] = await Promise.all([

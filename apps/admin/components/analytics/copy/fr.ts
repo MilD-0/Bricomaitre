@@ -158,6 +158,8 @@ export const analyticsCopyFr = {
     activePipeline: 'Des commandes sont encore en livraison',
   },
   warningLabels: {
+    legacyUtcTraffic:
+      'Les anciens totaux de trafic de cette période conservent les dates UTC. Le trafic actuel et les commandes suivent la date algérienne ; les comparaisons historiques autour de minuit ne sont pas exactes.',
     sourceMissing: 'Une source manque sur cette période',
     sourcePartial: 'Une source ne couvre qu’une partie de la période',
     projectedCostCoverage: 'Le profit projeté utilise une marge de secours de 30 %',

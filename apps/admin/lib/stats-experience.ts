@@ -16,6 +16,7 @@ import { getLiveStorefrontAiStats } from './stats-experience-ai';
 import {
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   dateCondition,
+  timestampCondition,
   inclusiveDateDays,
   isoValue,
   numberValue,
@@ -30,7 +31,7 @@ type Database = ReturnType<typeof getDb>;
 
 function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters) {
   const storefrontAnalyticsWhere = and(
-    dateCondition(analyticsEvents.occurredAt, filters),
+    timestampCondition(analyticsEvents.occurredAt, filters),
     sql`${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`,
   );
 
@@ -89,17 +90,20 @@ export async function getStorefrontExperienceStats(
   filters: ExperienceStatsFilters,
 ): Promise<ExperienceStats> {
   const includeRawSessionStats = inclusiveDateDays(filters) <= 7;
-  const websiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, filters);
+  const websiteAnalyticsWhere = timestampCondition(analyticsEvents.occurredAt, filters);
   const rawWebsiteFilters = resolveRawWebsiteFilters(filters);
-  const rawWebsiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, rawWebsiteFilters);
+  const rawWebsiteAnalyticsWhere = timestampCondition(
+    analyticsEvents.occurredAt,
+    rawWebsiteFilters,
+  );
   const websiteRollupWhere = dateCondition(analyticsDailyRollups.day, filters);
-  const acquisitionSessionWhere = dateCondition(analyticsSessions.startedAt, filters);
+  const acquisitionSessionWhere = timestampCondition(analyticsSessions.startedAt, filters);
   const acquisitionRollupWhere = dateCondition(analyticsAcquisitionDailyRollups.day, filters);
   const unrolledAcquisitionSessionWhere = and(
     acquisitionSessionWhere,
     sql`not exists (
       select 1 from ${analyticsAcquisitionDailyRollups} rollup
-      where rollup.day = (${analyticsSessions.startedAt} at time zone 'UTC')::date
+      where rollup.day = (${analyticsSessions.startedAt} at time zone rollup.day_timezone)::date
         and rollup.channel = ${analyticsSessions.channel}
         and rollup.evidence = ${analyticsSessions.evidence}
     )`,
@@ -108,7 +112,7 @@ export async function getStorefrontExperienceStats(
     rawWebsiteAnalyticsWhere,
     sql`not exists (
     select 1 from ${analyticsDailyRollups} rollup
-    where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+    where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
       and rollup.dimension = 'overall'
       and rollup.dimension_key = ''
   )`,
@@ -170,13 +174,13 @@ export async function getStorefrontExperienceStats(
       select min(value) as coverage_starts_at from (
         select min(${analyticsSessions.startedAt}) as value from ${analyticsSessions}
         union all
-        select min(${analyticsAcquisitionDailyRollups.day}::timestamp at time zone 'UTC')
+        select min(${analyticsAcquisitionDailyRollups.day}::timestamp at time zone ${analyticsAcquisitionDailyRollups.dayTimezone})
         from ${analyticsAcquisitionDailyRollups}
       ) coverage
     `),
     db
       .select({
-        bucket: sql<string>`to_char(date_trunc('day', ${analyticsEvents.occurredAt}), 'YYYY-MM-DD')`,
+        bucket: sql<string>`to_char(date_trunc('day', ${analyticsEvents.occurredAt} at time zone 'Africa/Algiers'), 'YYYY-MM-DD')`,
         sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
         pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
         purchases: sql<number>`count(distinct coalesce(${analyticsEvents.orderId}::text, ${analyticsEvents.eventId})) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,

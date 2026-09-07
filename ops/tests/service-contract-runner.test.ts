@@ -42,7 +42,7 @@ printf '%s\\n' "$step" >> "$GATE_LOG"
       writeFileSync(join(directory, 'ops/docker/postgres/init-roles.sh'), 'role fixture\n');
       writeFileSync(
         join(bin, 'docker'),
-        '#!/usr/bin/env bash\nif [[ "$*" == *"psql "* ]]; then echo "t|t|f|f|t|f"; else gate-step roles; fi\n',
+        '#!/usr/bin/env bash\nif [[ "$*" == *"psql "* ]]; then echo "t|t|f|f|f|f"; else gate-step roles; fi\n',
         { mode: 0o755 },
       );
 

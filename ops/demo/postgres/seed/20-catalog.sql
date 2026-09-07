@@ -367,7 +367,7 @@ INSERT INTO product_promo_codes (product_id, code, normalized_code, promo_price,
 SELECT id, 'ATELIER' || lpad(row_number() OVER (ORDER BY id)::text, 2, '0'),
   'atelier' || lpad(row_number() OVER (ORDER BY id)::text, 2, '0'),
   greatest(100, price - 500), true
-FROM products WHERE active AND in_stock ORDER BY popularity_score DESC, id LIMIT 80;
+FROM products WHERE active AND in_stock ORDER BY units_sold DESC, id LIMIT 80;
 
 INSERT INTO featured_product_groups (
   name, name_ar, cta, cta_ar, link, sort_order, show_at_top_of_products_page, active

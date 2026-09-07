@@ -37,15 +37,6 @@ export const products = pgTable(
 
     unitsSold: bigint('units_sold', { mode: 'number' }).notNull().default(0),
     inventoryQuantity: bigint('inventory_quantity', { mode: 'number' }).notNull().default(0),
-    viewCount: bigint('view_count', { mode: 'number' }).notNull().default(0),
-    addToCartCount: bigint('add_to_cart_count', { mode: 'number' }).notNull().default(0),
-    checkoutCount: bigint('checkout_count', { mode: 'number' }).notNull().default(0),
-    purchaseCount: bigint('purchase_count', { mode: 'number' }).notNull().default(0),
-    popularityScore: numeric('popularity_score', { precision: 14, scale: 2 })
-      .notNull()
-      .default('0'),
-    conversionRate: numeric('conversion_rate', { precision: 8, scale: 4 }).notNull().default('0'),
-    lastViewedAt: timestamp('last_viewed_at', { withTimezone: true }),
 
     brandId: bigint('brand_id', { mode: 'number' }).references(() => brands.id, {
       onDelete: 'set null',
@@ -74,8 +65,6 @@ export const products = pgTable(
     index('idx_products_updated_at').on(t.updatedAt.desc()),
     index('idx_products_brand_updated_at').on(t.brandId, t.updatedAt.desc()),
     index('idx_products_category_updated_at').on(t.categoryId, t.updatedAt.desc()),
-    index('idx_products_popularity').on(t.popularityScore),
-    index('idx_products_last_viewed_at').on(t.lastViewedAt.desc()),
     index('idx_products_title_trgm').using('gin', t.title.op('gin_trgm_ops')),
     index('idx_products_sku_trgm').using('gin', t.sku.op('gin_trgm_ops')),
     index('idx_products_barcode_trgm').using('gin', t.barcode.op('gin_trgm_ops')),
@@ -85,13 +74,8 @@ export const products = pgTable(
       'products_purchase_price_nonnegative_check',
       sql`${t.purchasePrice} is null or ${t.purchasePrice} >= 0`,
     ),
+    check('products_units_sold_nonnegative_check', sql`${t.unitsSold} >= 0`),
     check('products_inventory_quantity_nonnegative_check', sql`${t.inventoryQuantity} >= 0`),
-    check(
-      'products_engagement_counters_nonnegative_check',
-      sql`${t.unitsSold} >= 0 and ${t.viewCount} >= 0 and ${t.addToCartCount} >= 0 and ${t.checkoutCount} >= 0 and ${t.purchaseCount} >= 0`,
-    ),
-    check('products_popularity_score_nonnegative_check', sql`${t.popularityScore} >= 0`),
-    check('products_conversion_rate_nonnegative_check', sql`${t.conversionRate} >= 0`),
     check(
       'products_availability_status_check',
       sql`${t.availabilityStatus} in ('in_stock', 'out_of_stock')`,

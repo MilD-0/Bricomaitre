@@ -216,6 +216,8 @@ export const metaEventDailyRollups = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     day: date('day').notNull(),
+    // Existing retained aggregates keep their recorded UTC calendar.
+    dayTimezone: text('day_timezone').notNull().default('UTC'),
     eventName: text('event_name').notNull(),
     total: integer('total').notNull().default(0),
     pixelFired: integer('pixel_fired').notNull().default(0),
@@ -228,7 +230,7 @@ export const metaEventDailyRollups = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('meta_event_daily_rollups_day_event_unique').on(t.day, t.eventName),
+    uniqueIndex('meta_event_daily_rollups_day_event_unique').on(t.day, t.dayTimezone, t.eventName),
     index('idx_meta_event_daily_rollups_event_day').on(t.eventName, t.day),
   ],
 );

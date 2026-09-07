@@ -101,22 +101,6 @@ FROM read_write_table
 WHERE to_regclass(table_name) IS NOT NULL
 \gexec
 
-WITH catalog_metric_table(table_name) AS (
-  SELECT unnest(ARRAY[
-    'public.brands',
-    'public.categories',
-    'public.products'
-  ]::text[])
-)
-SELECT format(
-  'GRANT UPDATE (view_count, add_to_cart_count, checkout_count, purchase_count, popularity_score, conversion_rate, last_viewed_at) ON TABLE %s TO %I',
-  to_regclass(table_name),
-  :'storefront_user'
-)
-FROM catalog_metric_table
-WHERE to_regclass(table_name) IS NOT NULL
-\gexec
-
 WITH read_write_table(table_name) AS (
   SELECT unnest(ARRAY[
     'public.analytics_acquisition_daily_rollups',

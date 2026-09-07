@@ -48,7 +48,7 @@ async function loadAiDatasetCutoff(db: Database, surface: AiStatsSurface) {
       : await db.execute(sql`
           select to_char(greatest(
             (select max(${analyticsAiDailyRollups.day}) from ${analyticsAiDailyRollups}),
-            (select max(${analyticsEvents.occurredAt} at time zone 'UTC')
+            (select max(${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')
               from ${analyticsEvents}
               where ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}),
             (select max(${orderAiInfluence.capturedAt} at time zone 'Africa/Algiers')
@@ -117,17 +117,17 @@ export async function getAiStatsData(
             select min(${analyticsEvents.occurredAt}) as from_at,
               max(${analyticsEvents.occurredAt}) as through_at, count(*)::bigint as records
             from ${analyticsEvents}
-            where ${timestampCondition(analyticsEvents.occurredAt, filters, 'UTC')}
+            where ${timestampCondition(analyticsEvents.occurredAt, filters, 'Africa/Algiers')}
               and ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}
               and ${analyticsEvents.eventName} like 'ai_assistant_%'
               and not exists (
                 select 1 from ${analyticsAiDailyRollups} rollup
-                where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+                where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
                   and rollup.dimension = 'overall' and rollup.dimension_key = ''
               )
             union all
-            select min(${analyticsAiDailyRollups.day})::timestamp at time zone 'UTC',
-              max(${analyticsAiDailyRollups.day})::timestamp at time zone 'UTC',
+            select min(${analyticsAiDailyRollups.day}::timestamp at time zone ${analyticsAiDailyRollups.dayTimezone}),
+              max(${analyticsAiDailyRollups.day}::timestamp at time zone ${analyticsAiDailyRollups.dayTimezone}),
               sum(${analyticsAiDailyRollups.opens} + ${analyticsAiDailyRollups.messages} +
                 ${analyticsAiDailyRollups.resultClicks} + ${analyticsAiDailyRollups.runs} +
                 ${analyticsAiDailyRollups.helpful} + ${analyticsAiDailyRollups.notHelpful} +
@@ -142,7 +142,7 @@ export async function getAiStatsData(
   const coverage = rows(coverageResult)[0] ?? {};
   const coverageFrom = isoValue(coverage.from_at),
     coverageThrough = isoValue(coverage.through_at);
-  const coverageTimezone = filters.surface === 'operations' ? 'Africa/Algiers' : 'UTC';
+  const coverageTimezone = 'Africa/Algiers';
   const base = {
     surface: filters.surface,
     filters,
