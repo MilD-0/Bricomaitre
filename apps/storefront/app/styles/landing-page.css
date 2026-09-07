@@ -506,7 +506,7 @@
   padding: calc(1.4rem * var(--sf-density));
 }
 .landing-use-cases article > span {
-  color: var(--sf-text-muted, #687477);
+  color: var(--sf-text-muted, #5d666b);
   font-size: var(--sf-type-caption, 0.7rem);
   font-weight: var(--sf-weight-heavy, 800);
   letter-spacing: var(--sf-tracking-wide, 0.12em);
