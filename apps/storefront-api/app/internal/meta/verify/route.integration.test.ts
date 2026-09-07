@@ -28,6 +28,18 @@ describe('POST /internal/meta/verify', () => {
     expect(response.status).toBe(401);
   });
 
+  it('rejects malformed JSON without sending a provider event', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/internal/meta/verify', {
+        method: 'POST',
+        headers: { authorization: 'Bearer deploy-token', 'content-type': 'application/json' },
+        body: '{',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(sendMetaEventMock).not.toHaveBeenCalled();
+  });
+
   it('requires an accepted Meta event', async () => {
     sendMetaEventMock.mockResolvedValue({
       ok: false,

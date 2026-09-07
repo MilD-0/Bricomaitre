@@ -90,7 +90,7 @@ describe('CatalogFilters', () => {
     const sheet = screen.getByRole('dialog');
     const select = within(sheet).getByRole('combobox', { name: 'Marque' });
     expect(select).toHaveValue('1500');
-    expect(within(select).getAllByRole('option')).toHaveLength(1563);
+    expect((select as HTMLSelectElement).options).toHaveLength(1563);
     fireEvent.change(select, { target: { value: '1562' } });
     const data = new FormData(sheet.querySelector('form')!);
     expect(data.get('brand')).toBe('1562');

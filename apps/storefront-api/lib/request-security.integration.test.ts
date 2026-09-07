@@ -1,7 +1,13 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { enforceOrderVelocityLimit, getRequestClientKey } from './request-security';
+import {
+  buildRateLimitHeaders,
+  enforceGlobalRateLimit,
+  enforceOrderVelocityLimit,
+  enforceRequestRateLimit,
+  getRequestClientKey,
+} from './request-security';
 
 describe('request-security client identity', () => {
   it('prefers the address supplied by the trusted reverse proxy', () => {
@@ -36,6 +42,73 @@ vi.mock('@bric/runtime/rate-limit', () => ({
 vi.mock('@bric/runtime/redis', () => ({
   getRedis: getRedisMock,
 }));
+
+describe('request and subject rate limits', () => {
+  const allowed = { ok: true, limit: 60, remaining: 59, resetAt: 100_001, retryAfterSeconds: 60 };
+  const blocked = { ...allowed, ok: false, remaining: 0 };
+  const request = new NextRequest('https://api.example.test/storefront/orders/track', {
+    headers: { 'x-real-ip': '203.0.113.42' },
+  });
+
+  beforeEach(() => applyRateLimitMock.mockReset());
+
+  it('hashes private lookup subjects and enforces their limit after the client limit', async () => {
+    applyRateLimitMock.mockResolvedValueOnce(allowed).mockResolvedValueOnce(blocked);
+    expect(
+      await enforceRequestRateLimit(request, {
+        scope: 'track',
+        limit: 60,
+        windowSeconds: 60,
+        suffix: 'private-order-token',
+      }),
+    ).toEqual(blocked);
+    expect(applyRateLimitMock).toHaveBeenNthCalledWith(1, {
+      scope: 'track',
+      key: '203.0.113.42',
+      limit: 60,
+      windowSeconds: 60,
+    });
+    expect(applyRateLimitMock).toHaveBeenNthCalledWith(2, {
+      scope: 'track:subject',
+      key: expect.stringMatching(/^[a-f0-9]{64}$/),
+      limit: 60,
+      windowSeconds: 60,
+    });
+    expect(JSON.stringify(applyRateLimitMock.mock.calls)).not.toContain('private-order-token');
+    expect(buildRateLimitHeaders(blocked)).toEqual({
+      'x-ratelimit-limit': '60',
+      'x-ratelimit-remaining': '0',
+      'x-ratelimit-reset': '101',
+      'retry-after': '60',
+    });
+  });
+
+  it('does not consume a subject allowance after the client is blocked', async () => {
+    applyRateLimitMock.mockResolvedValue(blocked);
+    expect(
+      await enforceRequestRateLimit(request, {
+        scope: 'track',
+        limit: 60,
+        windowSeconds: 60,
+        suffix: 'private-order-token',
+      }),
+    ).toEqual(blocked);
+    expect(applyRateLimitMock).toHaveBeenCalledOnce();
+  });
+
+  it('uses a shared global quota independent of the caller address', async () => {
+    applyRateLimitMock.mockResolvedValue(blocked);
+    expect(
+      await enforceGlobalRateLimit({ scope: 'analytics', limit: 60, windowSeconds: 60 }),
+    ).toEqual(blocked);
+    expect(applyRateLimitMock).toHaveBeenCalledWith({
+      scope: 'analytics',
+      key: 'global',
+      limit: 60,
+      windowSeconds: 60,
+    });
+  });
+});
 
 describe('request-security order velocity limit', () => {
   const redis = {

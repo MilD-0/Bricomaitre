@@ -49,6 +49,21 @@ describe('POST /storefront/orders/track', () => {
     await expect(response.json()).resolves.toEqual({ item: { id: 42 } });
   });
 
+  it('rejects malformed JSON privately before rate limiting or reading orders', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/storefront/orders/track', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(readByTokenMock).not.toHaveBeenCalled();
+  });
+
   it('uses private no-store responses for malformed and unknown tokens', async () => {
     const malformed = await POST(
       new NextRequest('http://localhost/storefront/orders/track', {

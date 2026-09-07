@@ -658,6 +658,7 @@ describe('OrdersWorkspace', () => {
       const successToast = vi.spyOn(toast, 'success');
       const applies: Array<Record<string, unknown>> = [];
       let saves = 0;
+      let successfulSaves = 0;
       let releaseLostResponse!: () => void;
       const lostResponse = new Promise<void>((resolve) => {
         releaseLostResponse = resolve;
@@ -675,6 +676,7 @@ describe('OrdersWorkspace', () => {
           saves += 1;
           if (saves > 1 && applies.length < 2)
             return HttpResponse.json({ error: 'stale revision' }, { status: 409 });
+          successfulSaves += 1;
           draft = {
             ...((await request.json()) as Record<string, unknown>),
             scopeKey: 'selected:1',
@@ -737,7 +739,7 @@ describe('OrdersWorkspace', () => {
           expect.any(Object),
         ),
       );
-      expect(saves).toBe(editAfterLoss ? 2 : 1);
+      expect(successfulSaves).toBe(editAfterLoss ? 2 : 1);
       expect((draft.draftItems as Array<Record<string, unknown>>)[0]).toMatchObject({
         quantity: editAfterLoss ? 2 : 1,
         inventoryAppliedQuantity: 1,

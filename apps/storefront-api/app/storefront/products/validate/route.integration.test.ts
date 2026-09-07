@@ -16,6 +16,20 @@ describe('public cart validation', () => {
     mocks.promos.mockReset().mockResolvedValue([]);
   });
 
+  it('rejects malformed JSON without resolving products or discounts', async () => {
+    const response = await POST(
+      new Request('http://localhost/storefront/products/validate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.products).not.toHaveBeenCalled();
+    expect(mocks.promo).not.toHaveBeenCalled();
+    expect(mocks.promos).not.toHaveBeenCalled();
+  });
+
   it('uses canonical promo resolution for the actual cart and returns the quote with products', async () => {
     const promo = { code: 'AUDIT10', productId: 12, promoPrice: 1200 };
     mocks.promo.mockResolvedValue(promo);

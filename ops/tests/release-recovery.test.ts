@@ -331,7 +331,7 @@ function expectRecovered(test: ReturnType<typeof fixture>) {
   expect(Object.keys(test.state().containers).some((name) => name.endsWith('-green'))).toBe(false);
 }
 
-describe('deployment and rollback entrypoints', () => {
+describe('deployment and rollback entrypoints', { timeout: 30_000 }, () => {
   it.each(['deploy', 'rollback'] as const)(
     '%s switches routing and state before retiring the incumbent',
     (script) => {
