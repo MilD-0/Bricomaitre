@@ -30,12 +30,15 @@ services:
   admin:
     environment:
       EXPLABS_BASE_URL: http://ai-relay:8080/v1
+      OPENROUTER_BASE_URL: http://ai-relay:8080/openrouter/api/v1
   admin-worker:
     environment:
       EXPLABS_BASE_URL: http://ai-relay:8080/v1
+      OPENROUTER_BASE_URL: http://ai-relay:8080/openrouter/api/v1
   storefront:
     environment:
       EXPLABS_BASE_URL: http://ai-relay:8080/v1
+      OPENROUTER_BASE_URL: http://ai-relay:8080/openrouter/api/v1
 
 networks:
   ai-egress: {}
