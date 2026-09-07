@@ -10,6 +10,10 @@ import {
   analyticsPaidClickDailyRollups,
   analyticsPaidClickVisits,
   marketingEventOutbox,
+  metaEventOutbox,
+  orderMarketingAttribution,
+  orderMetaAttribution,
+  orderStatusHistory,
   orderAcquisitionAttribution,
   orderAiInfluence,
   orderLineItems,
@@ -24,16 +28,39 @@ import {
   deleteExpiredAnalyticsEventsBatch,
   deleteExpiredPaidClickVisitsBatch,
   deleteTerminalMarketingOutboxBatch,
+  deleteTerminalMetaOutboxBatch,
+  rollUpNextExpiredMetaOutboxDay,
   normalizeNextPaidClickRollupDays,
   rollUpNextExpiredAnalyticsDay,
   runStorefrontDataMaintenanceBatch,
 } from '@bric/storefront-core/maintenance';
+import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
+import {
+  ensureMarketingOrderStatusEvents,
+  processMarketingOutboxBatch,
+  reconcileMarketingOrderEvents,
+} from '@bric/storefront-core/marketing';
+import {
+  ensureOrderConfirmedEventForOrder,
+  ensureOrderCompletedEventForOrder,
+  processMetaOutboxBatch,
+  reconcileOrderConfirmedEvents,
+  reconcileOrderCompletedEvents,
+} from '@bric/storefront-core/meta';
+import { MARKETING_SEMANTICS_VERSION } from '@bric/storefront-core/marketing-contracts';
+import { META_SEMANTICS_VERSION } from '@bric/storefront-core/meta-contracts';
+import { loadShopping } from '../lib/ai-stats-shopping';
 import { asc, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
 const namespace = `maintenance_${randomUUID().replaceAll('-', '')}`;
 const db = createDb({ max: 2, options: `-c search_path=${namespace},public` });
 const tables = [
+  'order_status_history',
+  'order_marketing_attribution',
+  'order_meta_attribution',
+  'storefront_settings',
   'products',
   'orders',
   'order_line_items',
@@ -555,4 +582,168 @@ it('deletes only terminal marketing deliveries beyond their seven or 30 day rete
     'rejected-boundary',
     'retrying',
   ]);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
+
+it('preserves intent clicks in the real shopping report after retention rollup', async () => {
+  const occurredAt = ago(8);
+  const day = occurredAt.toISOString().slice(0, 10);
+  await db.insert(analyticsJourneys).values({ id: 'intent-clicks' });
+  await db.insert(analyticsEvents).values(
+    ['ai_assistant_message', 'ai_assistant_result_click'].map((eventName) => ({
+      eventId: randomUUID(),
+      journeyId: 'intent-clicks',
+      sessionId: 'intent-session',
+      eventName,
+      occurredAt,
+      metadata: { storefrontProject: STOREFRONT_ANALYTICS_PROJECT, intent: 'product_discovery' },
+    })),
+  );
+  const filters = {
+    surface: 'shopping' as const,
+    range: 'custom' as const,
+    startDate: day,
+    endDate: day,
+    grain: 'day' as const,
+    resolvedGrain: 'day' as const,
+  };
+  const before = await loadShopping(db, filters);
+  expect(before.intents).toEqual([
+    expect.objectContaining({ name: 'product_discovery', resultClicks: 1 }),
+  ]);
+  expect(await rollUpNextExpiredAnalyticsDay(db, { now })).toBe(day);
+  await deleteExpiredAnalyticsEventsBatch(db, { now });
+  expect(await db.select().from(analyticsEvents)).toHaveLength(2);
+  const after = await loadShopping(db, filters);
+  expect(after.intents).toEqual(before.intents);
+  expect(after.metrics).toEqual(before.metrics);
+});
+
+it.each([ORDER_STATUS.CONFIRMED, ORDER_STATUS.COMPLETED])(
+  'does not recreate expired status %i events after terminal retention',
+  async (status) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(ago(40));
+    vi.stubEnv('GOOGLE_ANALYTICS_MEASUREMENT_ID', 'test');
+    vi.stubEnv('GOOGLE_ANALYTICS_API_SECRET', 'test');
+    vi.stubEnv('TIKTOK_PIXEL_ID', 'test');
+    vi.stubEnv('TIKTOK_EVENTS_API_ACCESS_TOKEN', 'test');
+    const input = await seedAdvertisingStatus(status, new Date());
+    const ensureMeta =
+      status === ORDER_STATUS.CONFIRMED
+        ? ensureOrderConfirmedEventForOrder
+        : ensureOrderCompletedEventForOrder;
+    const reconcileMeta =
+      status === ORDER_STATUS.CONFIRMED
+        ? reconcileOrderConfirmedEvents
+        : reconcileOrderCompletedEvents;
+    expect(await ensureMarketingOrderStatusEvents(db, input)).toMatchObject({ created: true });
+    expect(await ensureMeta(db, input)).toMatchObject({ created: true });
+    vi.setSystemTime(ago(31));
+    await processMarketingOutboxBatch(db);
+    await processMetaOutboxBatch(db);
+    expect((await db.select().from(marketingEventOutbox)).map((row) => row.status)).toEqual([
+      'dropped',
+      'dropped',
+    ]);
+    expect((await db.select().from(metaEventOutbox)).map((row) => row.status)).toEqual(['skipped']);
+    vi.setSystemTime(now);
+    await rollUpNextExpiredMetaOutboxDay(db, { now });
+    expect(await deleteTerminalMarketingOutboxBatch(db, { now })).toBe(2);
+    expect(await deleteTerminalMetaOutboxBatch(db, { now })).toBe(1);
+    // A later repetition of the same milestone must not renew its delivery window.
+    await db.insert(orderStatusHistory).values({ orderId: input.orderId, status, changedAt: now });
+    const marketingResult = await reconcileMarketingOrderEvents(db);
+    const metaResult = await reconcileMeta(db);
+    expect.soft(marketingResult).toMatchObject({ marketingScanned: 0, marketingCreated: 0 });
+    expect.soft(Object.values(metaResult)).toEqual([0, 0]);
+    expect(await ensureMarketingOrderStatusEvents(db, input)).toMatchObject({ created: false });
+    expect(await ensureMeta(db, input)).toMatchObject({ created: false });
+    expect(await db.select().from(marketingEventOutbox)).toHaveLength(0);
+    expect(await db.select().from(metaEventOutbox)).toHaveLength(0);
+  },
+);
+
+async function seedAdvertisingStatus(status: number, changedAt: Date) {
+  const [order] = await db.insert(orders).values({ phoneNumber1: '0550000000' }).returning();
+  const [product] = await db
+    .insert(products)
+    .values({ title: 'Retention', slug: randomUUID(), price: '1000' })
+    .returning();
+  await db.insert(orderLineItems).values({
+    orderId: order!.id,
+    productId: product!.id,
+    contentId: String(product!.id),
+    rawValue: String(product!.id),
+    titleSnapshot: 'Retention',
+    originalUnitPrice: '1000',
+    effectiveUnitPrice: '1000',
+    quantity: 1,
+    lineTotal: '1000',
+  });
+  const [history] = await db
+    .insert(orderStatusHistory)
+    .values({ orderId: order!.id, status, changedAt })
+    .returning();
+  await db.insert(orderMarketingAttribution).values({
+    orderId: order!.id,
+    semanticsVersion: MARKETING_SEMANTICS_VERSION,
+    eventId: randomUUID(),
+    eventSourceUrl: 'https://example.invalid',
+    expiresAt: ago(-60),
+  });
+  await db.insert(orderMetaAttribution).values({
+    orderId: order!.id,
+    semanticsVersion: META_SEMANTICS_VERSION,
+    leadEventId: randomUUID(),
+    eventSourceUrl: 'https://example.invalid',
+    expiresAt: ago(-60),
+  });
+  return {
+    orderId: order!.id,
+    statusHistoryId: history!.id,
+    status,
+    changedAt,
+  };
+}
+
+it('reconciles recent work per destination without renewing an expired Google window', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(now);
+  vi.stubEnv('GOOGLE_ANALYTICS_MEASUREMENT_ID', 'test');
+  vi.stubEnv('GOOGLE_ANALYTICS_API_SECRET', 'test');
+  vi.stubEnv('TIKTOK_PIXEL_ID', 'test');
+  vi.stubEnv('TIKTOK_EVENTS_API_ACCESS_TOKEN', 'test');
+  const recent = await seedAdvertisingStatus(ORDER_STATUS.CONFIRMED, ago(1));
+  const older = await seedAdvertisingStatus(ORDER_STATUS.CONFIRMED, ago(4));
+  expect(await reconcileMarketingOrderEvents(db)).toEqual({
+    marketingScanned: 2,
+    marketingCreated: 2,
+  });
+  const rows = await db.select().from(marketingEventOutbox);
+  expect(
+    rows
+      .filter((row) => row.orderId === recent.orderId)
+      .map((row) => row.destination)
+      .sort(),
+  ).toEqual(['google', 'tiktok']);
+  expect(rows.filter((row) => row.orderId === older.orderId).map((row) => row.destination)).toEqual(
+    ['tiktok'],
+  );
+  expect(await reconcileMarketingOrderEvents(db)).toEqual({
+    marketingScanned: 0,
+    marketingCreated: 0,
+  });
+  expect(await reconcileOrderConfirmedEvents(db)).toEqual({
+    confirmationScanned: 2,
+    confirmationCreated: 2,
+  });
+  expect(await reconcileOrderConfirmedEvents(db)).toEqual({
+    confirmationScanned: 0,
+    confirmationCreated: 0,
+  });
 });

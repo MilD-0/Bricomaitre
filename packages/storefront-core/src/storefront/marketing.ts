@@ -414,30 +414,34 @@ async function enqueueOrderDestinations(
     externalId: input.order.visitId ?? input.order.journeyId ?? input.eventId,
     lines: input.lines,
   });
-  const google = isMarketingDestinationConfigured('google')
-    ? await insertDestinationEvent(db, {
-        destination: 'google',
-        eventName: input.googleEventName,
-        eventId: input.eventId,
-        source: input.source,
-        orderId: input.order.id,
-        orderStatusHistoryId: input.orderStatusHistoryId,
-        eventTime: input.eventTime,
-        payload: googlePayload,
-      })
-    : null;
-  const tiktok = isMarketingDestinationConfigured('tiktok')
-    ? await insertDestinationEvent(db, {
-        destination: 'tiktok',
-        eventName: input.tiktokEventName,
-        eventId: input.eventId,
-        source: input.source,
-        orderId: input.order.id,
-        orderStatusHistoryId: input.orderStatusHistoryId,
-        eventTime: input.eventTime,
-        payload: tiktokPayload,
-      })
-    : null;
+  const google =
+    isMarketingDestinationConfigured('google') &&
+    input.eventTime.getTime() >= Date.now() - GOOGLE_MAX_AGE_MS
+      ? await insertDestinationEvent(db, {
+          destination: 'google',
+          eventName: input.googleEventName,
+          eventId: input.eventId,
+          source: input.source,
+          orderId: input.order.id,
+          orderStatusHistoryId: input.orderStatusHistoryId,
+          eventTime: input.eventTime,
+          payload: googlePayload,
+        })
+      : null;
+  const tiktok =
+    isMarketingDestinationConfigured('tiktok') &&
+    input.eventTime.getTime() >= Date.now() - TIKTOK_MAX_AGE_MS
+      ? await insertDestinationEvent(db, {
+          destination: 'tiktok',
+          eventName: input.tiktokEventName,
+          eventId: input.eventId,
+          source: input.source,
+          orderId: input.order.id,
+          orderStatusHistoryId: input.orderStatusHistoryId,
+          eventTime: input.eventTime,
+          payload: tiktokPayload,
+        })
+      : null;
   return { google, tiktok };
 }
 
@@ -547,6 +551,9 @@ export async function ensureMarketingOrderStatusEvents(
         ? 'completed'
         : null;
   if (!kind) return { created: false, reason: 'unqualified' as const };
+  if (input.changedAt.getTime() < Date.now() - Math.max(GOOGLE_MAX_AGE_MS, TIKTOK_MAX_AGE_MS)) {
+    return { created: false, reason: 'expired' as const };
+  }
   const [attribution] = await db
     .select()
     .from(orderMarketingAttribution)
@@ -837,16 +844,34 @@ export async function processMarketingOutboxBatch(db: Database, limit = 50) {
 }
 
 export async function reconcileMarketingOrderEvents(db: Database, limit = 100) {
+  const googleCutoff = new Date(Date.now() - GOOGLE_MAX_AGE_MS);
+  const tiktokCutoff = new Date(Date.now() - TIKTOK_MAX_AGE_MS);
   const result = await db.execute(sql`
     select history.id as history_id, history.order_id, history.status, history.changed_at
     from order_status_history history
     inner join order_marketing_attribution attribution on attribution.order_id = history.order_id
       and attribution.semantics_version = ${MARKETING_SEMANTICS_VERSION}
     where history.status in (${ORDER_STATUS.CONFIRMED}, ${ORDER_STATUS.COMPLETED}, ${ORDER_STATUS.MANUAL_COMPLETED})
+      and (
+        (${isMarketingDestinationConfigured('google')} and history.changed_at >= ${googleCutoff}
+          and not exists (
+            select 1 from marketing_event_outbox outbox
+            where outbox.order_id = history.order_id and outbox.destination = 'google'
+              and outbox.source = case when history.status = ${ORDER_STATUS.CONFIRMED} then 'order_confirmation' else 'order_completion' end
+          ))
+        or (${isMarketingDestinationConfigured('tiktok')} and history.changed_at >= ${tiktokCutoff}
+          and not exists (
+            select 1 from marketing_event_outbox outbox
+            where outbox.order_id = history.order_id and outbox.destination = 'tiktok'
+              and outbox.source = case when history.status = ${ORDER_STATUS.CONFIRMED} then 'order_confirmation' else 'order_completion' end
+          ))
+      )
       and not exists (
-        select 1 from marketing_event_outbox outbox
-        where outbox.order_id = history.order_id
-          and outbox.source = case when history.status = ${ORDER_STATUS.CONFIRMED} then 'order_confirmation' else 'order_completion' end
+        select 1 from order_status_history earlier
+        where earlier.order_id = history.order_id
+          and (earlier.status = ${ORDER_STATUS.CONFIRMED}) = (history.status = ${ORDER_STATUS.CONFIRMED})
+          and earlier.status in (${ORDER_STATUS.CONFIRMED}, ${ORDER_STATUS.COMPLETED}, ${ORDER_STATUS.MANUAL_COMPLETED})
+          and (earlier.changed_at, earlier.id) < (history.changed_at, history.id)
       )
     order by history.changed_at asc, history.id asc
     limit ${Math.max(1, Math.min(limit, 500))}

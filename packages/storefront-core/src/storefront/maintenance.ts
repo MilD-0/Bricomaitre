@@ -242,12 +242,13 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
 
     await tx.execute(sql`
       insert into ${analyticsAiDailyRollups} (
-        day, dimension, dimension_key, messages, runs, completed, failed, cancelled,
+        day, dimension, dimension_key, messages, result_clicks, runs, completed, failed, cancelled,
         input_tokens, output_tokens, total_tokens, duration_ms_total,
         duration_samples, tool_calls, updated_at
       )
       select ${day}::date, 'intent', coalesce(nullif(metadata->>'intent', ''), 'other'),
         count(*) filter (where event_name = 'ai_assistant_message')::int,
+        count(*) filter (where event_name = 'ai_assistant_result_click')::int,
         count(*) filter (where event_name = 'ai_assistant_run')::int,
         count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'completed')::int,
         count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'failed')::int,
@@ -262,7 +263,7 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
       from ${analyticsEvents}
       where occurred_at >= (${day}::date::timestamp at time zone 'UTC')
         and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
-        and event_name in ('ai_assistant_message', 'ai_assistant_run')
+        and event_name in ('ai_assistant_message', 'ai_assistant_run', 'ai_assistant_result_click')
       group by 3
       on conflict (day, dimension, dimension_key) do nothing
     `);

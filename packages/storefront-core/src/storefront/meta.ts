@@ -821,6 +821,8 @@ async function ensureMetaOrderStatusEvent(
       ? isMetaOrderConfirmedStatus(input.status)
       : isMetaCompletedStatus(input.status);
   if (!qualified) return { created: false, reason: 'unqualified' as const };
+  const normalizedTime = normalizeMetaEventTime(input.changedAt);
+  if (normalizedTime.kind === 'expired') return { created: false, reason: 'expired' as const };
   const eventName =
     kind === 'confirmed' ? META_ORDER_CONFIRMED_EVENT_NAME : META_ORDER_COMPLETED_EVENT_NAME;
   const [attribution] = await db
@@ -867,7 +869,6 @@ async function ensureMetaOrderStatusEvent(
     .filter((line) => Number.isInteger(line.productId));
   if (lines.length === 0) return { created: false, reason: 'missing_lines' as const };
 
-  const normalizedTime = normalizeMetaEventTime(input.changedAt);
   const userData = buildMetaUserData({
     email: order.email,
     firstName: order.firstName,
@@ -895,7 +896,7 @@ async function ensureMetaOrderStatusEvent(
     eventSourceUrl: attribution.eventSourceUrl,
     userData,
     customData,
-    status: normalizedTime.kind === 'expired' ? 'skipped' : 'pending',
+    status: 'pending',
   });
   if (!outbox) {
     return {
@@ -908,6 +909,7 @@ async function ensureMetaOrderStatusEvent(
 }
 
 export async function reconcileOrderConfirmedEvents(db: Database, limit = 100) {
+  const cutoff = new Date(Date.now() - META_EVENT_MAX_AGE_MS);
   const result = await db.execute(sql`
     select distinct on (history.order_id)
       history.id as history_id,
@@ -919,6 +921,13 @@ export async function reconcileOrderConfirmedEvents(db: Database, limit = 100) {
       on attribution.order_id = history.order_id
       and attribution.semantics_version = ${META_SEMANTICS_VERSION}
     where history.status = ${ORDER_STATUS.CONFIRMED}
+      and history.changed_at >= ${cutoff}
+      and not exists (
+        select 1 from order_status_history earlier
+        where earlier.order_id = history.order_id
+          and earlier.status = ${ORDER_STATUS.CONFIRMED}
+          and (earlier.changed_at, earlier.id) < (history.changed_at, history.id)
+      )
       and not exists (
         select 1
         from meta_event_outbox outbox
@@ -948,6 +957,7 @@ export async function reconcileOrderConfirmedEvents(db: Database, limit = 100) {
 }
 
 export async function reconcileOrderCompletedEvents(db: Database, limit = 100) {
+  const cutoff = new Date(Date.now() - META_EVENT_MAX_AGE_MS);
   const result = await db.execute(sql`
     select distinct on (history.order_id)
       history.id as history_id,
@@ -959,6 +969,13 @@ export async function reconcileOrderCompletedEvents(db: Database, limit = 100) {
       on attribution.order_id = history.order_id
       and attribution.semantics_version = ${META_SEMANTICS_VERSION}
     where history.status in (${ORDER_STATUS.COMPLETED}, ${ORDER_STATUS.MANUAL_COMPLETED})
+      and history.changed_at >= ${cutoff}
+      and not exists (
+        select 1 from order_status_history earlier
+        where earlier.order_id = history.order_id
+          and earlier.status in (${ORDER_STATUS.COMPLETED}, ${ORDER_STATUS.MANUAL_COMPLETED})
+          and (earlier.changed_at, earlier.id) < (history.changed_at, history.id)
+      )
       and not exists (
         select 1
         from meta_event_outbox outbox
