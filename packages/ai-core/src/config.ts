@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 const optionalModel = z.string().trim().min(1).optional();
 const optionalUrl = z.string().trim().url().optional();
+const optionalPositiveInteger = z.number().int().positive().optional();
 
 export const aiProviderSchema = z.enum(['openai', 'openrouter', 'deepseek', 'experientiallabs']);
 export type AiProvider = z.infer<typeof aiProviderSchema>;
@@ -19,7 +20,18 @@ export const aiConfigSchema = z.object({
   openRouterBaseUrl: optionalUrl,
   openRouterReferer: optionalUrl,
   openRouterTitle: z.string().trim().min(1).max(200).optional(),
-  requestTimeoutMs: z.number().int().min(1_000).max(120_000),
+  requestTimeoutMs: z.number().int().min(1_000).optional(),
+  adminRequestTimeoutMs: z.number().int().min(1_000).optional(),
+  contentRequestTimeoutMs: z.number().int().min(1_000).optional(),
+  landingPageRequestTimeoutMs: z.number().int().min(1_000).optional(),
+  adminMaxSteps: optionalPositiveInteger,
+  adminMaxOutputTokens: optionalPositiveInteger,
+  adminContextCharacterLimit: optionalPositiveInteger,
+  adminToolEvidenceCharacterLimit: optionalPositiveInteger,
+  adminSynthesisEvidenceCharacterLimit: optionalPositiveInteger,
+  adminAnalyticsArrayLimit: optionalPositiveInteger,
+  adminAnalyticsStringLimit: optionalPositiveInteger,
+  adminAnalyticsMaxDepth: optionalPositiveInteger,
   maxRetries: z.number().int().min(0).max(5),
 });
 
@@ -32,6 +44,11 @@ export type AiLanguageModelOptions = {
 
 function isTruthy(value: string | undefined) {
   return value === '1' || value?.toLowerCase() === 'true';
+}
+
+function optionalNumber(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized ? Number(normalized) : undefined;
 }
 
 export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
@@ -54,7 +71,20 @@ export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
     openRouterBaseUrl: env.OPENROUTER_BASE_URL || undefined,
     openRouterReferer: env.OPENROUTER_HTTP_REFERER || undefined,
     openRouterTitle: env.OPENROUTER_APP_TITLE || undefined,
-    requestTimeoutMs: Number(env.AI_REQUEST_TIMEOUT_MS ?? 30_000),
+    requestTimeoutMs: optionalNumber(env.AI_REQUEST_TIMEOUT_MS),
+    adminRequestTimeoutMs: optionalNumber(env.AI_ADMIN_REQUEST_TIMEOUT_MS),
+    contentRequestTimeoutMs: optionalNumber(env.AI_CONTENT_REQUEST_TIMEOUT_MS),
+    landingPageRequestTimeoutMs: optionalNumber(env.AI_LANDING_PAGE_REQUEST_TIMEOUT_MS),
+    adminMaxSteps: optionalNumber(env.AI_ADMIN_MAX_STEPS),
+    adminMaxOutputTokens: optionalNumber(env.AI_ADMIN_MAX_OUTPUT_TOKENS),
+    adminContextCharacterLimit: optionalNumber(env.AI_ADMIN_CONTEXT_CHARACTER_LIMIT),
+    adminToolEvidenceCharacterLimit: optionalNumber(env.AI_ADMIN_TOOL_EVIDENCE_CHARACTER_LIMIT),
+    adminSynthesisEvidenceCharacterLimit: optionalNumber(
+      env.AI_ADMIN_SYNTHESIS_EVIDENCE_CHARACTER_LIMIT,
+    ),
+    adminAnalyticsArrayLimit: optionalNumber(env.AI_ADMIN_ANALYTICS_ARRAY_LIMIT),
+    adminAnalyticsStringLimit: optionalNumber(env.AI_ADMIN_ANALYTICS_STRING_LIMIT),
+    adminAnalyticsMaxDepth: optionalNumber(env.AI_ADMIN_ANALYTICS_MAX_DEPTH),
     maxRetries: Number(env.AI_MAX_RETRIES ?? 5),
   });
 }

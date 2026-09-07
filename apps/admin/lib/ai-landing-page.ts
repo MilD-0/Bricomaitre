@@ -326,7 +326,9 @@ function createModelStageRunner(config: AiConfig): LandingPageStageRunner {
           name: 'storefront_landing_page_plan',
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        ...(config.landingPageRequestTimeoutMs
+          ? { timeout: config.landingPageRequestTimeoutMs }
+          : {}),
       });
       return { plan: landingPagePlanSchema.parse(await result.output), usage: result.usage };
     },
@@ -346,7 +348,9 @@ function createModelStageRunner(config: AiConfig): LandingPageStageRunner {
           name: `storefront_landing_page_${section.type.replaceAll('-', '_')}`,
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        ...(config.landingPageRequestTimeoutMs
+          ? { timeout: config.landingPageRequestTimeoutMs }
+          : {}),
       });
       const rawBlock = schema.parse(await result.output) as Record<string, unknown>;
       const block = landingPageBlockSchema.parse({
@@ -700,7 +704,9 @@ function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunne
           name: 'storefront_landing_page_edit_plan',
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        ...(config.landingPageRequestTimeoutMs
+          ? { timeout: config.landingPageRequestTimeoutMs }
+          : {}),
       });
       return { plan: landingPageEditPlanSchema.parse(await result.output), usage: result.usage };
     },
@@ -721,7 +727,9 @@ function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunne
           name: `storefront_landing_page_edit_${slot.type.replaceAll('-', '_')}`,
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        ...(config.landingPageRequestTimeoutMs
+          ? { timeout: config.landingPageRequestTimeoutMs }
+          : {}),
       });
       const rawBlock = schema.parse(await result.output) as Record<string, unknown>;
       return {

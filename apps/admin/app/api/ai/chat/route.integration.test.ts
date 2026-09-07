@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   streamCalls: 0,
   createLanguageModel: vi.fn(() => 'language-model'),
   generateText: vi.fn(),
+  configOverrides: {} as Record<string, unknown>,
 }));
 
 vi.mock('@bric/ai-core', async (importOriginal) => ({
@@ -24,8 +25,8 @@ vi.mock('@bric/ai-core', async (importOriginal) => ({
   getAiConfig: () => ({
     enabled: true,
     provider: mocks.provider,
-    requestTimeoutMs: 30_000,
     maxRetries: 5,
+    ...mocks.configOverrides,
   }),
 }));
 
@@ -132,6 +133,7 @@ describe('POST /api/ai/chat model-led runtime', () => {
     mocks.insertedValues = [];
     mocks.updatedValues = [];
     mocks.streamOptions = null;
+    mocks.configOverrides = {};
     mocks.streamParts = [
       { type: 'text-delta', text: 'A useful answer.' },
       {
@@ -368,6 +370,37 @@ describe('POST /api/ai/chat model-led runtime', () => {
     expect(recovery).not.toHaveProperty('timeout');
     const evidence = recovery.messages.at(-1).content.split('this turn:\n')[1];
     expect(JSON.parse(evidence)).toEqual(toolResults);
+  });
+
+  it('applies configured admin execution and recovery limits', async () => {
+    mocks.configOverrides = {
+      adminRequestTimeoutMs: 60_000,
+      adminMaxSteps: 8,
+      adminMaxOutputTokens: 1_600,
+      adminSynthesisEvidenceCharacterLimit: 100,
+    };
+    mocks.streamParts = [
+      {
+        type: 'tool-result',
+        toolCallId: 'orders-1',
+        toolName: 'query_orders',
+        input: {},
+        output: { rows: 'x'.repeat(200) },
+      },
+    ];
+
+    const chatRequest = request({ message: 'Investigate.', conversationKey });
+    const response = await POST(chatRequest);
+    await response.text();
+
+    expect(mocks.streamOptions).toMatchObject({ maxOutputTokens: 1_600 });
+    expect(mocks.streamOptions!.abortSignal).not.toBe(chatRequest.signal);
+    expect(mocks.generateText.mock.calls[0]![0]).toMatchObject({ maxOutputTokens: 1_600 });
+    const recoveryEvidence = mocks.generateText.mock.calls[0]![0].messages.at(-1).content;
+    expect(recoveryEvidence).toContain(
+      'Evidence truncated by AI_ADMIN_SYNTHESIS_EVIDENCE_CHARACTER_LIMIT',
+    );
+    expect(recoveryEvidence.split('this turn:\n')[1]).toHaveLength(100);
   });
 
   it('never hides a completed mutation when both model narration passes are empty', async () => {

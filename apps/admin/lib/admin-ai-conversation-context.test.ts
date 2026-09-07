@@ -61,4 +61,26 @@ describe('admin AI conversation context', () => {
     const serialized = context[0]!.content.split('instructions):\n')[1]!;
     expect(JSON.parse(serialized)).toEqual(evidence);
   });
+
+  it('applies configured context and saved-evidence character limits', () => {
+    const newest = {
+      role: 'assistant',
+      content: { text: 'Newest answer', toolResults: [{ output: 'x'.repeat(200) }] },
+    };
+    const boundedNewest = buildAdminAiConversationContext([newest], {
+      toolEvidenceCharacterLimit: 100,
+    })[0]!;
+    const context = buildAdminAiConversationContext(
+      [newest, { role: 'user', content: { text: 'Older question that should not fit' } }],
+      {
+        characterLimit: boundedNewest.content.length,
+        toolEvidenceCharacterLimit: 100,
+      },
+    );
+
+    expect(context).toHaveLength(1);
+    expect(context[0]!.content).toContain('saved tool evidence truncated');
+    expect(context[0]!.content).not.toContain('Older question');
+    expect(context[0]!.content.split('instructions):\n')[1]).toHaveLength(100);
+  });
 });

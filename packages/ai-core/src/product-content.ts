@@ -87,7 +87,7 @@ export function createProductContentGenerator(
         prompt: JSON.stringify(input),
         output: Output.object({ schema: generatedContentSchema, name: 'product_content_proposal' }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        ...(config.contentRequestTimeoutMs ? { timeout: config.contentRequestTimeoutMs } : {}),
       });
       const generated = await result.output;
 

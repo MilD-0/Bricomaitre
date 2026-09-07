@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { ecotrackOrderStates, orders, orderStatusHistory } from '@bric/db/schema';
+import { getAiConfig } from '@bric/ai-core';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 import {
@@ -20,9 +21,61 @@ import {
 } from './admin-ai-analytics-focus';
 import { adminAiDateScopeSchema, canonicalAdminAiDateQuery } from './admin-ai-date-scope';
 
-export function analyticsForAssistant(payload: AnalyticsPayload, focus?: AdminAiAnalyticsFocus) {
+type AdminAiAnalyticsLimits = {
+  arrayLimit?: number;
+  stringLimit?: number;
+  maxDepth?: number;
+};
+
+type AnalyticsTruncation = {
+  path: string;
+  available: number;
+  included: number;
+};
+
+function compactAnalyticsValue(
+  value: unknown,
+  limits: AdminAiAnalyticsLimits,
+  truncations: AnalyticsTruncation[],
+  path = 'data',
+  depth = 0,
+): unknown {
+  if (limits.maxDepth !== undefined && depth > limits.maxDepth) return '[nested data omitted]';
+  if (typeof value === 'string' && limits.stringLimit && value.length > limits.stringLimit) {
+    return `${value.slice(0, Math.max(0, limits.stringLimit - 1))}…`;
+  }
+  if (Array.isArray(value)) {
+    const selected = limits.arrayLimit ? value.slice(0, limits.arrayLimit) : value;
+    if (selected.length < value.length) {
+      truncations.push({ path, available: value.length, included: selected.length });
+    }
+    return selected.map((item, index) =>
+      compactAnalyticsValue(item, limits, truncations, `${path}[${index}]`, depth + 1),
+    );
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        compactAnalyticsValue(item, limits, truncations, `${path}.${key}`, depth + 1),
+      ]),
+    );
+  }
+  return value;
+}
+
+export function analyticsForAssistant(
+  payload: AnalyticsPayload,
+  focus?: AdminAiAnalyticsFocus,
+  limits: AdminAiAnalyticsLimits = {},
+) {
   const metrics = analyticsMetricsForAssistant(payload);
   const focusedDataset = focus ? focusAnalyticsForAssistant(payload, focus) : null;
+  const truncations: AnalyticsTruncation[] = [];
+  const hasConfiguredLimit = Object.values(limits).some((value) => value !== undefined);
+  const data = hasConfiguredLimit
+    ? compactAnalyticsValue(payload.data, limits, truncations)
+    : payload.data;
   return {
     kind: 'analytics' as const,
     responseContractVersion: 6 as const,
@@ -36,10 +89,10 @@ export function analyticsForAssistant(payload: AnalyticsPayload, focus?: AdminAi
     generatedAt: payload.generatedAt,
     referenceDate: payload.referenceDate,
     reviewClock: payload.reviewClock,
-    data: payload.data,
+    data,
     sources: payload.sources,
     warnings: payload.warnings,
-    truncations: [],
+    truncations,
     diagnostics: payload.diagnostics,
   };
 }
@@ -231,7 +284,12 @@ export async function queryAdminAnalytics(raw: unknown) {
   const payload = await getAnalyticsData(query, {
     includeStorefrontDetails: query.view === 'storefront',
   });
-  const result = analyticsForAssistant(payload, normalizedFocus);
+  const config = getAiConfig();
+  const result = analyticsForAssistant(payload, normalizedFocus, {
+    arrayLimit: config.adminAnalyticsArrayLimit,
+    stringLimit: config.adminAnalyticsStringLimit,
+    maxDepth: config.adminAnalyticsMaxDepth,
+  });
   if (!sourceCoverage) return result;
   return {
     ...result,

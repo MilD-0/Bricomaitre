@@ -113,10 +113,12 @@ export async function POST(request: NextRequest) {
                   tools: runtime.tools,
                   toolChoice: 'auto',
                   stopWhen: stepCountIs(12),
-                  abortSignal: AbortSignal.any([
-                    request.signal,
-                    AbortSignal.timeout(config.requestTimeoutMs),
-                  ]),
+                  abortSignal: config.requestTimeoutMs
+                    ? AbortSignal.any([
+                        request.signal,
+                        AbortSignal.timeout(config.requestTimeoutMs),
+                      ])
+                    : request.signal,
                   maxRetries: config.maxRetries,
                   maxOutputTokens: STOREFRONT_ASSISTANT_MAX_OUTPUT_TOKENS,
                 });

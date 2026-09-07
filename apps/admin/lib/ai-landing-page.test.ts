@@ -17,7 +17,6 @@ const testConfig = {
   provider: 'openrouter' as const,
   apiKey: 'test-key',
   contentModel: 'test/content-model',
-  requestTimeoutMs: 30_000,
   maxRetries: 0,
 };
 
@@ -624,7 +623,7 @@ describe('landing-page provider deadlines', () => {
       });
     });
     vi.stubGlobal('fetch', localFetch);
-    const config = { ...testConfig, requestTimeoutMs: 1000 };
+    const config = { ...testConfig, landingPageRequestTimeoutMs: 1000 };
     const result =
       mode === 'generation'
         ? createLandingPageGenerator(config).generate(generationInput)

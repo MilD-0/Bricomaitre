@@ -1,5 +1,5 @@
 import { createAiLanguageModel, getAiConfig, isNonRetryableAiProviderError } from '@bric/ai-core';
-import { generateText, streamText } from 'ai';
+import { generateText, stepCountIs, streamText } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -75,6 +75,14 @@ function hasSuccessfulMutation(toolResults: unknown[]) {
     if (record.type !== 'tool-result' || typeof record.toolName !== 'string') return false;
     return adminAiToolConfirmsCompletedMutation(record.toolName, record.output);
   });
+}
+
+function serializedEvidence(value: unknown, characterLimit?: number) {
+  const serialized = JSON.stringify(value);
+  if (!characterLimit || serialized.length <= characterLimit) return serialized;
+  const suffix = '\n[Evidence truncated by AI_ADMIN_SYNTHESIS_EVIDENCE_CHARACTER_LIMIT]';
+  if (suffix.length >= characterLimit) return suffix.slice(0, characterLimit);
+  return `${serialized.slice(0, characterLimit - suffix.length)}${suffix}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -155,7 +163,10 @@ export async function POST(request: NextRequest) {
       .where(eq(aiMessages.conversationId, conversation.id))
       .orderBy(desc(aiMessages.createdAt))
       .limit(ADMIN_AI_CONTEXT_QUERY_LIMIT);
-    const previousMessages = buildAdminAiConversationContext(previousRows);
+    const previousMessages = buildAdminAiConversationContext(previousRows, {
+      characterLimit: config.adminContextCharacterLimit,
+      toolEvidenceCharacterLimit: config.adminToolEvidenceCharacterLimit,
+    });
     const effectiveTitle = previousMessages.length === 0 ? title : conversation.title || title;
 
     await db.transaction(async (tx) => {
@@ -231,6 +242,9 @@ export async function POST(request: NextRequest) {
         autoAcceptProposals: parsed.data.autoAcceptProposals,
       },
     });
+    const abortSignal = config.adminRequestTimeoutMs
+      ? AbortSignal.any([request.signal, AbortSignal.timeout(config.adminRequestTimeoutMs)])
+      : request.signal;
     const createResult = () =>
       streamText({
         model: languageModel,
@@ -238,11 +252,10 @@ export async function POST(request: NextRequest) {
         messages,
         tools,
         toolChoice: 'auto',
-        stopWhen: () => false,
-        // An operating investigation may span several live queries and a long
-        // reasoning pass. Keep it alive until the client disconnects.
-        abortSignal: request.signal,
+        stopWhen: config.adminMaxSteps ? stepCountIs(config.adminMaxSteps) : () => false,
+        abortSignal,
         maxRetries: config.maxRetries,
+        ...(config.adminMaxOutputTokens ? { maxOutputTokens: config.adminMaxOutputTokens } : {}),
       });
 
     const encoder = new TextEncoder();
@@ -375,11 +388,17 @@ export async function POST(request: NextRequest) {
                     ...messages,
                     {
                       role: 'user' as const,
-                      content: `Trusted tool evidence from this turn:\n${JSON.stringify(toolResults)}`,
+                      content: `Trusted tool evidence from this turn:\n${serializedEvidence(
+                        toolResults,
+                        config.adminSynthesisEvidenceCharacterLimit,
+                      )}`,
                     },
                   ],
-                  abortSignal: request.signal,
+                  abortSignal,
                   maxRetries: config.maxRetries,
+                  ...(config.adminMaxOutputTokens
+                    ? { maxOutputTokens: config.adminMaxOutputTokens }
+                    : {}),
                 });
                 text = synthesis.text.trim();
                 usage = combineUsage(usage, synthesis.usage);

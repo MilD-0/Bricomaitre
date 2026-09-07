@@ -130,7 +130,7 @@ export function createProductRelationGenerator(
           name: 'product_relation_proposal',
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        ...(config.contentRequestTimeoutMs ? { timeout: config.contentRequestTimeoutMs } : {}),
       });
       const generated = await result.output;
       if (generated.confidence < MIN_AI_PRODUCT_RELATION_CONFIDENCE) {

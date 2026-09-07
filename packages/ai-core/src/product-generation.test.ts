@@ -14,7 +14,7 @@ const config = getAiConfig({
   OPENROUTER_API_KEY: 'test-key',
   AI_ADMIN_MODEL: 'test-model',
   AI_CONTENT_MODEL: 'test-model',
-  AI_REQUEST_TIMEOUT_MS: '1000',
+  AI_CONTENT_REQUEST_TIMEOUT_MS: '1000',
   AI_MAX_RETRIES: '0',
 });
 const product = {

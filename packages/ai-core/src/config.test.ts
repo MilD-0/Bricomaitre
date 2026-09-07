@@ -234,7 +234,18 @@ describe('AI configuration', () => {
       openRouterBaseUrl: undefined,
       openRouterReferer: undefined,
       openRouterTitle: undefined,
-      requestTimeoutMs: 30_000,
+      requestTimeoutMs: undefined,
+      adminRequestTimeoutMs: undefined,
+      contentRequestTimeoutMs: undefined,
+      landingPageRequestTimeoutMs: undefined,
+      adminMaxSteps: undefined,
+      adminMaxOutputTokens: undefined,
+      adminContextCharacterLimit: undefined,
+      adminToolEvidenceCharacterLimit: undefined,
+      adminSynthesisEvidenceCharacterLimit: undefined,
+      adminAnalyticsArrayLimit: undefined,
+      adminAnalyticsStringLimit: undefined,
+      adminAnalyticsMaxDepth: undefined,
       maxRetries: 5,
     });
   });
@@ -271,12 +282,44 @@ describe('AI configuration', () => {
       OPENAI_API_KEY: 'secret',
       AI_ADMIN_MODEL: 'admin-model',
       AI_REQUEST_TIMEOUT_MS: '45000',
+      AI_ADMIN_REQUEST_TIMEOUT_MS: '60000',
+      AI_CONTENT_REQUEST_TIMEOUT_MS: '90000',
+      AI_LANDING_PAGE_REQUEST_TIMEOUT_MS: '180000',
+      AI_ADMIN_MAX_STEPS: '16',
+      AI_ADMIN_MAX_OUTPUT_TOKENS: '3200',
+      AI_ADMIN_CONTEXT_CHARACTER_LIMIT: '160000',
+      AI_ADMIN_TOOL_EVIDENCE_CHARACTER_LIMIT: '24000',
+      AI_ADMIN_SYNTHESIS_EVIDENCE_CHARACTER_LIMIT: '48000',
+      AI_ADMIN_ANALYTICS_ARRAY_LIMIT: '40',
+      AI_ADMIN_ANALYTICS_STRING_LIMIT: '4000',
+      AI_ADMIN_ANALYTICS_MAX_DEPTH: '20',
       AI_MAX_RETRIES: '3',
     });
 
     expect(() => assertAiConfigured(config)).not.toThrow();
     expect(resolveAiModel(config, 'admin')).toBe('admin-model');
     expect(config.requestTimeoutMs).toBe(45_000);
+    expect(config).toMatchObject({
+      adminRequestTimeoutMs: 60_000,
+      contentRequestTimeoutMs: 90_000,
+      landingPageRequestTimeoutMs: 180_000,
+      adminMaxSteps: 16,
+      adminMaxOutputTokens: 3_200,
+      adminContextCharacterLimit: 160_000,
+      adminToolEvidenceCharacterLimit: 24_000,
+      adminSynthesisEvidenceCharacterLimit: 48_000,
+      adminAnalyticsArrayLimit: 40,
+      adminAnalyticsStringLimit: 4_000,
+      adminAnalyticsMaxDepth: 20,
+      maxRetries: 3,
+    });
+  });
+
+  it('keeps task-specific limits disabled when only the Storefront timeout is set', () => {
+    const config = getAiConfig({ AI_REQUEST_TIMEOUT_MS: '45000' });
+    expect(config.requestTimeoutMs).toBe(45_000);
+    expect(config.contentRequestTimeoutMs).toBeUndefined();
+    expect(config.landingPageRequestTimeoutMs).toBeUndefined();
   });
 
   it('fails closed when AI or the requested model is not configured', () => {

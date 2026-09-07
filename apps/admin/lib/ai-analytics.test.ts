@@ -135,4 +135,48 @@ describe('admin assistant Analytics adapter', () => {
     expect(result.data).toEqual(payload.data);
     expect(result.truncations).toEqual([]);
   });
+
+  it('compacts analytics data only when limits are configured', () => {
+    const payload = {
+      view: 'search',
+      filters: {
+        view: 'search',
+        range: '7d',
+        startDate: '2026-08-17',
+        endDate: '2026-08-23',
+        grain: 'day',
+        resolvedGrain: 'day',
+        comparisonStartDate: null,
+        comparisonEndDate: null,
+      },
+      generatedAt: '2026-08-23T00:00:00.000Z',
+      referenceDate: '2026-08-23',
+      reviewClock: false,
+      data: {
+        kind: 'search',
+        metrics: [],
+        queries: [{ query: 'abcdefgh' }, { query: 'second' }, { query: 'third' }],
+      },
+      effectiveRanges: [],
+      sources: [],
+      warnings: [],
+      diagnostics: {},
+    } as unknown as AnalyticsPayload;
+
+    const result = analyticsForAssistant(payload, undefined, {
+      arrayLimit: 2,
+      stringLimit: 4,
+      maxDepth: 8,
+    });
+
+    expect(result.data).toMatchObject({
+      kind: 'sea…',
+      queries: [{ query: 'abc…' }, { query: 'sec…' }],
+    });
+    expect(result.truncations).toContainEqual({
+      path: 'data.queries',
+      available: 3,
+      included: 2,
+    });
+  });
 });
