@@ -328,4 +328,21 @@ describe('tools/legacy-data/mongo-product-import', () => {
     expect(resolveWilayaCode('Tébessa')).toBe(12);
     expect(resolveWilayaCode('Sidi Bel Abbes')).toBe(22);
   });
+  it('preserves numeric and canonical Extended JSON milliseconds instead of import time', () => {
+    const instant = new Date('2024-01-01T00:00:00.000Z');
+    const fallback = new Date('2026-09-07T00:00:00Z');
+    expect(readMongoDate({ $date: instant.getTime() }, fallback)).toEqual(instant);
+    expect(readMongoDate({ $date: { $numberLong: String(instant.getTime()) } }, fallback)).toEqual(
+      instant,
+    );
+    expect(readMongoDate({ $date: 0 }, fallback)).toEqual(new Date(0));
+    expect(readMongoDate(undefined, fallback)).toEqual(fallback);
+    for (const value of [
+      { $date: { $numberLong: 'invalid' } },
+      { $date: '2024-02-30' },
+      { $date: null },
+    ]) {
+      expect(() => readMongoDate(value, fallback)).toThrow('Invalid Mongo date');
+    }
+  });
 });

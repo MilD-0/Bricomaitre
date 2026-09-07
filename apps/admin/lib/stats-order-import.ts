@@ -267,16 +267,15 @@ export async function importStatsSpreadsheet(
     const resolvedProducts = matchedProducts.filter((product) => product !== undefined);
     const productCost = resolvedProducts.reduce((sum, product) => sum + Number(product.cost), 0);
     const totalFees =
-      row.totalFraisService > 0
-        ? row.totalFraisService
-        : row.fraisLivraison +
-          row.fraisPoids +
-          row.fraisExtra +
-          row.fraisSMS +
-          row.fraisStockage +
-          row.commissionRecouvrement;
-    const amountCollected = row.encaisse > 0 ? row.encaisse : row.montant;
-    const netRevenue = row.netRecouvret > 0 ? row.netRecouvret : amountCollected - totalFees;
+      row.totalFraisService ??
+      row.fraisLivraison +
+        row.fraisPoids +
+        row.fraisExtra +
+        row.fraisSMS +
+        row.fraisStockage +
+        row.commissionRecouvrement;
+    const amountCollected = row.encaisse ?? row.montant;
+    const netRevenue = row.netRecouvret ?? amountCollected - totalFees;
     const profit = netRevenue - productCost;
 
     processedOrderValues.push({
@@ -439,5 +438,5 @@ export async function dismissUnmatchedReference(batchId: string, reference: stri
 }
 
 function amountCollectedFromRow(row: SpreadsheetRow) {
-  return row.encaisse > 0 ? row.encaisse : row.montant;
+  return row.encaisse ?? row.montant;
 }

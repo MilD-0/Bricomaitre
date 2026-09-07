@@ -108,4 +108,27 @@ describe('buildAdCostEntriesFromSpreadsheetRow', () => {
       [],
     );
   });
+  it('imports comma-decimal spend and day-first dates without converting it to zero', () => {
+    expect(
+      buildAdCostEntriesFromSpreadsheetRow(
+        { Date: '31/08/2026', 'Amount spent': '12,50', Clicks: '0' },
+        150,
+      ),
+    ).toMatchObject([{ date: '2026-08-31', spend: 1875, clicks: 0 }]);
+    expect(
+      buildAdCostEntriesFromSpreadsheetRow({ Date: '31/08/2026', 'Amount spent': '0,00' }, 150),
+    ).toMatchObject([{ spend: 0 }]);
+    expect(
+      buildAdCostEntriesFromSpreadsheetRow({ Date: '31/08/2026', 'Amount spent': '  ' }, 150),
+    ).toEqual([]);
+  });
+
+  it('rejects populated invalid money, dates and fractional counters before upsert', () => {
+    for (const row of [
+      { Date: '2026-08-31', 'Amount spent': 'invalid' },
+      { Date: '31/02/2026', 'Amount spent': 12 },
+      { Date: '2026-08-31', 'Amount spent': 12, Clicks: '1,50' },
+    ])
+      expect(() => buildAdCostEntriesFromSpreadsheetRow(row, 150)).toThrow('Invalid');
+  });
 });

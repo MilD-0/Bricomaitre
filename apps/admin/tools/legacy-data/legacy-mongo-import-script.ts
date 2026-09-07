@@ -87,7 +87,7 @@ export function resolveLegacyImportFiles(options: LegacyImportCliOptions): Legac
 }
 
 export function resolveSelectedTargets(options: LegacyImportCliOptions) {
-  if (!options.replace) {
+  if (!options.replace && !options.dropScope) {
     return [...IMPORT_TARGETS];
   }
 

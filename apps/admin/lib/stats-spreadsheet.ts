@@ -9,8 +9,8 @@ export type StatsSpreadsheetRow = {
   fraisSMS: number;
   fraisStockage: number;
   commissionRecouvrement: number;
-  totalFraisService: number;
-  netRecouvret: number;
+  totalFraisService: number | null;
+  netRecouvret: number | null;
   type: string;
   typePrestation: string;
   creeLe: Date | null;
@@ -23,7 +23,7 @@ export type StatsSpreadsheetRow = {
   produits: string;
   remarque: string;
   poidsLivreLe: string;
-  encaisse: number;
+  encaisse: number | null;
 };
 
 const COLUMN_MAP: Record<keyof StatsSpreadsheetRow, string[]> = {
@@ -57,42 +57,89 @@ function findColumnValue(row: Record<string, unknown>, possibleNames: string[]) 
   return column ? row[column] : undefined;
 }
 
-function parseSpreadsheetNumber(value: unknown) {
-  if (typeof value === 'number') {
-    return value;
+/** Blank cells are absent; malformed populated cells must never become money. */
+export function parseSpreadsheetNumber(value: unknown): number | null {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') throw new Error('Invalid spreadsheet number.');
+
+  const text = value
+    .trim()
+    .replace(/^(?:DZD|DA|EUR|€)\s*/i, '')
+    .replace(/\s*(?:DZD|DA|EUR|€)$/i, '');
+  let normalized: string;
+  if (/^[+-]?\d+(?:\.\d+)?$/.test(text)) {
+    normalized = text;
+  } else if (/^[+-]?\d+,\d{1,2}$/.test(text)) {
+    normalized = text.replace(',', '.');
+  } else if (/^[+-]?\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d{1,2})?$/.test(text)) {
+    normalized = text.replace(/[ \u00a0\u202f]/g, '').replace(',', '.');
+  } else if (/^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(text)) {
+    normalized = text.replace(/,/g, '');
+  } else if (/^[+-]?\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(text)) {
+    normalized = text.replace(/\./g, '').replace(',', '.');
+  } else {
+    throw new Error(`Invalid spreadsheet number: ${value}`);
   }
-
-  if (typeof value === 'string') {
-    if (value.includes('/')) {
-      // EcoTrack settlement exports use `current/original` for adjusted COD
-      // amounts. The first side is the amount that actually reconciles to
-      // net recovered + fees; the second is the original submitted total.
-      const currentAmount = value.split('/', 1)[0]?.replace(/[^\d.-]/g, '') ?? '';
-      return Number.parseFloat(currentAmount || '0');
-    }
-
-    return Number.parseFloat(value.replace(/[^\d.-]/g, '') || '0');
-  }
-
-  return 0;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) throw new Error('Invalid spreadsheet number.');
+  return parsed;
 }
 
-export function parseSpreadsheetDate(value: unknown) {
-  if (!value) {
-    return null;
+function parseSettlementNumber(value: unknown): number;
+function parseSettlementNumber(value: unknown, optional: true): number | null;
+function parseSettlementNumber(value: unknown, optional = false): number | null {
+  if (typeof value === 'string' && value.includes('/')) {
+    // Adjusted COD exports encode current/original. Validate both amounts,
+    // but only the current amount belongs in settlement economics.
+    const parts = value.split('/');
+    if (parts.length !== 2) throw new Error('Invalid adjusted COD amount.');
+    const amounts = parts.map(parseSpreadsheetNumber);
+    if (amounts.some((amount) => amount == null)) throw new Error('Invalid adjusted COD amount.');
+    return amounts[0]!;
   }
+  return parseSpreadsheetNumber(value) ?? (optional ? null : 0);
+}
 
+export function parseSpreadsheetDate(value: unknown): Date | null {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null;
   if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
+    if (!Number.isFinite(value.getTime())) throw new Error('Invalid spreadsheet date.');
+    return value;
   }
-
-  if (typeof value === 'number') {
-    const parsed = new Date((value - 25569) * 86400 * 1000);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const parts = XLSX.SSF.parse_date_code(value);
+    if (!parts) throw new Error('Invalid Excel date serial.');
+    const parsed = new Date(Date.UTC(parts.y, parts.m - 1, parts.d, parts.H, parts.M, parts.S));
+    if (
+      parsed.getUTCFullYear() !== parts.y ||
+      parsed.getUTCMonth() !== parts.m - 1 ||
+      parsed.getUTCDate() !== parts.d
+    )
+      throw new Error('Invalid Excel date serial.');
+    return parsed;
   }
-
-  const parsed = new Date(String(value));
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  if (typeof value !== 'string') throw new Error('Invalid spreadsheet date.');
+  const text = value.trim();
+  const dayFirst = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  const iso =
+    /^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/.exec(
+      text,
+    );
+  if (!dayFirst && !iso) throw new Error(`Invalid spreadsheet date: ${value}`);
+  const year = Number(dayFirst?.[3] ?? iso![1]);
+  const month = Number(dayFirst?.[2] ?? iso![2]);
+  const day = Number(dayFirst?.[1] ?? iso![3]);
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  if (
+    calendar.getUTCFullYear() !== year ||
+    calendar.getUTCMonth() !== month - 1 ||
+    calendar.getUTCDate() !== day
+  )
+    throw new Error(`Invalid spreadsheet date: ${value}`);
+  const parsed = dayFirst ? calendar : new Date(text);
+  if (!Number.isFinite(parsed.getTime())) throw new Error(`Invalid spreadsheet date: ${value}`);
+  return parsed;
 }
 
 export function normalizeSpreadsheetText(value: unknown) {
@@ -136,17 +183,20 @@ export function parseStatsSpreadsheet(buffer: Buffer) {
 
   return rawRows.map((row) => ({
     encaisseLe: parseSpreadsheetDate(findColumnValue(row, COLUMN_MAP.encaisseLe)),
-    montant: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.montant)),
-    fraisLivraison: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.fraisLivraison)),
-    fraisPoids: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.fraisPoids)),
-    fraisExtra: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.fraisExtra)),
-    fraisSMS: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.fraisSMS)),
-    fraisStockage: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.fraisStockage)),
-    commissionRecouvrement: parseSpreadsheetNumber(
+    montant: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.montant)),
+    fraisLivraison: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.fraisLivraison)),
+    fraisPoids: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.fraisPoids)),
+    fraisExtra: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.fraisExtra)),
+    fraisSMS: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.fraisSMS)),
+    fraisStockage: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.fraisStockage)),
+    commissionRecouvrement: parseSettlementNumber(
       findColumnValue(row, COLUMN_MAP.commissionRecouvrement),
     ),
-    totalFraisService: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.totalFraisService)),
-    netRecouvret: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.netRecouvret)),
+    totalFraisService: parseSettlementNumber(
+      findColumnValue(row, COLUMN_MAP.totalFraisService),
+      true,
+    ),
+    netRecouvret: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.netRecouvret), true),
     type: normalizeSpreadsheetText(findColumnValue(row, COLUMN_MAP.type)),
     typePrestation: normalizeSpreadsheetText(findColumnValue(row, COLUMN_MAP.typePrestation)),
     creeLe: parseSpreadsheetDate(findColumnValue(row, COLUMN_MAP.creeLe)),
@@ -159,6 +209,6 @@ export function parseStatsSpreadsheet(buffer: Buffer) {
     produits: normalizeSpreadsheetText(findColumnValue(row, COLUMN_MAP.produits)),
     remarque: normalizeSpreadsheetText(findColumnValue(row, COLUMN_MAP.remarque)),
     poidsLivreLe: normalizeSpreadsheetText(findColumnValue(row, COLUMN_MAP.poidsLivreLe)),
-    encaisse: parseSpreadsheetNumber(findColumnValue(row, COLUMN_MAP.encaisse)),
+    encaisse: parseSettlementNumber(findColumnValue(row, COLUMN_MAP.encaisse), true),
   })) satisfies StatsSpreadsheetRow[];
 }

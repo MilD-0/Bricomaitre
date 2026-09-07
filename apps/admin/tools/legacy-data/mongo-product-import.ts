@@ -331,19 +331,36 @@ export function readMongoId(value: unknown) {
 }
 
 export function readMongoDate(value: unknown, fallback = new Date()) {
-  const directValue = trimNullableText(value);
-  const raw =
-    directValue ??
-    (typeof value === 'object' && value !== null && '$date' in value
-      ? trimNullableScalarText((value as { $date?: unknown }).$date)
-      : null);
-
-  if (!raw) {
-    return fallback;
+  if (value == null || value === '') return fallback;
+  let raw: unknown = value;
+  if (typeof raw === 'object' && raw !== null && '$date' in raw) raw = raw.$date;
+  if (typeof raw === 'object' && raw !== null && '$numberLong' in raw) {
+    if (typeof raw.$numberLong !== 'string' || !/^-?\d+$/.test(raw.$numberLong))
+      throw new Error('Invalid Mongo date milliseconds.');
+    raw = Number(raw.$numberLong);
   }
-
+  if (typeof raw === 'number') {
+    if (!Number.isSafeInteger(raw)) throw new Error('Invalid Mongo date milliseconds.');
+    const date = new Date(raw);
+    if (!Number.isFinite(date.getTime())) throw new Error('Invalid Mongo date milliseconds.');
+    return date;
+  }
+  if (
+    typeof raw !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/.test(raw)
+  )
+    throw new Error('Invalid Mongo date.');
   const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? fallback : date;
+  const [year, month, day] = raw.slice(0, 10).split('-').map(Number);
+  const calendar = new Date(Date.UTC(year!, month! - 1, day!));
+  if (
+    !Number.isFinite(date.getTime()) ||
+    calendar.getUTCFullYear() !== year ||
+    calendar.getUTCMonth() !== month! - 1 ||
+    calendar.getUTCDate() !== day
+  )
+    throw new Error('Invalid Mongo date.');
+  return date;
 }
 
 function toFiniteNumber(value: unknown, fallback = 0) {

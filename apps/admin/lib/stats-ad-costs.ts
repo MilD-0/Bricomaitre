@@ -16,6 +16,7 @@ import type { StatsFilters } from './stats-contract';
 import {
   normalizeSpreadsheetText as normalizeText,
   parseSpreadsheetDate as parseDate,
+  parseSpreadsheetNumber,
 } from './stats-spreadsheet';
 import { numberOrZero, toDateInput } from './stats-values';
 
@@ -58,7 +59,11 @@ function buildAdCostWhere(filters: AdCostDateFilters) {
 
 function valueFor(row: Record<string, unknown>, names: string[]) {
   for (const name of names) {
-    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
+    if (
+      row[name] !== undefined &&
+      row[name] !== null &&
+      (typeof row[name] !== 'string' || row[name].trim() !== '')
+    ) {
       return row[name];
     }
   }
@@ -349,10 +354,14 @@ export function buildAdCostEntriesFromSpreadsheetRow(row: Record<string, unknown
     throw new Error('Invalid ad spend conversion rate.');
   if (endDate < startDate) throw new Error('Ad spend report ends before it starts.');
   const days = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1;
-  const spendCents = Math.round(numberOrZero(spendRaw) * rate * 100);
+  const spendCents = Math.round((parseSpreadsheetNumber(spendRaw) ?? 0) * rate * 100);
   const optionalCount = (names: string[]) => {
     const value = valueFor(row, names);
-    return value === undefined ? undefined : Math.round(numberOrZero(value));
+    if (value === undefined) return undefined;
+    const count = parseSpreadsheetNumber(value);
+    if (count == null) return undefined;
+    if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid ad spend count.');
+    return count;
   };
   const totals = {
     impressions: optionalCount(['Impressions', 'impressions']),

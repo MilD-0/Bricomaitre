@@ -5,11 +5,12 @@ import { pathToFileURL } from 'node:url';
 
 import { sql } from 'drizzle-orm';
 
-import { getDb, hasDb } from '@bric/db/client';
+import { getDb, getPool, hasDb } from '@bric/db/client';
 import { brands, categories, orders, products } from '@bric/db/schema';
 import {
   IMPORT_TARGETS,
   parseLegacyImportArgs,
+  parseDropTables,
   resolveLegacyImportFiles,
   resolveSelectedTargets,
   type DropScope,
@@ -20,6 +21,7 @@ import {
   importMongoBrands,
   importMongoCategories,
   mapMongoOrderToCurrentSchema,
+  mapMongoBrandToCurrentSchema,
   mapMongoProductToCurrentSchemaDetailed,
   parseMongoCollectionExport,
   readMongoId,
@@ -33,7 +35,14 @@ import {
 } from './mongo-product-import';
 import { createSlugAssigner } from '../../lib/slug';
 
+type ReplacementPlan = {
+  tables: string[];
+  outsideDependencies: Array<{ table: string; references: string }>;
+};
+
 type ValidationReport = {
+  replacement?: ReplacementPlan;
+  invalidDocuments: Array<{ target: ImportTarget; mongoId: string | null; reason: string }>;
   targets: ImportTarget[];
   counts: Record<ImportTarget, { loaded: number; prepared: number; skipped: number }>;
   productDiagnostics: {
@@ -42,6 +51,7 @@ type ValidationReport = {
     purchasePriceDropped: number;
   };
   orderDiagnostics: {
+    invalid: Array<{ mongoId: string | null; reasons: string[]; skippable: boolean }>;
     skippedForState: Array<{ mongoId: string | null; state: string | null }>;
     blockedByCart: Array<{ mongoId: string | null; missingRefs: string[] }>;
   };
@@ -108,6 +118,12 @@ async function main() {
   const selectedTargets = resolveSelectedTargets(options);
   const existingLookups = await loadExistingLookups(db, selectedTargets);
   const prepared = prepareImportData(loaded, selectedTargets, existingLookups);
+  const replacement = await resolveReplacementPlan(
+    db,
+    options.dropScope ?? 'import',
+    selectedTargets,
+  );
+  prepared.report.replacement = replacement;
 
   if (options.json) {
     console.log(JSON.stringify(prepared.report, null, 2));
@@ -120,9 +136,21 @@ async function main() {
     return;
   }
 
-  if (shouldAbortForBlockedOrders(options, prepared.report)) {
+  if (prepared.report.invalidDocuments.length > 0) {
+    throw new Error('Refusing to import because selected documents failed validation.');
+  }
+
+  if (
+    prepared.report.orderDiagnostics.invalid.some(
+      (order) => !options.skipBlockedOrders || !order.skippable,
+    )
+  ) {
+    throw new Error('Refusing to import because input orders failed validation.');
+  }
+
+  if (replacement.outsideDependencies.length > 0) {
     throw new Error(
-      'Refusing to import because some orders reference products that are not available for remapping.',
+      `Refusing to clear tables referenced outside the selected scope: ${replacement.outsideDependencies.map((edge) => `${edge.table} references ${edge.references}`).join('; ')}`,
     );
   }
 
@@ -133,11 +161,8 @@ async function main() {
   }
 
   await db.transaction(async (tx) => {
-    const tablesToClear = await resolveTablesToClear(tx, options.dropScope!, selectedTargets);
-
-    if (tablesToClear.length > 0) {
-      await tx.execute(sql.raw(buildTruncateSql(tablesToClear)));
-    }
+    // RESTRICT also catches any dependency added after the preview was built.
+    await tx.execute(sql.raw(buildTruncateSql(replacement.tables)));
 
     const brandIdByMongoId = selectedTargets.includes('brands')
       ? await importMongoBrands(
@@ -224,6 +249,7 @@ function prepareImportData(
 ): PreparedData {
   const report: ValidationReport = {
     targets: selectedTargets,
+    invalidDocuments: [],
     counts: {
       brands: { loaded: loaded.brands.length, prepared: 0, skipped: 0 },
       categories: { loaded: loaded.categories.length, prepared: 0, skipped: 0 },
@@ -236,6 +262,7 @@ function prepareImportData(
       purchasePriceDropped: 0,
     },
     orderDiagnostics: {
+      invalid: [],
       skippedForState: [],
       blockedByCart: [],
     },
@@ -245,34 +272,31 @@ function prepareImportData(
   const preparedBrands: ImportedBrandRow[] = [];
   if (selectedTargets.includes('brands')) {
     for (const brand of loaded.brands) {
-      const name = typeof brand.name === 'string' ? brand.name.trim() : '';
-      if (!name) {
+      const mapped = mapMongoBrandToCurrentSchema(brand);
+      if (!mapped) {
+        report.invalidDocuments.push({
+          target: 'brands',
+          mongoId: readMongoId(brand._id),
+          reason: 'Missing brand name.',
+        });
         continue;
       }
-
-      preparedBrands.push({
-        mongoId: readMongoId(brand._id),
-        name,
-        slug: '',
-        image: typeof brand.image === 'string' ? brand.image.trim() || null : null,
-        isActive: true,
-        featured: Boolean(brand.featured),
-        createdBy: null,
-        createdByName: null,
-        updatedBy: null,
-        updatedByName: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      preparedBrands.push(mapped);
     }
   }
   report.counts.brands.prepared = preparedBrands.length;
   report.counts.brands.skipped = report.counts.brands.loaded - preparedBrands.length;
 
   const preparedCategories = selectedTargets.includes('categories') ? loaded.categories : [];
-  report.counts.categories.prepared = preparedCategories.filter(
-    (category) => typeof category.name === 'string' && category.name.trim().length > 0,
-  ).length;
+  report.counts.categories.prepared = preparedCategories.filter((category) => {
+    if (typeof category.name === 'string' && category.name.trim().length > 0) return true;
+    report.invalidDocuments.push({
+      target: 'categories',
+      mongoId: readMongoId(category._id),
+      reason: 'Missing category name.',
+    });
+    return false;
+  }).length;
   report.counts.categories.skipped =
     report.counts.categories.loaded - report.counts.categories.prepared;
 
@@ -287,6 +311,11 @@ function prepareImportData(
         });
 
         if (!mapped) {
+          report.invalidDocuments.push({
+            target: 'products',
+            mongoId: readMongoId(product._id),
+            reason: 'Missing product title.',
+          });
           return false;
         }
 
@@ -335,6 +364,11 @@ function prepareImportData(
         });
 
         if (!result.row) {
+          report.orderDiagnostics.invalid.push({
+            mongoId: readMongoId(order._id),
+            reasons: [...result.errors, ...result.warnings].map((issue) => issue.message),
+            skippable: hasOnlyBlockedCartRefs(result.errors) && result.warnings.length === 0,
+          });
           const unresolvedState = result.warnings.find(
             (warning) => warning.code === 'unresolved_state',
           );
@@ -373,7 +407,7 @@ function prepareImportData(
 
   if (report.orderDiagnostics.skippedForState.length > 0) {
     report.notes.push(
-      `${report.orderDiagnostics.skippedForState.length} orders will be skipped because their wilaya could not be resolved.`,
+      `${report.orderDiagnostics.skippedForState.length} orders block replacement because their wilaya could not be resolved.`,
     );
   }
 
@@ -387,7 +421,8 @@ function prepareImportData(
     brands: preparedBrands,
     categories: preparedCategories,
     products: preparedProducts,
-    orders: preparedOrders,
+    // Preserve rejected input until the validated plan explicitly refuses it.
+    orders: selectedTargets.includes('orders') ? loaded.orders : [],
     report,
   };
 }
@@ -468,13 +503,6 @@ export function hasOnlyBlockedCartRefs(errors: Array<{ code: string }>) {
   return errors.length > 0 && errors.every((error) => error.code === 'unmatched_cart_product');
 }
 
-export function shouldAbortForBlockedOrders(
-  options: Pick<LegacyImportCliOptions, 'skipBlockedOrders'>,
-  report: Pick<ValidationReport, 'orderDiagnostics'>,
-) {
-  return !options.skipBlockedOrders && report.orderDiagnostics.blockedByCart.length > 0;
-}
-
 async function resolveTablesToClear(
   db: QueryExecutor,
   dropScope: DropScope,
@@ -504,6 +532,37 @@ async function resolveTablesToClear(
   return selectedTargets.map((target) => `${quoteIdentifier('public')}.${quoteIdentifier(target)}`);
 }
 
+async function resolveReplacementPlan(
+  db: QueryExecutor,
+  dropScope: DropScope,
+  selectedTargets: ImportTarget[],
+): Promise<ReplacementPlan> {
+  const tables = await resolveTablesToClear(db, dropScope, selectedTargets);
+  const result = await db.execute(sql`
+    with selected as (
+      select unnest(${sql.param(tables)}::text[])::regclass as oid
+    )
+    select format('%I.%I', child_schema.nspname, child.relname) as "table",
+      format('%I.%I', parent_schema.nspname, parent.relname) as "references"
+    from pg_constraint dependency
+    join pg_class child on child.oid = dependency.conrelid
+    join pg_namespace child_schema on child_schema.oid = child.relnamespace
+    join pg_class parent on parent.oid = dependency.confrelid
+    join pg_namespace parent_schema on parent_schema.oid = parent.relnamespace
+    where dependency.contype = 'f'
+      and dependency.confrelid in (select oid from selected)
+      and dependency.conrelid not in (select oid from selected)
+    order by 1, 2
+  `);
+  return {
+    tables,
+    outsideDependencies: result.rows.map((row) => ({
+      table: String(row.table),
+      references: String(row.references),
+    })),
+  };
+}
+
 function collectMongoIdMap(rows: Array<{ id: number; mongoId: string | null }>) {
   const lookup = new Map<string, number>();
 
@@ -523,7 +582,7 @@ function buildTruncateSql(tables: string[]) {
     throw new Error('No tables selected for truncation.');
   }
 
-  return `TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE`;
+  return `TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY RESTRICT`;
 }
 
 function quoteIdentifier(value: string) {
@@ -560,10 +619,7 @@ async function promptForDropPlan() {
     const tableAnswer = await rl.question(
       `Enter comma-separated import tables (${IMPORT_TARGETS.join(', ')}): `,
     );
-    const selected = tableAnswer
-      .split(',')
-      .map((value) => value.trim())
-      .filter((value): value is ImportTarget => IMPORT_TARGETS.includes(value as ImportTarget));
+    const selected = parseDropTables(tableAnswer);
 
     if (selected.length === 0) {
       throw new Error('Custom destructive scope requires at least one valid import table.');
@@ -621,6 +677,18 @@ function printReport(
   console.log('\nImport summary:');
   console.log(`- Mode: ${options.replace ? 'write' : 'dry-run'}`);
   console.log(`- Selected targets: ${report.targets.join(', ')}`);
+  console.log(`- Tables to clear: ${report.replacement?.tables.join(', ')}`);
+  console.log(
+    `- Outside dependencies: ${report.replacement?.outsideDependencies.map((edge) => `${edge.table} references ${edge.references}`).join('; ') || 'none'}`,
+  );
+  console.log(`- Invalid selected documents: ${report.invalidDocuments.length}`);
+  for (const document of report.invalidDocuments.slice(0, 10)) {
+    console.log(`  - ${document.target} ${document.mongoId ?? '<unknown>'}: ${document.reason}`);
+  }
+  console.log(`- Invalid orders: ${report.orderDiagnostics.invalid.length}`);
+  for (const order of report.orderDiagnostics.invalid.slice(0, 10)) {
+    console.log(`  - ${order.mongoId ?? '<unknown>'}: ${order.reasons.join('; ')}`);
+  }
   console.log(`- Skip blocked orders: ${options.skipBlockedOrders ? 'yes' : 'no'}`);
   for (const target of IMPORT_TARGETS) {
     const counts = report.counts[target];
@@ -636,7 +704,7 @@ function printReport(
     `- Product purchase prices dropped: ${report.productDiagnostics.purchasePriceDropped}`,
   );
   console.log(
-    `- Orders skipped for unresolved state: ${report.orderDiagnostics.skippedForState.length}`,
+    `- Orders blocked by unresolved state: ${report.orderDiagnostics.skippedForState.length}`,
   );
   console.log(
     `- Orders blocked by unmatched cart refs: ${report.orderDiagnostics.blockedByCart.length}`,
@@ -650,7 +718,7 @@ function printReport(
   }
 
   if (report.orderDiagnostics.skippedForState.length > 0) {
-    console.log('\nOrders skipped for unresolved state:');
+    console.log('\nOrders blocked by unresolved state:');
     for (const item of report.orderDiagnostics.skippedForState.slice(0, 10)) {
       console.log(`- ${item.mongoId ?? 'no mongo id'}: ${item.state ?? '<null>'}`);
     }
@@ -665,8 +733,12 @@ function printReport(
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  void main().catch((error) => {
-    console.error(error instanceof Error ? (error.stack ?? error.message) : error);
-    process.exitCode = 1;
-  });
+  void main()
+    .catch((error) => {
+      console.error(error instanceof Error ? (error.stack ?? error.message) : error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      if (hasDb()) await getPool().end();
+    });
 }
