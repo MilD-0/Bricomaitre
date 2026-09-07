@@ -557,6 +557,59 @@ describe('OrdersWorkspace', () => {
     await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
   });
 
+  it('keeps the unfulfilled quantity visible after a partial stock deduction exhausts inventory', async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    let draft: Record<string, unknown> = {};
+    server.use(
+      http.get('/api/orders/shopping-list-draft', () => HttpResponse.json({ draft: null })),
+      http.post('/api/orders/shopping-list-details', () =>
+        HttpResponse.json({
+          products: [{ id: 1, inventoryQuantity: 1, purchasePrice: '2800' }],
+          brands: [],
+        }),
+      ),
+      http.put('/api/orders/shopping-list-draft', async ({ request }) => {
+        draft = {
+          ...((await request.json()) as Record<string, unknown>),
+          scopeKey: 'selected:1',
+          revision: 1,
+        };
+        return HttpResponse.json({ draft });
+      }),
+      http.post('/api/orders/shopping-list-draft/apply', () => {
+        const items = (draft.draftItems as Array<Record<string, unknown>>).map((item) => ({
+          ...item,
+          inventoryQuantity: 0,
+          inventoryAppliedQuantity: 1,
+          inventoryDecreaseQuantity: 0,
+          inventoryShortageQuantity: 1,
+          inventoryActionEligible: false,
+          checked: true,
+        }));
+        return HttpResponse.json({
+          draft: { ...draft, revision: 2, draftItems: items, generatedItems: items },
+          items: [{ productId: 1, previousQuantity: 1, nextQuantity: 0 }],
+          skipped: [],
+        });
+      }),
+    );
+    await user.click(screen.getByRole('checkbox', { name: 'Select Customer One' }));
+    await user.click(screen.getByRole('button', { name: 'Posted shopping list menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Shopping list' }));
+    const list = await screen.findByRole('dialog');
+    await user.click(
+      within(list).getByRole('button', { name: 'Increase quantity for Cordless drill' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Print view menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Accept all inventory changes' }));
+    await waitFor(() =>
+      expect(within(list).queryByText('Inventory decrease')).not.toBeInTheDocument(),
+    );
+    expect(within(list).getByText('Short by 1')).toBeVisible();
+    expect(within(list).getByRole('checkbox', { name: 'Toggle Cordless drill' })).toBeChecked();
+  });
+
   it.each([false, true])(
     'replays an accepted stock request after response loss, with subsequent edits=%s',
     async (editAfterLoss) => {

@@ -50,6 +50,14 @@ it('prints product photos through bounded thumbnails in both columns while retai
     updatedAt: new Date().toISOString(),
     updatedByName: 'Operator',
   });
+  Object.assign(state.draftItems[0]!, {
+    inventoryQuantity: 0,
+    inventoryAppliedQuantity: 1,
+    inventoryDecreaseQuantity: 0,
+    inventoryShortageQuantity: 1,
+    inventoryActionEligible: false,
+    checked: true,
+  });
   const html = buildShoppingListPrintHtml(state, 'ar', 'Previous', {
     generated: (value) => value,
     unitPrice: 'Price',
@@ -66,4 +74,5 @@ it('prints product photos through bounded thumbnails in both columns while retai
   expect(html).toContain('x2');
   expect(html).toContain('Call first');
   expect(html).toContain('dir="rtl"');
+  expect(html).toContain('Short 1');
 });

@@ -275,8 +275,8 @@ export function buildShoppingListPrintHtml(
             .map(
               (product) => `
             <li style="${
-              product.checked
-                ? 'opacity: 0.65; text-decoration: line-through;'
+              product.checked && product.inventoryShortageQuantity === 0
+                ? 'opacity: 0.65;'
                 : product.inventoryQuantity != null && product.inventoryQuantity > 0
                   ? 'color: #166534; background: #dcfce7; border: 1px solid #86efac; border-radius: 10px; padding: 8px 10px;'
                   : ''
@@ -284,9 +284,10 @@ export function buildShoppingListPrintHtml(
               <div style="display: flex; align-items: flex-start; gap: 10px;">
                 ${printImage(product.thumbnailUrl) ? `<img src="${escapeHtml(printImage(product.thumbnailUrl)!)}" alt="${escapeHtml(product.title)}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
                 <div>
-                  <strong>${product.checked ? '&#10003; ' : ''}${escapeHtml(product.title)}</strong> x${product.quantity}
+                  <strong style="${product.checked ? 'text-decoration: line-through;' : ''}">${product.checked ? '&#10003; ' : ''}${escapeHtml(product.title)}</strong> x${product.quantity}
                   ${product.unitPrice == null ? '' : `<div>${escapeHtml(labels.unitPrice)}: ${escapeHtml(formatCurrency(locale, product.unitPrice))}${product.purchasePrice == null ? '' : ` | ${escapeHtml(labels.purchasePrice)}: ${escapeHtml(formatCurrency(locale, product.purchasePrice))}`}</div>`}
-                  ${product.inventoryActionEligible ? `<div>${escapeHtml(labels.inventoryDecrease)}: ${product.inventoryDecreaseQuantity}${product.inventoryShortageQuantity > 0 ? ` | ${escapeHtml(labels.inventoryShortage(product.inventoryShortageQuantity))}` : ''}</div>` : ''}
+                  ${product.inventoryActionEligible ? `<div>${escapeHtml(labels.inventoryDecrease)}: ${product.inventoryDecreaseQuantity}</div>` : ''}
+                  ${product.inventoryShortageQuantity > 0 ? `<div>${escapeHtml(labels.inventoryShortage(product.inventoryShortageQuantity))}</div>` : ''}
                   ${product.notes.length ? `<div>${escapeHtml(labels.notes)}: ${escapeHtml(product.notes.join(' | '))}</div>` : ''}
                 </div>
               </div>

@@ -316,6 +316,13 @@ export function ShoppingListWorkspaceDialog({
                                   >
                                     +
                                   </Button>
+                                  {product.inventoryShortageQuantity > 0 ? (
+                                    <span className="text-xs font-medium text-destructive">
+                                      {t('ordersManager.shoppingList.inventoryShortage', {
+                                        count: product.inventoryShortageQuantity,
+                                      })}
+                                    </span>
+                                  ) : null}
                                   {product.inventoryActionEligible ? (
                                     <>
                                       <span className="ms-2 text-xs text-muted-foreground">
