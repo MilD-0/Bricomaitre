@@ -5,7 +5,10 @@ import type {
   EcotrackTrackingInfo,
   EcotrackMajEntry as UpstreamEcotrackMajEntry,
 } from '@bric/storefront-core/ecotrack-client';
-import { readEcotrackActivityTimestamp } from '@bric/storefront-core/ecotrack-tracking';
+import {
+  parseEcotrackRemoteDateTime,
+  readEcotrackActivityTimestamp,
+} from '@bric/storefront-core/ecotrack-tracking';
 
 import { normalizeEcotrackMonetaryValue } from './ecotrack-monetary';
 import { findLatestDate } from './ecotrack-shipment-errors';
@@ -55,11 +58,7 @@ export function getUpstreamTrackingValues(item: EcotrackStatusItem) {
 }
 
 export function parseEcotrackProviderTimestamp(value: string | null | undefined) {
-  if (!value?.trim()) return null;
-  const isoLike = value.includes('T') ? value.trim() : value.trim().replace(' ', 'T');
-  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(isoLike) ? isoLike : `${isoLike}+01:00`;
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return parseEcotrackRemoteDateTime(value);
 }
 
 function providerBoolean(value: boolean | string | number | null | undefined) {

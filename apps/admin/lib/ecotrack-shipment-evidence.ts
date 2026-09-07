@@ -7,7 +7,10 @@ import type {
   EcotrackTrackingInfo,
   EcotrackMajEntry as UpstreamEcotrackMajEntry,
 } from '@bric/storefront-core/ecotrack-client';
-import { readEcotrackActivityTimestamp } from '@bric/storefront-core/ecotrack-tracking';
+import {
+  parseEcotrackRemoteDateTime,
+  readEcotrackActivityTimestamp,
+} from '@bric/storefront-core/ecotrack-tracking';
 
 import { ecotrackOrderActivities, ecotrackOrderStatusObservations } from '@bric/db/schema';
 import { getEcotrackProviderEnv } from './ecotrack-provider';
@@ -114,12 +117,13 @@ export function providerRequestOptions(row: Pick<EcotrackShipmentRow, 'provider'
 }
 
 export function mapMajEntry(entry: UpstreamEcotrackMajEntry) {
-  const parsed = new Date(entry.created_at);
+  const parsed = parseEcotrackRemoteDateTime(entry.created_at);
+  if (!parsed) return null;
   return {
     remarque: entry.remarque,
     station: sanitizeNullableText(entry.station),
     livreur: sanitizeNullableText(entry.livreur),
-    remoteCreatedAt: Number.isNaN(parsed.getTime()) ? new Date() : parsed,
+    remoteCreatedAt: parsed,
     raw: entry,
   };
 }

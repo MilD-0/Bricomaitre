@@ -212,7 +212,7 @@ function isEcotrackRequestFailure(error: unknown, pathPrefix: string, status: nu
   );
 }
 
-export function isEcotrackMissingTrackingInfoError(error: unknown) {
+export function isEcotrackTrackingInfoUnavailableError(error: unknown) {
   return (
     isEcotrackRequestFailure(error, '/get/trackings/info', 404) ||
     isEcotrackRequestFailure(error, '/get/tracking/info', 404)

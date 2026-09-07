@@ -6,7 +6,7 @@ import {
   buildListItems,
   confirmShipmentStatusFromCurrentOrders,
   ensureFreshShipmentRow,
-  getEcotrackTrackingsInfoAllowingMissing,
+  getEcotrackTrackingsInfoAllowingUnavailable,
   loadActiveShipmentPageRows,
   loadShipmentRowByOrderId,
   refreshShipmentRow,
@@ -155,7 +155,7 @@ export async function refreshEcotrackOrdersBatch(
   for (const batch of batches) {
     const trackingNumbers = batch.map((row) => row.trackingNumber);
     let statusResponse: Awaited<ReturnType<typeof getEcotrackOrdersStatus>>;
-    let trackingResponse: Awaited<ReturnType<typeof getEcotrackTrackingsInfoAllowingMissing>>;
+    let trackingResponse: Awaited<ReturnType<typeof getEcotrackTrackingsInfoAllowingUnavailable>>;
 
     try {
       [statusResponse, trackingResponse] = await Promise.all([
@@ -163,11 +163,11 @@ export async function refreshEcotrackOrdersBatch(
           ? getEcotrackOrdersStatus(trackingNumbers, 'all', providerRequestOptions(batch[0]))
           : getEcotrackOrdersStatus(trackingNumbers, 'all'),
         batch[0].provider === 'emir'
-          ? getEcotrackTrackingsInfoAllowingMissing(
+          ? getEcotrackTrackingsInfoAllowingUnavailable(
               trackingNumbers,
               providerRequestOptions(batch[0]),
             )
-          : getEcotrackTrackingsInfoAllowingMissing(trackingNumbers),
+          : getEcotrackTrackingsInfoAllowingUnavailable(trackingNumbers),
       ]);
     } catch (error) {
       failures.push(...batch.map((row) => toEcotrackFailureRecord('refresh', row, error)));
@@ -176,11 +176,6 @@ export async function refreshEcotrackOrdersBatch(
 
     for (const row of batch) {
       try {
-        if (trackingResponse.missing.has(row.trackingNumber)) {
-          await softDeleteShipmentRow(db, row, { actor, operation: 'delete' });
-          continue;
-        }
-
         const trackingInfo = trackingResponse.data.get(row.trackingNumber) ?? null;
         const rawTrackingInfo =
           trackingResponse.rawData?.get(row.trackingNumber) ?? trackingInfo ?? null;
@@ -188,7 +183,10 @@ export async function refreshEcotrackOrdersBatch(
           statusResponse.data.get(row.trackingNumber),
           trackingInfo,
         );
-        if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
+        if (
+          !statusItem &&
+          (trackingResponse.unavailable || shouldRetireShipmentMissingFromStatusFeed(row))
+        ) {
           statusItem = await confirmShipmentStatusFromCurrentOrders(row);
           if (!statusItem) {
             await softDeleteShipmentRow(db, row, { actor, operation: 'delete' });
@@ -196,7 +194,10 @@ export async function refreshEcotrackOrdersBatch(
           }
         }
 
-        const majResponse = await getEcotrackMaj(row.trackingNumber, providerRequestOptions(row));
+        const majResponse = await getEcotrackMaj(
+          row.trackingNumber,
+          providerRequestOptions(row),
+        ).catch(() => null);
         await upsertShipmentState(
           db,
           row,
@@ -205,8 +206,8 @@ export async function refreshEcotrackOrdersBatch(
             rawStatusItem: statusResponse.rawData?.get(row.trackingNumber) ?? statusItem,
             trackingInfo,
             rawTrackingInfo,
-            majEntries: majResponse.data,
-            rawMajEntries: majResponse.payload,
+            majEntries: majResponse?.data ?? null,
+            rawMajEntries: majResponse?.payload ?? null,
             orderInfo: trackingInfo?.OrderInfo ?? null,
             rawOrderInfo: rawOrderInfoFromTrackingPayload(rawTrackingInfo),
           },

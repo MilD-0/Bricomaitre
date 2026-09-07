@@ -151,7 +151,7 @@ const ecotrackOrdersPageSchema = z
     current_page: z.union([z.string(), z.number()]).optional(),
     last_page: z.union([z.string(), z.number()]).optional(),
     next_page_url: z.string().nullable().optional(),
-    data: z.array(ecotrackOrderSummarySchema).default([]),
+    data: z.array(ecotrackOrderSummarySchema),
   })
   .passthrough();
 
@@ -685,10 +685,10 @@ export async function getEcotrackTrackingsInfo(
     deadlineAt: options.deadlineAt,
   });
 
-  const payload =
-    typeof result.payload === 'object' && result.payload !== null
-      ? (result.payload as Record<string, unknown>)
-      : {};
+  if (readEcotrackRejected(result.payload))
+    throw new Error('ECOTRACK rejected the shipment lookup.');
+  const payload = z.record(z.string(), z.unknown()).parse(result.payload);
+  z.record(z.string(), ecotrackTrackingInfoSchema).parse(payload);
   const normalized = new Map<string, EcotrackTrackingInfo>();
   const rawData = new Map<string, unknown>();
   for (const tracking of trackings) {
@@ -726,14 +726,10 @@ export async function getEcotrackOrdersStatus(
     deadlineAt: options.deadlineAt,
   });
 
-  const payload =
-    typeof result.payload === 'object' && result.payload !== null
-      ? (result.payload as Record<string, unknown>)
-      : {};
-  const rawData =
-    typeof payload.data === 'object' && payload.data !== null
-      ? (payload.data as Record<string, unknown>)
-      : {};
+  if (readEcotrackRejected(result.payload))
+    throw new Error('ECOTRACK rejected the shipment lookup.');
+  const payload = z.record(z.string(), z.unknown()).parse(result.payload);
+  const rawData = z.record(z.string(), z.unknown()).parse(payload.data);
   const normalized = new Map<string, EcotrackStatusItem>();
   const rawItems = new Map<string, unknown>();
   for (const tracking of trackings) {
@@ -778,6 +774,8 @@ export async function getEcotrackOrdersPage(
     typeof result.payload === 'object' && result.payload !== null
       ? (result.payload as Record<string, unknown>)
       : {};
+  if (readEcotrackRejected(result.payload))
+    throw new Error('ECOTRACK rejected the current-orders lookup.');
   const page = ecotrackOrdersPageSchema.parse(rawPage);
   const rawRows = Array.isArray(rawPage.data) ? rawPage.data : [];
   const rawData = new Map<string, unknown>();
@@ -842,9 +840,18 @@ export async function getEcotrackOrder(
     deadlineAt: options.deadlineAt,
   });
 
+  const data = result.data.find((order) => order.tracking === tracking) ?? null;
+  if (
+    !data &&
+    (result.data.length > 0 ||
+      result.page.next_page_url ||
+      Number(result.page.last_page ?? 1) > Number(result.page.current_page ?? 1))
+  ) {
+    throw new Error('ECOTRACK current-orders lookup did not establish absence.');
+  }
   return {
     ...result,
-    data: result.data.find((order) => order.tracking === tracking) ?? null,
+    data,
     raw: result.rawData.get(tracking) ?? null,
   };
 }

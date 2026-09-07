@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   EcotrackMutationRejectedError,
   getEcotrackOrder,
+  getEcotrackOrdersStatus,
   getEcotrackTrackingsInfo,
   listEcotrackOrders,
   requestEcotrack,
@@ -72,6 +73,41 @@ describe('getEcotrackOrder', () => {
     );
 
     await expect(getEcotrackOrder('TRK-11', { fetchImpl, env })).rejects.toThrow();
+  });
+
+  it.each([null, {}, { success: false, message: 'Unavailable' }, { success: false, data: [] }])(
+    'rejects malformed or failed current-order envelopes: %j',
+    async (payload) => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+      await expect(getEcotrackOrder('TRK-11', { fetchImpl, env })).rejects.toThrow();
+    },
+  );
+
+  it.each([null, { success: false, message: 'Unavailable' }, { message: 'Unavailable' }])(
+    'rejects failed or malformed primary shipment reads: %j',
+    async (payload) => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockImplementation(async () => new Response(JSON.stringify(payload), { status: 200 }));
+      await expect(
+        getEcotrackOrdersStatus(['TRK-11'], 'all', { fetchImpl, env }),
+      ).rejects.toThrow();
+      await expect(getEcotrackTrackingsInfo(['TRK-11'], { fetchImpl, env })).rejects.toThrow();
+    },
+  );
+
+  it.each([
+    { data: [{ tracking: 'OTHER', status: 'en_livraison' }] },
+    { data: [], current_page: 1, last_page: 2 },
+  ])('does not infer absence from an unfiltered or incomplete page', async (payload) => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    await expect(getEcotrackOrder('TRK-11', { fetchImpl, env })).rejects.toThrow(
+      'did not establish absence',
+    );
   });
 
   it('paginates the current-order feed and preserves provider fields outside the known contract', async () => {

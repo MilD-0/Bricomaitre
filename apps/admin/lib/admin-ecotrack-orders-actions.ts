@@ -8,6 +8,7 @@ import {
   EcotrackRateLimitError,
   fetchEcotrackOrderLabel,
   getEcotrackOrdersStatus,
+  getEcotrackOrder,
   readEcotrackRejected,
   requestEcotrackReturn as requestEcotrackReturnUpstream,
   updateEcotrackOrder,
@@ -22,7 +23,7 @@ import { PDFDocument } from 'pdf-lib';
 import type { ActionActor } from './action-history';
 import {
   ensureFreshShipmentRow,
-  getEcotrackTrackingsInfoAllowingMissing,
+  getEcotrackTrackingsInfoAllowingUnavailable,
   type EcotrackBulkLabelResult,
   type EcotrackDispatchBatchResult,
   type EcotrackOrderDetail,
@@ -279,20 +280,29 @@ export async function deletePostedEcotrackOrder(orderId: number, actor: ActionAc
       return { success: result.success, raw: result.payload };
     } catch (error) {
       // Some carrier instances return an error after deleting. Require both
-      // status absence and an explicit missing-tracking response before applying locally.
+      // status absence and a successful, validated current-orders lookup before applying locally.
       try {
         const [status, tracking] = await Promise.all([
           getEcotrackOrdersStatus([row.trackingNumber], 'all', providerRequestOptions(row)),
-          getEcotrackTrackingsInfoAllowingMissing(
+          getEcotrackTrackingsInfoAllowingUnavailable(
             [row.trackingNumber],
             providerRequestOptions(row),
           ),
         ]);
-        if (!status.data.has(row.trackingNumber) && tracking.missing.has(row.trackingNumber))
+        if (
+          !status.data.has(row.trackingNumber) &&
+          !tracking.data.has(row.trackingNumber) &&
+          !(
+            await getEcotrackOrder(row.trackingNumber, {
+              ...providerRequestOptions(row),
+              startDate: row.createdAt.toISOString().slice(0, 10),
+            })
+          ).data
+        )
           return {
             success: true,
             raw: {
-              recoveredBy: 'status-and-tracking-absence',
+              recoveredBy: 'status-and-current-orders-absence',
               originalError: error instanceof Error ? error.message : String(error),
             },
           };

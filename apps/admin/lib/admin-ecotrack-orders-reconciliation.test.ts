@@ -46,6 +46,7 @@ import {
 } from '@bric/db/schema';
 import {
   refreshEcotrackOrdersBatch,
+  refreshEcotrackOrder,
   syncEcotrackShipmentStates,
 } from './admin-ecotrack-orders-data';
 import { shouldRetireShipmentMissingFromStatusFeed } from './admin-ecotrack-shipment-state';
@@ -255,7 +256,27 @@ describe('admin ecotrack shipment reconciliation', () => {
     ).toBe(true);
   });
 
-  it('removes missing upstream shipments from batch refreshes instead of throwing', async () => {
+  it('preserves positive status evidence when the tracking endpoint returns 404', async () => {
+    const row = createShipmentRow();
+    const { db, updates } = createDbMock([row], { limitSequence: [11, 11, 11] });
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({
+      data: new Map([['TRK-11', { status: 'en_livraison', activity: [] }]]),
+    });
+    getEcotrackTrackingsInfoMock.mockRejectedValue(
+      new Error(
+        'ECOTRACK request failed for /get/trackings/info?trackings[]=TRK-11: 404 {"message":"Not Found"}',
+      ),
+    );
+    getEcotrackMajMock.mockResolvedValue({ data: [] });
+    const result = await refreshEcotrackOrdersBatch([11]);
+    expect(result.failureCount).toBe(0);
+    expect(result.items).toHaveLength(1);
+    expect(updates.some((update) => update.values.deletedAt)).toBe(false);
+    expect(getEcotrackOrderMock).not.toHaveBeenCalled();
+  });
+
+  it('retires an unavailable tracking only after a successful current-orders absence check', async () => {
     const row = createShipmentRow();
     const { db, updates } = createDbMock([row]);
     getDbMock.mockReturnValue(db);
@@ -266,6 +287,7 @@ describe('admin ecotrack shipment reconciliation', () => {
       ),
     );
 
+    getEcotrackOrderMock.mockResolvedValue({ data: null });
     await expect(refreshEcotrackOrdersBatch([11])).resolves.toMatchObject({
       ok: true,
       successCount: 1,
@@ -283,10 +305,10 @@ describe('admin ecotrack shipment reconciliation', () => {
     expect(updates.some((update) => update.target === ecotrackOrderStates)).toBe(true);
   });
 
-  it('continues refreshing later rows when one row fails', async () => {
+  it('applies both primary refreshes when one optional MAJ read fails', async () => {
     const firstRow = createShipmentRow(11);
     const secondRow = createShipmentRow(12);
-    const { db } = createDbMock([firstRow, secondRow], { limitSequence: [11, 12, 12, 12] });
+    const { db } = createDbMock([firstRow, secondRow], { limitSequence: [11, 12, 11, 12] });
     getDbMock.mockReturnValue(db);
     getEcotrackOrdersStatusMock.mockResolvedValue({
       data: new Map([
@@ -309,20 +331,38 @@ describe('admin ecotrack shipment reconciliation', () => {
     expect(getEcotrackMajMock).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({
       ok: true,
-      successCount: 1,
-      failureCount: 1,
+      successCount: 2,
+      failureCount: 0,
       totalRequested: 2,
-      failures: [
-        {
-          orderId: 11,
-          reference: '11',
-          trackingNumber: 'TRK-11',
-          message: 'Order #11 / Ref 11 / Tracking TRK-11: MAJ failed for TRK-11',
-        },
-      ],
+      failures: [],
     });
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0]?.orderId).toBe(12);
+    expect(result.items.map((item) => item.orderId)).toEqual([11, 12]);
+  });
+
+  it('keeps a shipment when both the tracking endpoint and absence confirmation fail', async () => {
+    const { db, updates } = createDbMock([createShipmentRow()]);
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({ data: new Map() });
+    getEcotrackTrackingsInfoMock.mockRejectedValue(
+      new Error('ECOTRACK request failed for /get/trackings/info: 404 Not Found'),
+    );
+    getEcotrackOrderMock.mockRejectedValue(new Error('Malformed current-orders response'));
+    const result = await refreshEcotrackOrdersBatch([11]);
+    expect(result.failureCount).toBe(1);
+    expect(updates).toHaveLength(0);
+  });
+
+  it('updates the manual detail refresh when optional MAJ fails', async () => {
+    const { db, updates } = createDbMock([createShipmentRow()], { limitSequence: [11, 11, 11] });
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({
+      data: new Map([['TRK-11', { status: 'en_livraison', activity: [] }]]),
+    });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({ data: new Map() });
+    getEcotrackMajMock.mockRejectedValue(new Error('MAJ unavailable'));
+    expect(await refreshEcotrackOrder(11)).not.toBeNull();
+    expect(updates.some((update) => update.values.currentStatus === 'en_livraison')).toBe(true);
+    expect(updates.some((update) => update.values.lastMajSyncedAt)).toBe(false);
   });
 
   it('records chunk-level fetch failures for every row in that chunk', async () => {

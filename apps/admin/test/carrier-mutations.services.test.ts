@@ -22,6 +22,7 @@ import {
   deletePostedEcotrackOrder,
   updatePostedEcotrackOrder,
 } from '../lib/admin-ecotrack-orders-actions';
+import { refreshEcotrackOrdersBatch } from '../lib/admin-ecotrack-orders-read';
 import { upsertShipmentState } from '../lib/admin-ecotrack-shipment-state';
 import { loadShipmentRowByOrderId } from '../lib/admin-ecotrack-shipment-view';
 import { applyAdminInventoryBatch } from '../lib/admin-inventory-workflow';
@@ -52,6 +53,8 @@ const upstream = vi.hoisted(() => ({
     ),
   })),
   trackings: vi.fn(),
+  currentOrder: vi.fn(),
+  maj: vi.fn(),
 }));
 vi.mock('@bric/storefront-core/ecotrack-client', async (original) => ({
   ...(await original<typeof import('@bric/storefront-core/ecotrack-client')>()),
@@ -60,6 +63,8 @@ vi.mock('@bric/storefront-core/ecotrack-client', async (original) => ({
   getEcotrackTrackingInfo: upstream.tracking,
   getEcotrackOrdersStatus: upstream.status,
   getEcotrackTrackingsInfo: upstream.trackings,
+  getEcotrackOrder: upstream.currentOrder,
+  getEcotrackMaj: upstream.maj,
 }));
 vi.mock('../lib/server-cache', async (original) => ({
   ...(await original<typeof import('../lib/server-cache')>()),
@@ -894,7 +899,60 @@ describe('carrier mutation ownership and recovery', () => {
     ).toHaveLength(2);
   });
 
-  it('records deletion when the provider returns an error but both status and tracking prove the shipment is gone', async () => {
+  it('persists positive carrier status despite tracking 404 and optional MAJ failure', async () => {
+    const db = getDb();
+    const row = await createOrder({}, true);
+    const tracking = `TRACK-${row.id}`;
+    upstream.status.mockResolvedValueOnce({
+      data: new Map([[tracking, { status: 'en_livraison', activity: [] }]]),
+    });
+    upstream.trackings.mockRejectedValueOnce(
+      new Error('ECOTRACK request failed for /get/trackings/info: 404 Not Found'),
+    );
+    upstream.maj.mockRejectedValueOnce(new Error('MAJ unavailable'));
+    const result = await refreshEcotrackOrdersBatch([row.id]);
+    expect(result).toMatchObject({ successCount: 1, failureCount: 0 });
+    const [saved] = await db.select().from(orders).where(eq(orders.id, row.id));
+    const [shipment] = await db
+      .select()
+      .from(ecotrackOrderStates)
+      .where(eq(ecotrackOrderStates.orderId, row.id));
+    expect(saved).toMatchObject({
+      ecotrackTrackingNumber: tracking,
+      inHouseStatus: ORDER_STATUS.IN_DELIVERY,
+    });
+    expect(shipment).toMatchObject({
+      trackingNumber: tracking,
+      currentStatus: 'en_livraison',
+      deletedAt: null,
+    });
+    expect(upstream.currentOrder).not.toHaveBeenCalled();
+  });
+
+  it('does not delete an order shipment after a failed absence-confirmation read', async () => {
+    const db = getDb();
+    const row = await createOrder({}, true);
+    upstream.remove.mockRejectedValueOnce(
+      new Error('ECOTRACK request failed for /delete/order: 400 Bad request'),
+    );
+    upstream.status.mockResolvedValueOnce({ data: new Map() });
+    upstream.trackings.mockRejectedValueOnce(
+      new Error('ECOTRACK request failed for /get/trackings/info: 404 Not Found'),
+    );
+    upstream.currentOrder.mockRejectedValueOnce(
+      new Error('ECOTRACK rejected current-orders lookup'),
+    );
+    await expect(deletePostedEcotrackOrder(row.id, actor)).rejects.toThrow();
+    const [saved] = await db.select().from(orders).where(eq(orders.id, row.id));
+    const [shipment] = await db
+      .select()
+      .from(ecotrackOrderStates)
+      .where(eq(ecotrackOrderStates.orderId, row.id));
+    expect(saved?.ecotrackTrackingNumber).toBe(`TRACK-${row.id}`);
+    expect(shipment?.deletedAt).toBeNull();
+  });
+
+  it('records deletion when the provider returns an error but validated current-order absence confirms the shipment is gone', async () => {
     const db = getDb();
     const row = await createOrder({}, true);
     upstream.remove.mockRejectedValueOnce(
@@ -906,6 +964,7 @@ describe('carrier mutation ownership and recovery', () => {
         'ECOTRACK request failed for /get/trackings/info: 404 {"message":"Trackings non trouvés"}',
       ),
     );
+    upstream.currentOrder.mockResolvedValueOnce({ data: null });
     await expect(deletePostedEcotrackOrder(row.id, actor)).resolves.toMatchObject({ ok: true });
     expect((await db.select().from(orders).where(eq(orders.id, row.id)))[0]).toMatchObject({
       ecotrackTrackingNumber: null,
@@ -915,7 +974,7 @@ describe('carrier mutation ownership and recovery', () => {
       (await db.select().from(ecotrackMutations).where(eq(ecotrackMutations.orderId, row.id)))[0],
     ).toMatchObject({
       state: 'applied',
-      response: { raw: { recoveredBy: 'status-and-tracking-absence' } },
+      response: { raw: { recoveredBy: 'status-and-current-orders-absence' } },
     });
   });
 });

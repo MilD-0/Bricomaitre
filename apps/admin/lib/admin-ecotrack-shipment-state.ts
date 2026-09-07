@@ -46,7 +46,7 @@ import type {
   EcotrackShipmentDetail,
   EcotrackShipmentsResponse,
 } from './ecotrack-admin-contracts';
-import { isEcotrackMissingTrackingInfoError } from './ecotrack-shipment-errors';
+import { isEcotrackTrackingInfoUnavailableError } from './ecotrack-shipment-errors';
 import {
   mapMajEntry,
   mapTrackingInfoEvents,
@@ -207,7 +207,7 @@ export async function softDeleteShipmentRow(
   });
 }
 
-export async function getEcotrackTrackingsInfoAllowingMissing(
+export async function getEcotrackTrackingsInfoAllowingUnavailable(
   trackings: string[],
   options?: Parameters<typeof getEcotrackTrackingsInfo>[1],
 ) {
@@ -218,17 +218,17 @@ export async function getEcotrackTrackingsInfoAllowingMissing(
     return {
       data: response.data,
       rawData: response.rawData,
-      missing: new Set<string>(),
+      unavailable: false,
     };
   } catch (error) {
-    if (!isEcotrackMissingTrackingInfoError(error)) {
+    if (!isEcotrackTrackingInfoUnavailableError(error)) {
       throw error;
     }
 
     return {
       data: new Map<string, EcotrackTrackingInfo>(),
       rawData: new Map<string, unknown>(),
-      missing: new Set(trackings),
+      unavailable: true,
     };
   }
 }
@@ -376,13 +376,20 @@ export async function upsertShipmentState(
     }
 
     if (payload.majEntries) {
-      const majValues = payload.majEntries.map((entry) => ({
-        orderId: row.order.id,
-        trackingNumber: row.trackingNumber,
-        ...mapMajEntry(entry),
-        createdAt: now,
-        updatedAt: now,
-      }));
+      const majValues = payload.majEntries.flatMap((entry) => {
+        const mapped = mapMajEntry(entry);
+        return mapped
+          ? [
+              {
+                orderId: row.order.id,
+                trackingNumber: row.trackingNumber,
+                ...mapped,
+                createdAt: now,
+                updatedAt: now,
+              },
+            ]
+          : [];
+      });
       if (majValues.length > 0) {
         await tx.insert(ecotrackOrderMajEntries).values(majValues).onConflictDoNothing();
       }
@@ -448,16 +455,14 @@ export async function refreshShipmentRow(
     getEcotrackOrdersStatus([row.trackingNumber], 'all', providerRequestOptions(row)),
     options.includeTracking === false
       ? Promise.resolve(null)
-      : getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber], providerRequestOptions(row)),
+      : getEcotrackTrackingsInfoAllowingUnavailable(
+          [row.trackingNumber],
+          providerRequestOptions(row),
+        ),
     options.includeMaj === false
       ? Promise.resolve(null)
-      : getEcotrackMaj(row.trackingNumber, providerRequestOptions(row)),
+      : getEcotrackMaj(row.trackingNumber, providerRequestOptions(row)).catch(() => null),
   ]);
-
-  if (trackingResponse?.missing.has(row.trackingNumber)) {
-    await softDeleteShipmentRow(db, row, { actor: options.actor, operation: 'delete' });
-    return null;
-  }
 
   const trackingInfo = trackingResponse?.data.get(row.trackingNumber) ?? null;
   const rawTrackingInfo =
@@ -466,7 +471,10 @@ export async function refreshShipmentRow(
     statusResponse.data.get(row.trackingNumber),
     trackingInfo,
   );
-  if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
+  if (
+    !statusItem &&
+    (trackingResponse?.unavailable || shouldRetireShipmentMissingFromStatusFeed(row))
+  ) {
     statusItem = await confirmShipmentStatusFromCurrentOrders(row);
     if (!statusItem) {
       await softDeleteShipmentRow(db, row, { actor: options.actor, operation: 'delete' });

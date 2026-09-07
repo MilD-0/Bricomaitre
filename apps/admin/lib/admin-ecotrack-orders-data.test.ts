@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { mapMajEntry } from './ecotrack-shipment-evidence';
 import { parseEcotrackShipmentUpdateDraft } from './admin-ecotrack-orders-data';
 import type { EcotrackCatalogRecord } from './ecotrack';
 import { buildUpdatePayload } from './ecotrack-shipment-input';
@@ -112,7 +113,7 @@ describe('admin ECOTRACK shipment mapping', () => {
       ] as never,
     });
 
-    expect(latestActivity?.toISOString()).toBe('2026-03-12T10:00:00.000Z');
+    expect(latestActivity?.toISOString()).toBe('2026-03-12T09:00:00.000Z');
 
     const fallbackActivity = deriveLatestUpstreamActivityAt(row, {});
     expect(fallbackActivity?.toISOString()).toBe('2026-03-01T00:00:00.000Z');
@@ -178,6 +179,17 @@ describe('admin ECOTRACK shipment mapping', () => {
     expect(parseEcotrackProviderTimestamp('2026-08-15T10:30:00Z')?.toISOString()).toBe(
       '2026-08-15T10:30:00.000Z',
     );
+  });
+
+  it('maps MAJ provider-local time without inventing timestamps for invalid entries', () => {
+    expect(
+      mapMajEntry({
+        tracking: 'TRK-11',
+        created_at: '2026-08-15 10:30:00',
+        remarque: 'Call',
+      })?.remoteCreatedAt.toISOString(),
+    ).toBe('2026-08-15T09:30:00.000Z');
+    expect(mapMajEntry({ tracking: 'TRK-11', created_at: 'invalid', remarque: 'Call' })).toBeNull();
   });
 
   it('uses bulk tracking status before treating an archived shipment as missing', () => {
