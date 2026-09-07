@@ -21,8 +21,14 @@ beforeEach(() => {
 it('allows Orders-only staff to find bounded product identity without catalog access or private fields', async () => {
   const item = { id: 4, title: 'Drill', price: '1200', images: [], brandId: 2 };
   const limit = vi.fn().mockResolvedValue([item]);
-  const where = vi.fn((_condition: SQL | undefined) => ({ orderBy: () => ({ limit }) }));
-  const select = vi.fn((_fields: Record<string, unknown>) => ({ from: () => ({ where }) }));
+  const where = vi.fn((condition: SQL | undefined) => {
+    void condition;
+    return { orderBy: () => ({ limit }) };
+  });
+  const select = vi.fn((fields: Record<string, unknown>) => {
+    void fields;
+    return { from: () => ({ where }) };
+  });
   mocks.getDb.mockReturnValue({ select });
   expect((await requireMutationAccess('products')).response?.status).toBe(403);
   const response = await GET(request('search=90%25_&limit=6'));

@@ -163,7 +163,7 @@ describe('Meta domain rules', () => {
       orderId: 42,
       statusHistoryId: 6,
       status: 2,
-      changedAt: new Date('2026-06-23T00:00:00.000Z'),
+      changedAt: new Date(),
     });
 
     expect(result).toMatchObject({
@@ -259,7 +259,7 @@ describe('Meta domain rules', () => {
       orderId: 42,
       statusHistoryId: 7,
       status: 4,
-      changedAt: new Date('2026-06-23T00:00:00.000Z'),
+      changedAt: new Date(),
     });
 
     expect(result).toMatchObject({
