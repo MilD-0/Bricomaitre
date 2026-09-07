@@ -1,3 +1,4 @@
+import { unretainedTimestamp } from './stats-retention';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
@@ -69,12 +70,12 @@ export async function getWebsiteAnalyticsData(
 }> {
   const unrolledAnalyticsWhere = and(
     analyticsWhere,
-    sql`not exists (
-      select 1 from ${analyticsDailyRollups} rollup
-      where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
-        and rollup.dimension = 'overall'
-        and rollup.dimension_key = ''
-    )`,
+    sql`${unretainedTimestamp(
+      analyticsEvents.occurredAt,
+      analyticsDailyRollups,
+      sql`rollup.dimension = 'overall'
+        and rollup.dimension_key = ''`,
+    )}`,
   );
   const [
     websiteSummaryRows,
@@ -203,10 +204,7 @@ export async function getMetaAdsTrackingData(
   const rollupWhere = rollupConditions.length > 0 ? and(...rollupConditions) : undefined;
   const unrolledMetaWhere = and(
     metaWhere,
-    sql`not exists (
-    select 1 from ${metaEventDailyRollups} rollup
-    where rollup.day = (${metaEventOutbox.eventTime} at time zone rollup.day_timezone)::date
-  )`,
+    sql`${unretainedTimestamp(metaEventOutbox.eventTime, metaEventDailyRollups)}`,
   );
   const pixelInvoked = sql`coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->>'invoked', 'false') = 'true'`;
 
@@ -295,10 +293,7 @@ export async function getMetaAttributedOrderCount(
   const rollupWhere = rollupConditions.length ? and(...rollupConditions) : undefined;
   const unrolledRawWhere = and(
     rawWhere,
-    sql`not exists (
-      select 1 from ${analyticsPaidClickDailyRollups} rollup
-      where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone rollup.day_timezone)::date
-    )`,
+    sql`${unretainedTimestamp(analyticsPaidClickVisits.firstSeenAt, analyticsPaidClickDailyRollups)}`,
   );
   const [rawResult, rollupRows] = await Promise.all([
     db.execute(sql`

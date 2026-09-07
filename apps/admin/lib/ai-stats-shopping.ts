@@ -1,3 +1,4 @@
+import { unretainedTimestamp } from './stats-retention';
 import { sql } from 'drizzle-orm';
 
 import {
@@ -34,11 +35,7 @@ export async function loadShopping(
   const eventWhere = sql`${timestampCondition(analyticsEvents.occurredAt, filters, 'Africa/Algiers')}
     and ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`;
   const rollupWhere = dateCondition(analyticsAiDailyRollups.day, filters);
-  const unrolledEventWhere = sql`${eventWhere} and not exists (
-    select 1 from ${analyticsAiDailyRollups} rollup
-    where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
-      and rollup.dimension = 'overall' and rollup.dimension_key = ''
-  )`;
+  const unrolledEventWhere = sql`${eventWhere} and ${unretainedTimestamp(analyticsEvents.occurredAt, analyticsAiDailyRollups, sql`rollup.dimension = 'overall' and rollup.dimension_key = ''`)}`;
   const [summaryResult, activeResult, trendResult, intentResult, orderResult, settingsResult] =
     await Promise.all([
       db.execute(sql`

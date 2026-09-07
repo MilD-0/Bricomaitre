@@ -406,9 +406,6 @@ export function previousFiltersWithCoverage(
 
 export function sourceWarnings(sources: AnalyticsSource[]) {
   return sources.flatMap((source) => [
-    ...(source.dateBasis === 'includes_legacy_utc'
-      ? [{ key: 'legacyUtcTraffic', source: source.key }]
-      : []),
     ...(source.state === 'missing' || source.state === 'partial'
       ? [
           {

@@ -90,8 +90,6 @@ export const analyticsCopyAr = {
     trajectory: 'مسار النشاط',
     signals: 'قائمة المتابعة',
     commerceFunnel: 'نضج الطلبات',
-    commerceFunnelDescription:
-      'الطلبات المقدمة خلال الفترة المحددة، مع متابعة نتائجها الحالية. تعتمد إجماليات الإرسال في الأقسام الأخرى على تاريخ أول إرسال إلى الناقل.',
     cashPipeline: 'مسار السيولة',
     paidEconomics: 'اقتصاد الدفع التلقائي',
     reconciliation: 'مرجع التسوية',
@@ -158,8 +156,6 @@ export const analyticsCopyAr = {
     activePipeline: 'طلبات ما زالت في مسار التوصيل',
   },
   warningLabels: {
-    legacyUtcTraffic:
-      'تحتفظ إجماليات الزيارات القديمة في هذه الفترة بتواريخ UTC. تعتمد الزيارات الحالية والطلبات توقيت الجزائر؛ لذا لا تكون المقارنات التاريخية حول منتصف الليل دقيقة.',
     sourceMissing: 'مصدر مفقود لهذه الفترة',
     sourcePartial: 'مصدر يغطي جزءًا فقط من الفترة',
     projectedCostCoverage: 'الربح المتوقع يستخدم هامشًا احتياطيًا بنسبة 30٪',

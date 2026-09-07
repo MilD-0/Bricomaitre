@@ -1,3 +1,4 @@
+import { unretainedTimestamp } from './stats-retention';
 import { and, inArray, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
@@ -99,11 +100,7 @@ export async function getLiveStorefrontAiStats(
   const rollupWhere = dateCondition(analyticsAiDailyRollups.day, filters);
   const unrolledEventWhere = and(
     eventWhere,
-    sql`not exists (
-      select 1 from ${analyticsAiDailyRollups} rollup
-      where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
-        and rollup.dimension = 'overall' and rollup.dimension_key = ''
-    )`,
+    sql`${unretainedTimestamp(analyticsEvents.occurredAt, analyticsAiDailyRollups, sql`rollup.dimension = 'overall' and rollup.dimension_key = ''`)}`,
   );
   const [summaryResult, outcomeResult] = await Promise.all([
     db.execute(sql`

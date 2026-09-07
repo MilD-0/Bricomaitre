@@ -1,3 +1,4 @@
+import { unretainedTimestamp } from './stats-retention';
 import { sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
@@ -120,11 +121,7 @@ export async function getAiStatsData(
             where ${timestampCondition(analyticsEvents.occurredAt, filters, 'Africa/Algiers')}
               and ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}
               and ${analyticsEvents.eventName} like 'ai_assistant_%'
-              and not exists (
-                select 1 from ${analyticsAiDailyRollups} rollup
-                where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
-                  and rollup.dimension = 'overall' and rollup.dimension_key = ''
-              )
+              and ${unretainedTimestamp(analyticsEvents.occurredAt, analyticsAiDailyRollups, sql`rollup.dimension = 'overall' and rollup.dimension_key = ''`)}
             union all
             select min(${analyticsAiDailyRollups.day}::timestamp at time zone ${analyticsAiDailyRollups.dayTimezone}),
               max(${analyticsAiDailyRollups.day}::timestamp at time zone ${analyticsAiDailyRollups.dayTimezone}),

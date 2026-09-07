@@ -1,3 +1,4 @@
+import { unretainedTimestamp } from './stats-retention';
 import { analyticsEventProductIdsSql } from '@bric/storefront-core/analytics';
 import { and, sql } from 'drizzle-orm';
 
@@ -143,16 +144,13 @@ export function buildCanonicalStorefrontSessionsQuery(filters: Required<StatsFil
               ? sql`${analyticsSessions.startedAt} < ((${filters.endDate}::date + interval '1 day') at time zone 'Africa/Algiers')`
               : sql`true`
           }
-          and not exists (
-            select 1 from ${analyticsDailyRollups} rollup
-            where rollup.day = (${analyticsSessions.startedAt} at time zone rollup.day_timezone)::date
-              and rollup.dimension = 'overall'
-              and rollup.dimension_key = ''
-          )
-          and not exists (
-            select 1 from ${analyticsAcquisitionDailyRollups} acquisition
-            where acquisition.day = (${analyticsSessions.startedAt} at time zone acquisition.day_timezone)::date
-          )), 0)
+          and ${unretainedTimestamp(
+            analyticsSessions.startedAt,
+            analyticsDailyRollups,
+            sql`rollup.dimension = 'overall'
+              and rollup.dimension_key = ''`,
+          )}
+          and ${unretainedTimestamp(analyticsSessions.startedAt, analyticsAcquisitionDailyRollups)}), 0)
     )::int as sessions
   `;
 }
@@ -258,12 +256,12 @@ export function buildWebsiteProductMetricsQuery(filters: Required<StatsFilters>)
   const orderWhere = buildLiveOrderWhere(filters);
   const unrolledAnalyticsWhere = and(
     analyticsWhere,
-    sql`not exists (
-      select 1 from ${analyticsDailyRollups} rollup
-      where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
-        and rollup.dimension = 'overall'
-        and rollup.dimension_key = ''
-    )`,
+    sql`${unretainedTimestamp(
+      analyticsEvents.occurredAt,
+      analyticsDailyRollups,
+      sql`rollup.dimension = 'overall'
+        and rollup.dimension_key = ''`,
+    )}`,
   );
 
   return sql`

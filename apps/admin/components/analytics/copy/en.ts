@@ -90,8 +90,6 @@ export const analyticsCopyEn = {
     trajectory: 'Profit',
     signals: 'Signals',
     commerceFunnel: 'Order maturity',
-    commerceFunnelDescription:
-      'Orders submitted in the selected period, followed through their current outcomes. Posting totals elsewhere use the first posting date.',
     cashPipeline: 'Cash pipeline',
     paidEconomics: 'Paid economics',
     reconciliation: 'Settlement reference',
@@ -158,8 +156,6 @@ export const analyticsCopyEn = {
     activePipeline: 'Orders are still moving through delivery',
   },
   warningLabels: {
-    legacyUtcTraffic:
-      'Older traffic totals in this range retain UTC dates. Current traffic and orders use Algeria dates; historical midnight comparisons are not exact.',
     sourceMissing: 'A source is missing for this range',
     sourcePartial: 'A source only covers part of this range',
     projectedCostCoverage: 'Projected profit uses a 30% fallback margin for missing costs',

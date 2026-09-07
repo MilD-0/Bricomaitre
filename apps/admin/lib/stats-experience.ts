@@ -1,3 +1,4 @@
+import { unretainedTimestamp } from './stats-retention';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
@@ -101,21 +102,24 @@ export async function getStorefrontExperienceStats(
   const acquisitionRollupWhere = dateCondition(analyticsAcquisitionDailyRollups.day, filters);
   const unrolledAcquisitionSessionWhere = and(
     acquisitionSessionWhere,
-    sql`not exists (
-      select 1 from ${analyticsAcquisitionDailyRollups} rollup
-      where rollup.day = (${analyticsSessions.startedAt} at time zone rollup.day_timezone)::date
-        and rollup.channel = ${analyticsSessions.channel}
-        and rollup.evidence = ${analyticsSessions.evidence}
-    )`,
+    sql`${unretainedTimestamp(
+      analyticsSessions.startedAt,
+      analyticsAcquisitionDailyRollups,
+      sql`true`,
+      [
+        { value: analyticsSessions.channel, retained: sql`rollup.channel` },
+        { value: analyticsSessions.evidence, retained: sql`rollup.evidence` },
+      ],
+    )}`,
   );
   const unrolledWebsiteAnalyticsWhere = and(
     rawWebsiteAnalyticsWhere,
-    sql`not exists (
-    select 1 from ${analyticsDailyRollups} rollup
-    where rollup.day = (${analyticsEvents.occurredAt} at time zone rollup.day_timezone)::date
-      and rollup.dimension = 'overall'
-      and rollup.dimension_key = ''
-  )`,
+    sql`${unretainedTimestamp(
+      analyticsEvents.occurredAt,
+      analyticsDailyRollups,
+      sql`rollup.dimension = 'overall'
+      and rollup.dimension_key = ''`,
+    )}`,
   );
   const [
     vitalRows,
