@@ -25,6 +25,7 @@ import {
 
 import { loadOrderRecordsByIds } from './admin-orders-data';
 import { orderProductSearchCondition } from './order-product-search';
+import { orderCitySearchCondition } from './order-search';
 import {
   ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES,
   adminAiInHouseOrderStatus,
@@ -224,7 +225,7 @@ function queryConditions(input: ReturnType<typeof normalizeOrderQuery>) {
       ilike(orders.phoneNumber2, pattern),
       ilike(orders.note, pattern),
       ilike(orders.homeAddress, pattern),
-      ilike(orders.city, pattern),
+      orderCitySearchCondition(input.search),
       orderProductSearchCondition(input.search),
     );
     if (search) conditions.push(search);

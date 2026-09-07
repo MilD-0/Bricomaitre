@@ -1,9 +1,23 @@
-import { eq, or, sql } from 'drizzle-orm';
-import { orders } from '@bric/db/schema';
+import { eq, ilike, or, sql } from 'drizzle-orm';
+import { ecotrackCommunes, orders } from '@bric/db/schema';
 import type { getDb } from '@bric/db/client';
 import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 
 export type OrderSearchDatabase = Pick<ReturnType<typeof getDb>, 'select' | 'execute'>;
+
+export function orderCitySearchCondition(search: string) {
+  const pattern = `%${search}%`;
+  return or(
+    ilike(orders.city, pattern),
+    // Match the same wilaya-scoped IDs as commune display resolution. The
+    // uncorrelated set lets PostgreSQL hash matching communes once per query.
+    sql`(${orders.state}, btrim(${orders.city})) in (
+      select ${ecotrackCommunes.wilayaId}, cast(${ecotrackCommunes.communeId} as text)
+      from ${ecotrackCommunes}
+      where ${ecotrackCommunes.name} ilike ${pattern}
+    )`,
+  );
+}
 
 export class OrderSearchTimeoutError extends Error {
   constructor() {

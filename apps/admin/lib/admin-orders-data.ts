@@ -19,6 +19,7 @@ import type {
 import { orderProductSearchCondition } from './order-product-search';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import {
+  orderCitySearchCondition,
   orderIdentifierSearchCondition,
   withOrderSearchTimeout,
   type OrderSearchDatabase,
@@ -322,7 +323,7 @@ async function loadOrderPageRows(
         ilike(orders.note, `%${query.search}%`),
         ilike(orders.homeAddress, `%${query.search}%`),
         sql`cast(${orders.state} as text) ILIKE ${`%${query.search}%`}`,
-        ilike(orders.city, `%${query.search}%`),
+        orderCitySearchCondition(query.search),
         orderProductSearchCondition(query.search),
       ))
     : undefined;

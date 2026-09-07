@@ -32,6 +32,7 @@ import type {
 import { orderProductSearchCondition } from './order-product-search';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import {
+  orderCitySearchCondition,
   orderIdentifierSearchCondition,
   withOrderSearchTimeout,
   type OrderSearchDatabase,
@@ -242,7 +243,7 @@ async function loadActiveShipmentSearchRows(
                 ilike(orders.phoneNumber1, search),
                 ilike(orders.phoneNumber2, search),
                 ilike(orders.homeAddress, search),
-                ilike(orders.city, search),
+                orderCitySearchCondition(query.search),
                 ilike(ecotrackWilayas.name, search),
                 sql`cast(${orders.state} as text) ILIKE ${search}`,
                 ilike(ecotrackOrderStates.currentStatus, search),
