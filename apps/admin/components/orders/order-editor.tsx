@@ -186,15 +186,21 @@ function OrderEditorBody({
   });
 
   const selectedProducts = summarizeEditableProducts(draft.products);
-  const productSubtotal = selectedProducts.reduce((sum, product) => sum + product.lineTotal, 0);
-  const deliveryFee = resolveEcotrackDeliveryFee(
-    catalog,
-    draft.delivery,
-    draft.state,
-    order.deliveryFee,
-  );
-  // Snapshot line totals already contain the effective promotional price.
-  const total = productSubtotal + deliveryFee;
+  const commercialChanges = buildOrderChanges(baseline, draft, catalog);
+  const productsChanged = commercialChanges.cartProducts !== undefined;
+  const deliveryChanged =
+    commercialChanges.delivery !== undefined ||
+    commercialChanges.state !== undefined ||
+    commercialChanges.city !== undefined;
+  const productSubtotal = productsChanged
+    ? selectedProducts.reduce((sum, product) => sum + product.lineTotal, 0)
+    : (baseline.subtotalOverride ?? baseline.productSubtotal);
+  const deliveryFee = deliveryChanged
+    ? resolveEcotrackDeliveryFee(catalog, draft.delivery, draft.state, baseline.deliveryFee)
+    : baseline.deliveryFee;
+  // Unrelated edits retain accepted amounts, including manual subtotal overrides.
+  const total =
+    productsChanged || deliveryChanged ? productSubtotal + deliveryFee : baseline.totalAmount;
   const wilayaId = Number.parseInt(draft.state, 10);
   const communeOptions = Number.isInteger(wilayaId)
     ? (catalog?.communes.filter((entry) => entry.wilayaId === wilayaId) ?? [])

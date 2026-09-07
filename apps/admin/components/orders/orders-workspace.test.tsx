@@ -12,6 +12,7 @@ import { ORDER_STATUS } from '../../lib/orders';
 import { toast } from '../../lib/toast';
 import { server } from '../../test/mocks/server';
 import { OrdersWorkspace } from './orders-workspace';
+import { OrderEditor } from './order-editor';
 import { OrderSalesDesk } from './order-sales-desk';
 import { formatOrderListTimestamp } from './orders-workspace-presenters';
 
@@ -1178,4 +1179,44 @@ describe('OrdersWorkspace', () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 720, left: 0, behavior: 'auto' });
   });
+});
+
+it('keeps accepted order totals for unrelated edits and previews commercial edits explicitly', async () => {
+  const order = {
+    ...makeOrder(1, 'Customer One', 0),
+    subtotalOverride: 3000,
+    productSubtotal: 4000,
+    deliveryFee: 500,
+    totalAmount: 3500,
+  };
+  server.use(
+    http.get('/api/orders/1/customer', () => HttpResponse.json({ available: false })),
+    http.get('/api/orders/1', () => HttpResponse.json({ ok: true, item: order })),
+  );
+  const onSave = vi.fn(async () => null);
+  const catalog = {
+    wilayas: [{ wilayaId: 16, name: 'Algiers' }],
+    communes: [],
+    weightFees: [],
+    lastSync: null,
+    serviceFees: [{ serviceType: 'livraison', wilayaId: 16, homeFee: '700', stopDeskFee: '400' }],
+  };
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <OrderEditor order={order} catalog={catalog} writable pending={false} onSave={onSave} />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText(/DZD\s3,500/)).toBeVisible();
+  expect(screen.queryByText(/DZD\s4,700/)).not.toBeInTheDocument();
+  await userEvent.type(screen.getByRole('textbox', { name: 'Notes' }), ' extra');
+  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() =>
+    expect(onSave).toHaveBeenCalledWith(order, { note: 'Call before delivery. extra' }),
+  );
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Delivery type' }), '1');
+  expect(screen.getByText(/DZD\s3,400/)).toBeVisible();
 });
