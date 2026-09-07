@@ -231,7 +231,9 @@ function ScalarField({
       {label}
       <Control
         value={stringValue}
-        onChange={(event) => onChange(event.target.value || (value === null ? null : ''))}
+        onChange={(event) =>
+          onChange(name === 'imageUrl' && !event.target.value.trim() ? null : event.target.value)
+        }
       />
     </label>
   );

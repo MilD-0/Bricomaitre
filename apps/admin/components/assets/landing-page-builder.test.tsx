@@ -130,6 +130,36 @@ describe('LandingPageBuilder', () => {
     );
   });
 
+  it('saves cleared optional images as null after editing their URLs', async () => {
+    const user = userEvent.setup();
+    let body: Record<string, unknown> | null = null;
+    server.use(
+      http.patch('/api/landing-pages/7', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 7, active: false, currentRevision: 4 });
+      }),
+    );
+    renderBuilder();
+    await user.click(screen.getByRole('button', { name: /3 · Final action/ }));
+    const image = screen.getByRole('textbox', { name: 'Image URL' });
+    await user.type(image, 'https://cdn.example.com/drill.jpg');
+    await user.clear(image);
+    await user.type(screen.getByRole('textbox', { name: 'Heading' }), '!');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(body).not.toBeNull());
+    expect(body).toMatchObject({
+      document: {
+        blocks: expect.arrayContaining([
+          expect.objectContaining({ type: 'final-cta', imageUrl: null, heading: 'Order now!' }),
+        ]),
+      },
+    });
+    expect(
+      landingPageDocumentSchema.safeParse((body as Record<string, unknown> | null)?.document)
+        .success,
+    ).toBe(true);
+  });
+
   it('preserves unsaved work and offers reload after a stale revision conflict', async () => {
     const user = userEvent.setup();
     server.use(
