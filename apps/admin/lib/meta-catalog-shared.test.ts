@@ -169,3 +169,25 @@ describe('buildMetaCatalogExportRows', () => {
     expect(csv).toContain('https://bricomaitre.com/products/quoted-product');
   });
 });
+
+it.each([100, 120, 0, null])('does not export a false discount for old price %s', (oldPrice) => {
+  const [row] = buildMetaCatalogExportRows(
+    [
+      {
+        id: 1,
+        slug: 'drill',
+        title: 'Drill',
+        description: '',
+        price: 120,
+        oldPrice,
+        images: [],
+        brandId: null,
+        inStock: true,
+        inventoryQuantity: 10,
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+    new Map(),
+  );
+  expect(row).toMatchObject({ price: '120 DZD', salePrice: '' });
+});

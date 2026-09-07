@@ -79,7 +79,7 @@ export function buildMetaCatalogExportRows(
   return products.map((product) => {
     const price = parseProductPrice(product.price) ?? 0;
     const compareAtPrice = parseProductPrice(product.oldPrice);
-    const hasCompareAtPrice = compareAtPrice !== null && compareAtPrice > 0;
+    const hasCompareAtPrice = compareAtPrice !== null && compareAtPrice > price;
 
     return {
       id: String(product.id),
