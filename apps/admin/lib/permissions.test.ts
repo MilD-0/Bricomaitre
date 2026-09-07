@@ -37,10 +37,10 @@ describe('permissions role matrix', () => {
   });
 
   it('limits full product exports to admin and developer roles', () => {
-    expect(canExportAllProducts('viewer')).toBe(false);
-    expect(canExportAllProducts('employee')).toBe(false);
-    expect(canExportAllProducts('admin')).toBe(true);
-    expect(canExportAllProducts('developer')).toBe(true);
+    expect(canExportAllProducts({ role: 'viewer' })).toBe(false);
+    expect(canExportAllProducts({ role: 'employee' })).toBe(false);
+    expect(canExportAllProducts({ role: 'admin' })).toBe(true);
+    expect(canExportAllProducts({ role: 'developer' })).toBe(true);
   });
 
   it('uses the analytics permission for dashboards and profit data', () => {
@@ -51,4 +51,14 @@ describe('permissions role matrix', () => {
     expect(canViewProfitStats(['analytics_manage'])).toBe(true);
     expect(canViewProfitStats(['ops_view'])).toBe(false);
   });
+});
+
+it('rejects reserved custom names and denies privileged exports to existing custom-role collisions', () => {
+  for (const name of ['Admin', ' DEVELOPER ', '--admin--', 'Employee', 'Viewer']) {
+    expect(
+      roleDefinitionFormSchema.safeParse({ name, permissions: ['assets_write'] }).success,
+    ).toBe(false);
+  }
+  expect(canExportAllProducts({ role: 'admin', roleDefinitionId: 7 })).toBe(false);
+  expect(canExportAllProducts({ role: 'developer', roleDefinitionId: 8 })).toBe(false);
 });

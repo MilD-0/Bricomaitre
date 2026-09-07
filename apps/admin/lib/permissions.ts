@@ -21,7 +21,21 @@ export type PermissionKey = z.infer<typeof permissionKeySchema>;
 export const permissionCatalog: readonly PermissionKey[] = permissionKeySchema.options;
 
 export const roleDefinitionFormSchema = z.object({
-  name: z.string().trim().min(3).max(60),
+  name: z
+    .string()
+    .trim()
+    .min(3)
+    .max(60)
+    .refine(
+      (name) =>
+        !isBuiltInRole(
+          name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, ''),
+        ),
+      'Choose a name other than a built-in role.',
+    ),
   description: z.string().trim().max(160).optional().nullable(),
   permissions: z.array(permissionKeySchema).min(1),
 });
@@ -108,8 +122,9 @@ export function hasPermission(access: Role | readonly PermissionKey[], permissio
   return resolvePermissionSet(access).includes(permission);
 }
 
-export function canExportAllProducts(role: unknown) {
-  const normalizedRole = normalizeRole(role);
+export function canExportAllProducts(access: { role: unknown; roleDefinitionId?: number | null }) {
+  if (access.roleDefinitionId != null) return false;
+  const normalizedRole = normalizeRole(access.role);
   return normalizedRole === 'admin' || normalizedRole === 'developer';
 }
 

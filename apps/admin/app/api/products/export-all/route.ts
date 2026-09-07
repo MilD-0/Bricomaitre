@@ -22,7 +22,7 @@ async function requireExportAccess() {
     return { session, denied: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  if (!canExportAllProducts(session.user.role)) {
+  if (!canExportAllProducts(session.user)) {
     return { session, denied: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 

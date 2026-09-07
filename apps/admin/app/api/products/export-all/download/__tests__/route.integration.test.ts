@@ -3,18 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from '../route';
 
-const { authMock, canExportAllProductsMock, getLatestExportJobMock } = vi.hoisted(() => ({
+const { authMock, getLatestExportJobMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
-  canExportAllProductsMock: vi.fn(),
   getLatestExportJobMock: vi.fn(),
 }));
 
 vi.mock('../../../../../../lib/auth', () => ({
   auth: authMock,
-}));
-
-vi.mock('../../../../../../lib/permissions', () => ({
-  canExportAllProducts: canExportAllProductsMock,
 }));
 
 vi.mock('../../../../../../lib/background-jobs', () => ({
@@ -25,13 +20,11 @@ vi.mock('../../../../../../lib/background-jobs', () => ({
 describe('app/api/products/export-all/download/route', () => {
   beforeEach(() => {
     authMock.mockReset();
-    canExportAllProductsMock.mockReset();
     getLatestExportJobMock.mockReset();
 
     authMock.mockResolvedValue({
       user: { id: 'user-1', email: 'admin@example.com', role: 'admin' },
     });
-    canExportAllProductsMock.mockReturnValue(true);
     getLatestExportJobMock.mockResolvedValue({
       id: 'job-1',
       downloadPath: 'https://cdn.example.com/products-export.xlsx',
@@ -48,7 +41,9 @@ describe('app/api/products/export-all/download/route', () => {
   });
 
   it('returns 403 for non privileged roles', async () => {
-    canExportAllProductsMock.mockReturnValue(false);
+    authMock.mockResolvedValue({
+      user: { id: 'user-1', email: 'ops@example.com', role: 'employee' },
+    });
 
     const response = await GET(
       new NextRequest('http://localhost/api/products/export-all/download?jobId=job-1'),
@@ -78,4 +73,22 @@ describe('app/api/products/export-all/download/route', () => {
     expect(getLatestExportJobMock).toHaveBeenCalledWith('admin-product-export', 'user-1');
     expect(response.headers.get('location')).toBe('https://cdn.example.com/products-export.xlsx');
   });
+});
+
+it('denies an existing assets-only custom role whose slug collides with admin', async () => {
+  getLatestExportJobMock.mockClear();
+  authMock.mockResolvedValue({
+    user: {
+      id: 'user-1',
+      email: 'ops@example.com',
+      role: 'admin',
+      roleDefinitionId: 7,
+      permissions: ['assets_write'],
+    },
+  });
+  const response = await GET(
+    new NextRequest('http://localhost/api/products/export-all/download?jobId=job-1'),
+  );
+  expect(response.status).toBe(403);
+  expect(getLatestExportJobMock).not.toHaveBeenCalled();
 });

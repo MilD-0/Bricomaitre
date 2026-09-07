@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!canExportAllProducts(session.user.role)) {
+  if (!canExportAllProducts(session.user)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
