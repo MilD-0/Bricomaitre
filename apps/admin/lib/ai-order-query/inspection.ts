@@ -1,5 +1,5 @@
 import { getDb } from '@bric/db/client';
-import { ecotrackOrderStates } from '@bric/db/schema';
+import { ecotrackOrderStates, orderLineItems } from '@bric/db/schema';
 import { parseNumericAmount } from '@bric/storefront-core/order-domain';
 import { inArray } from 'drizzle-orm';
 import { z } from 'zod';
@@ -30,10 +30,14 @@ export async function inspectAdminOrderDetails(raw: z.input<typeof adminAiOrderI
   const input = adminAiOrderInspectionSchema.parse(raw);
   const requestedIds = [...new Set(input.orderIds)];
   const db = getDb();
-  const [loadedOrders, shipments] = await Promise.all([
+  const [loadedOrders, shipments, capturedLines] = await Promise.all([
     loadOrderRecordsByIds(requestedIds, db, { includeHistory: true }),
     db.query.ecotrackOrderStates.findMany({
       where: inArray(ecotrackOrderStates.orderId, requestedIds),
+    }),
+    db.query.orderLineItems.findMany({
+      where: inArray(orderLineItems.orderId, requestedIds),
+      orderBy: orderLineItems.id,
     }),
   ]);
   const shipmentByOrderId = new Map(
@@ -59,6 +63,22 @@ export async function inspectAdminOrderDetails(raw: z.input<typeof adminAiOrderI
       return [
         {
           ...order,
+          capturedLineItems: capturedLines
+            .filter((line) => line.orderId === item.id)
+            .map((line) => ({
+              productId: line.productId,
+              capturedReference: line.contentId,
+              title: line.titleSnapshot,
+              quantity: line.quantity,
+              originalUnitPriceDzd: parseNumericAmount(line.originalUnitPrice),
+              effectiveUnitPriceDzd: parseNumericAmount(line.effectiveUnitPrice),
+              unitPurchaseCostDzd:
+                line.unitPurchasePriceSnapshot === null
+                  ? null
+                  : parseNumericAmount(line.unitPurchasePriceSnapshot),
+              purchaseCostSource: line.purchaseCostSource,
+              lineTotalDzd: parseNumericAmount(line.lineTotal),
+            })),
           inHouseStatus: adminAiInHouseOrderStatus(inHouseStatus, item.noAnswerCount),
           inHouseStatusHistory: statusHistory.map(({ status, ...entry }) => ({
             ...entry,

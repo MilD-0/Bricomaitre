@@ -1,4 +1,6 @@
 export const ADMIN_AI_ORDERS_KNOWLEDGE = {
+  payment:
+    'Orders are phone-confirmed cash on delivery; there is no online payment-provider refund workflow.',
   happyPath:
     'In-house not_contacted → operator calls → no_answer, confirmed, or cancelled → confirmed is posted to EcoTrack → in-house posted and EcoTrack prete_a_expedier → EcoTrack normally owns further shipment progress.',
   statusSystems:

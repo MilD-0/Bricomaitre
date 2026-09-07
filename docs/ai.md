@@ -61,7 +61,8 @@ action.
 
 The tools distinguish four kinds of work:
 
-- reads return current evidence without changing state;
+- reads return application evidence; live carrier inspection can refresh and
+  persist shipment evidence, while stored-order inspection does not refresh it;
 - previews establish the exact cohort or proposed effect before a dependent
   action;
 - direct mutations use canonical application services and return persisted
@@ -101,11 +102,52 @@ and multi-turn cart changes. Admin scenarios cover workflow knowledge, live
 counts, exact entity inspection, analytics interpretation, cross-domain
 investigation, follow-ups, and mutations.
 
-Evaluations exercise real read tools. Mutation tools keep their production
-schema and description but return non-writing receipts; Storefront cart changes
-remain simulated. This checks whether the model finds and uses the right
-evidence without changing production data. The suites judge outcomes and tool
-evidence rather than exact wording or one prescribed trajectory.
+Run the full Admin matrix from `apps/admin` with
+`pnpm exec tsx scripts/ai-eval-sandbox.ts all`. A suite name and optional scenario
+ID or comma-separated IDs select a smaller run. It copies the loopback database configured in the project
+environment, adds known test records, and starts private Redis and provider
+simulators. The original database and existing services stay untouched.
+The disposable copy starts with fresh picking drafts and known orders with status history.
+
+The matrix executes real tool implementations, database mutations, and job
+handlers. SQL read-back records changes independently of tool receipts. Carrier,
+Meta, and Search Console requests use local HTTP simulators; content-generation
+providers use controlled responses. Export files are saved locally, and cache
+invalidation is simulated. Those boundaries do not establish live-provider or
+generated-copy quality. Storefront cart evaluations remain simulated.
+
+The launcher requires Docker and local database create/drop privileges. It removes
+its disposable database and Redis container after the run; private evidence and
+the source dump remain in the printed temporary directory. These artifacts can
+contain customer data and must not be committed or published.
+
+Admin eval turns use the live step, output-token, request-timeout, retry, and
+conversation-evidence limits from the project environment. Analytics tools retain
+their configured data limits. The eval has no separate synthesis pass, so the
+synthesis-evidence limit applies only to live response recovery.
+Set `ADMIN_AI_EVAL_EFFORT=high` to retry at high effort; the default is medium.
+Each completed turn records its model and effort.
+`ADMIN_AI_EVAL_HIGH_SCENARIOS` accepts comma-separated scenario IDs for high-effort
+exceptions. Set `ADMIN_AI_EVAL_SOURCE=demo` to copy the running Docker demo into
+the local disposable database. The demo barcode prompt uses its actual product
+barcode. Large order tables retain full write-target rows plus fingerprints for
+other rows, so unexpected changes outside the selected orders remain visible.
+
+The Admin `workflows` suite adds ordinary operator requests for catalog upkeep,
+receiving, order handling, carrier work, reporting settings, and job progress.
+Together with the existing suites, its coverage expectations name every registered
+tool; a registry test catches new tools without a scenario. Expectations are not
+sent to the model. The older `run-ai-evals.ts` command is a read-only dry run:
+its mutations still return non-writing receipts and carrier inspection uses
+stored evidence without refreshing it.
+
+Each scenario's last log row includes returned tools, dry-run tools, and missing
+expected tools. Missing data or a blocked follow-up does not count as coverage.
+A returned tool result is not a success verdict. Judge the requested outcome,
+saved state, and answer as an operator, allowing recovery from intermediate tool
+errors. Scenario reports include write checks, row changes, job results, and a
+pending operator verdict. `coverage.json` lists tools not reached in the run;
+process completion alone does not establish satisfactory outcomes or full coverage.
 
 Shared provider contracts live in [`packages/ai-core`](../packages/ai-core).
 The current assistant boundaries are implemented in

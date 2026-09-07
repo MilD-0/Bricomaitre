@@ -6,10 +6,14 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   remove: vi.fn(),
   reorder: vi.fn(),
+  selection: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
 vi.mock('./admin-assets-data', () => ({ loadAssetsData: mocks.load }));
+vi.mock('@bric/storefront-core/catalog', () => ({
+  readStorefrontProductsForSelectionPage: mocks.selection,
+}));
 vi.mock('./asset-mutations', () => ({
   createAdminAsset: mocks.create,
   patchAdminAsset: mocks.replace,
@@ -93,6 +97,7 @@ describe('Admin AI assets', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.load.mockResolvedValue(assets);
+    mocks.selection.mockResolvedValue({ items: [], total: 2 });
   });
 
   it('inspects a bounded surface with active-state counts and exact missing IDs', async () => {
@@ -103,10 +108,35 @@ describe('Admin AI assets', () => {
       banners: {
         counts: { total: 2, active: 1, inactive: 1, matched: 1, returned: 1 },
         items: [assets.banners[0]],
+        pagination: { page: 1, limit: 10, totalItems: 1, totalPages: 1, hasNextPage: false },
         requestedIds: [1, 99],
         missingIds: [99],
       },
     });
+  });
+
+  it('exposes canonical group membership separately from category hierarchy totals', async () => {
+    const result = await inspectAdminAiAssets({ kind: 'featured-group' });
+    expect(result.featuredGroups?.items[0]).toMatchObject({
+      id: 7,
+      membership: { totalProducts: 2, categoryScope: 'direct_only' },
+    });
+    expect(mocks.selection).toHaveBeenCalledWith('database', assets.featuredGroups[0], {
+      page: 1,
+      limit: 1,
+    });
+  });
+
+  it('lets an operator discover all reorder IDs beyond the first fifty assets', async () => {
+    const banners = Array.from({ length: 51 }, (_, i) => ({ ...assets.banners[0], id: i + 1 }));
+    mocks.load.mockResolvedValue({ ...assets, banners });
+    const first = await inspectAdminAiAssets({ kind: 'banner', limit: 50 });
+    const second = await inspectAdminAiAssets({ kind: 'banner', page: 2, limit: 50 });
+    expect(first.banners?.pagination).toMatchObject({ totalItems: 51, hasNextPage: true });
+    expect(second.banners?.pagination).toMatchObject({ page: 2, hasNextPage: false });
+    expect([...first.banners!.items, ...second.banners!.items].map((item) => item.id)).toEqual(
+      banners.map((item) => item.id),
+    );
   });
 
   it('forwards named fields and reports the canonical mutation receipt', async () => {

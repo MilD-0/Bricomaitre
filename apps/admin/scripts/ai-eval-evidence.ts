@@ -118,7 +118,7 @@ export function savedEvidence(result: {
     toolResults: ReadonlyArray<{ toolName: string; input: unknown; output: unknown }>;
   }>;
 }) {
-  const evidence = result.steps.flatMap((step) =>
+  return result.steps.flatMap((step) =>
     step.toolResults.map((toolResult) => ({
       type: 'tool-result',
       toolName: toolResult.toolName,
@@ -126,6 +126,4 @@ export function savedEvidence(result: {
       output: toolResult.output,
     })),
   );
-  const serialized = JSON.stringify(evidence);
-  return serialized.length <= 12_000 ? serialized : `${serialized.slice(0, 11_900)}…`;
 }

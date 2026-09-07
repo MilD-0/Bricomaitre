@@ -172,8 +172,10 @@ function compactShipment(item: EcotrackShipmentDetail) {
 
 export async function inspectAdminAiEcotrackShipments(
   input: z.input<typeof adminAiEcotrackShipmentInspectionSchema>,
+  options: { refresh?: boolean } = {},
 ) {
   const parsed = adminAiEcotrackShipmentInspectionSchema.parse(input);
+  const refresh = options.refresh !== false;
   if (parsed.scope === 'filtered') {
     const result = await loadEcotrackOrdersPageData(
       {
@@ -185,17 +187,24 @@ export async function inspectAdminAiEcotrackShipments(
         sortKey: parsed.sortKey,
         sortDirection: parsed.sortDirection,
       },
-      true,
-      { ensureFreshVisiblePage: true },
+      refresh,
+      { ensureFreshVisiblePage: refresh },
     );
-    return { kind: 'ecotrack_shipments' as const, scope: parsed.scope, ...result };
+    return {
+      kind: 'ecotrack_shipments' as const,
+      scope: parsed.scope,
+      refreshEnabled: refresh,
+      ...result,
+    };
   }
 
   const items: EcotrackShipmentDetail[] = [];
   const failures: Array<{ orderId: number; message: string }> = [];
   for (const orderId of uniqueOrderIds(parsed.orderIds)) {
     try {
-      const item = await loadEcotrackOrderDetail(orderId);
+      const item = refresh
+        ? await loadEcotrackOrderDetail(orderId)
+        : await loadEcotrackOrderDetail(orderId, undefined, { refresh: false });
       if (item) items.push(item);
       else failures.push({ orderId, message: `Order #${orderId}: ECOTRACK shipment not found.` });
     } catch (error) {
@@ -208,6 +217,7 @@ export async function inspectAdminAiEcotrackShipments(
   return {
     kind: 'ecotrack_shipments' as const,
     scope: parsed.scope,
+    refreshEnabled: refresh,
     items,
     failures,
     requestedCount: uniqueOrderIds(parsed.orderIds).length,

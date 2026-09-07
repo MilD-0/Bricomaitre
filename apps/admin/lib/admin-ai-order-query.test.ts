@@ -7,13 +7,17 @@ const mocks = vi.hoisted(() => ({
   groupedTotal: 0,
   loadOrderRecordsByIds: vi.fn(),
   loadShipment: vi.fn(),
+  loadCapturedLines: vi.fn(),
   select: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({
   getDb: () => ({
     select: mocks.select,
-    query: { ecotrackOrderStates: { findMany: mocks.loadShipment } },
+    query: {
+      ecotrackOrderStates: { findMany: mocks.loadShipment },
+      orderLineItems: { findMany: mocks.loadCapturedLines },
+    },
   }),
 }));
 vi.mock('./admin-orders-data', () => ({ loadOrderRecordsByIds: mocks.loadOrderRecordsByIds }));
@@ -224,6 +228,7 @@ describe('admin AI order query', () => {
 describe('admin AI exact order inspection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.loadCapturedLines.mockResolvedValue([]);
     mocks.loadOrderRecordsByIds.mockImplementation(async () => [
       {
         ...orderRow(),
@@ -281,6 +286,46 @@ describe('admin AI exact order inspection', () => {
     });
   });
 
+  it.each([
+    ['800.50', 'captured', 800.5],
+    ['0.00', 'captured', 0],
+    [null, 'legacy_not_recorded', null],
+  ])(
+    'returns captured purchase cost %s without a catalog fallback',
+    async (cost, source, expected) => {
+      mocks.loadCapturedLines.mockResolvedValue([
+        {
+          orderId: 91,
+          productId: null,
+          contentId: 'legacy-drill',
+          titleSnapshot: 'Perceuse historique',
+          quantity: 2,
+          originalUnitPrice: '1500.00',
+          effectiveUnitPrice: '1400.00',
+          unitPurchasePriceSnapshot: cost,
+          purchaseCostSource: source,
+          lineTotal: '2800.00',
+        },
+        { orderId: 92, contentId: 'another-order' },
+      ]);
+      const result = await inspectAdminOrderDetails({ orderIds: [91] });
+      expect(mocks.loadCapturedLines).toHaveBeenCalledOnce();
+      expect(result.items[0].capturedLineItems).toEqual([
+        {
+          productId: null,
+          capturedReference: 'legacy-drill',
+          title: 'Perceuse historique',
+          quantity: 2,
+          originalUnitPriceDzd: 1500,
+          effectiveUnitPriceDzd: 1400,
+          unitPurchaseCostDzd: expected,
+          purchaseCostSource: source,
+          lineTotalDzd: 2800,
+        },
+      ]);
+    },
+  );
+
   it('includes captured order history and a deleted shipment without conflating statuses', async () => {
     const result = await inspectAdminOrderDetails({ orderIds: [404, 91, 91] });
 
@@ -288,6 +333,7 @@ describe('admin AI exact order inspection', () => {
       includeHistory: true,
     });
     expect(mocks.loadOrderRecordsByIds).toHaveBeenCalledOnce();
+    expect(result.items[0].capturedLineItems).toEqual([]);
     expect(mocks.loadShipment).toHaveBeenCalledOnce();
     expect(result.requestedIds).toEqual([404, 91]);
     expect(result.missingIds).toEqual([404]);

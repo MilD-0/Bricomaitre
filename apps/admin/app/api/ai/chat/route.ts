@@ -19,7 +19,8 @@ import { requireAppAccess } from '@/lib/rbac';
 import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages, aiRuns } from '@bric/db/schema';
-import { stepCountIs, streamText } from 'ai';
+import { streamText } from 'ai';
+import { adminAiGenerationOptions } from '@/lib/admin-ai-generation-options';
 import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
@@ -180,9 +181,8 @@ export async function POST(request: NextRequest) {
         autoAcceptProposals: parsed.data.autoAcceptProposals,
       },
     });
-    const abortSignal = config.adminRequestTimeoutMs
-      ? AbortSignal.any([request.signal, AbortSignal.timeout(config.adminRequestTimeoutMs)])
-      : request.signal;
+    const generationOptions = adminAiGenerationOptions(config, request.signal);
+    const abortSignal = generationOptions.abortSignal ?? request.signal;
     const createResult = () =>
       streamText({
         model: languageModel,
@@ -190,10 +190,7 @@ export async function POST(request: NextRequest) {
         messages,
         tools,
         toolChoice: 'auto',
-        stopWhen: config.adminMaxSteps ? stepCountIs(config.adminMaxSteps) : () => false,
-        abortSignal,
-        maxRetries: config.maxRetries,
-        ...(config.adminMaxOutputTokens ? { maxOutputTokens: config.adminMaxOutputTokens } : {}),
+        ...generationOptions,
       });
 
     const responseStream = createAdminAiResponseStream({

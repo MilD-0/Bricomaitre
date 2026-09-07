@@ -107,6 +107,7 @@ export async function loadEcotrackOrdersPageData(
 export async function loadEcotrackOrderDetail(
   orderId: number,
   actor?: ActionActor | null,
+  options: { refresh?: boolean } = {},
 ): Promise<EcotrackOrderDetail | null> {
   if (!hasDb()) {
     return null;
@@ -119,6 +120,10 @@ export async function loadEcotrackOrderDetail(
   }
 
   try {
+    if (options.refresh === false) {
+      const [detail] = await buildEcotrackOrderDetailsFromRows(db, [initialRow]);
+      return detail ?? null;
+    }
     return await ensureFreshShipmentRow(db, initialRow, { actor });
   } catch (error) {
     throw new Error(formatEcotrackActionError('detail', initialRow, error).summary);

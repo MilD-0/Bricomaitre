@@ -37,7 +37,7 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
   fridayAccounting:
     'After activation, a Friday with no automatic or manual gross-profit/confirmed activity is a rest day. Actual Meta spend stays on Friday but calculator economics roll it to the next working day. Friday-start weekly totals stay invariant; a trailing Friday may remain pending. Missing order data is never a rest day. No real event timestamp is rewritten.',
   projection:
-    'Forecasts use the stronger of a weekday-weighted completed-day baseline and known pending demand, with confidence, historical conversion/delay, planning returns, and fallback cost. They do not blindly add baseline and pipeline. Stale pending demand is capped at seven days. Dotted values are modeled; solid values are observed.',
+    'Forecasts backtest weekday and seasonal-blend baselines on completed days, defaulting to the blend with short history. Known pending demand provides a floor, not an addition, with historical conversion/delay, planning returns, and fallback cost. Stale pending demand is capped at seven days. Dotted values are modeled; solid values are observed.',
   sourcePrecedence: {
     demand: 'Bricomaitre orders and immutable lines',
     posting: 'Local status history',
@@ -56,6 +56,5 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
     'Keep Meta-reported purchases separate from Bricomaitre orders. Exact retained entity attribution starts around 2026-08-10 and immutable capture on 2026-08-17. Never fabricate earlier attribution. Spend coverage can exceed attributed-order coverage. Creative metrics are diagnostic correlations, not causal proof.',
   interpretation:
     'Customer identity is normalized primarily by phone. Product scatter and tables are filtered decision views; use headline aggregates for totals. Delivery speed is elapsed calendar time. Meta regions and customer wilayas are separate aggregates. Search Console is aggregate and row-limited, lower average position is better, and it does not provide deterministic order attribution. GA4 is not canonical or required.',
-  materializedFacts:
-    'Facts are a performance cache, not alternative semantics. Use requires a complete date spine, semantics version 5, fresh dependencies and assumptions, and no unresolved Friday roll-forward; otherwise canonical tables are computed live.',
+  materializedFacts: `Facts are a performance cache, not alternative semantics. Use requires a complete date spine, semantics version ${ANALYTICS_FACT_SEMANTICS_VERSION}, fresh dependencies and assumptions, and no unresolved Friday roll-forward; otherwise canonical tables are computed live.`,
 } as const;

@@ -151,7 +151,7 @@ const guidanceByTopic = {
     owner: 'Storefront configuration',
     facts: {
       phone:
-        'Storefront phone support stays enabled; contactPhone changes the customer-facing number.',
+        'Storefront phone support stays enabled; contactPhone must be a valid Algerian number and cannot be cleared.',
       assistant:
         'Storefront AI models must be selected from the configured model choices returned by the configuration read.',
       announcement:
@@ -163,11 +163,11 @@ const guidanceByTopic = {
     facts: {
       visibility: 'Only active assets appear on Storefront, ordered by sortOrder.',
       featuredGroups:
-        'A featured group combines its directly selected products with active products from its selected brands and categories.',
+        'A featured group combines selected products with active products from selected brands and exact categories, not descendants. Use its inspected membership count, not parent-category totals.',
       productCards:
         'Product cards are bilingual editorial cards on the homepage, each tied to one product.',
       recommendation:
-        'prioritizeRecommendations gives a featured group’s selected products priority ahead of normal recommendation signals in the Products recommended order.',
+        'Active groups with prioritizeRecommendations rank their matching products ahead of stock and sales signals in Products recommended order; search relevance still comes first.',
     },
   },
   landing_pages: {

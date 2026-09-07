@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readStorefrontProductsForSelectionPage } from '@bric/storefront-core/catalog';
 
 import { getDb } from '@bric/db/client';
 import { loadAssetsData } from './admin-assets-data';
@@ -21,7 +22,7 @@ const assetKindSchema = z.enum(['banner', 'featured-group', 'product-card']);
 const requiredImageUrlSchema = z.string().trim().url().max(2_048).describe('Absolute image URL.');
 
 export const ADMIN_AI_INSPECT_ASSETS_TOOL_DESCRIPTION =
-  'Read current banners, featured groups, or product cards, with active-state counts and exact missing IDs when requested.';
+  'Read current banners, featured groups, or product cards in Storefront order, with counts, pagination, and exact missing IDs. Featured groups include canonical product counts; selected categories match directly, not descendants. Read every page with active unset before reordering.';
 
 export const ADMIN_AI_MANAGE_ASSETS_TOOL_DESCRIPTION =
   'Create, update, or permanently delete one Storefront asset. Updates change only named fields and preserve everything else.';
@@ -34,6 +35,7 @@ export const adminAiAssetInspectionSchema = z
     kind: z.enum(['all', ...assetKindSchema.options]).default('all'),
     ids: z.array(z.number().int().positive()).max(50).default([]),
     active: z.boolean().nullable().default(null),
+    page: z.number().int().positive().default(1),
     limit: z.number().int().min(1).max(50).default(20),
   })
   .strict()
@@ -176,7 +178,8 @@ function summarizeRecords<T extends { id: number; active: boolean }>(
       (idSet.size === 0 || idSet.has(record.id)) &&
       (input.active === null || record.active === input.active),
   );
-  const returned = matched.slice(0, input.limit);
+  const offset = (input.page - 1) * input.limit;
+  const returned = matched.slice(offset, offset + input.limit);
   const foundIds = new Set(records.map((record) => record.id));
   return {
     counts: {
@@ -187,6 +190,13 @@ function summarizeRecords<T extends { id: number; active: boolean }>(
       returned: returned.length,
     },
     items: returned,
+    pagination: {
+      page: input.page,
+      limit: input.limit,
+      totalItems: matched.length,
+      totalPages: Math.max(1, Math.ceil(matched.length / input.limit)),
+      hasNextPage: offset + input.limit < matched.length,
+    },
     ...(input.ids.length > 0
       ? {
           requestedIds: input.ids,
@@ -199,14 +209,33 @@ function summarizeRecords<T extends { id: number; active: boolean }>(
 export async function inspectAdminAiAssets(rawInput: z.input<typeof adminAiAssetInspectionSchema>) {
   const input = adminAiAssetInspectionSchema.parse(rawInput);
   const data = await loadAssetsData();
+  const featuredGroups =
+    input.kind === 'all' || input.kind === 'featured-group'
+      ? summarizeRecords(data.featuredGroups, input)
+      : null;
+  const featuredGroupItems = featuredGroups
+    ? await Promise.all(
+        featuredGroups.items.map(async (group) => {
+          const selection = await readStorefrontProductsForSelectionPage(getDb(), group, {
+            page: 1,
+            limit: 1,
+          });
+          return {
+            ...group,
+            membership: {
+              totalProducts: selection.total,
+              categoryScope: 'direct_only' as const,
+            },
+          };
+        }),
+      )
+    : [];
   return {
     kind: 'admin_assets' as const,
     ...(input.kind === 'all' || input.kind === 'banner'
       ? { banners: summarizeRecords(data.banners, input) }
       : {}),
-    ...(input.kind === 'all' || input.kind === 'featured-group'
-      ? { featuredGroups: summarizeRecords(data.featuredGroups, input) }
-      : {}),
+    ...(featuredGroups ? { featuredGroups: { ...featuredGroups, items: featuredGroupItems } } : {}),
     ...(input.kind === 'all' || input.kind === 'product-card'
       ? { productCards: summarizeRecords(data.productCards, input) }
       : {}),

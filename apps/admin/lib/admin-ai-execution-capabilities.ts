@@ -40,6 +40,7 @@ const backgroundToolNames = new Set<string>([
   'categorize_catalog',
   'start_landing_page_work',
   'start_order_export',
+  'post_orders_to_ecotrack',
 ]);
 
 const mutatingToolNames = new Set<string>(ADMIN_AI_MUTATING_TOOL_NAMES);
@@ -54,8 +55,26 @@ export function adminAiToolConfirmsCompletedMutation(toolName: string, output: u
   const receipt = output as Record<string, unknown>;
   // Batch receipts report both committed items and failures. A failed sibling
   // must not hide durable changes or encourage repeating the entire batch.
-  if (toolName === 'adjust_inventory' || toolName === 'receive_inventory') {
+  if (['adjust_inventory', 'receive_inventory', 'update_order_status'].includes(toolName)) {
     return Array.isArray(receipt.items) && receipt.items.length > 0;
+  }
+  if (toolName === 'get_order_tracking_links') {
+    return Array.isArray(receipt.items) && receipt.items.some((item) => item?.action === 'issued');
+  }
+  if (toolName === 'update_analytics_settings') {
+    return (
+      receipt.kind === 'analytics_settings' &&
+      Boolean(receipt.current) &&
+      Array.isArray(receipt.changedFields) &&
+      receipt.changedFields.length > 0
+    );
+  }
+  if (toolName === 'sync_analytics_source') {
+    return (
+      receipt.kind === 'analytics_sync' &&
+      receipt.result != null &&
+      typeof receipt.result === 'object'
+    );
   }
   const countKey = (
     {
@@ -64,6 +83,12 @@ export function adminAiToolConfirmsCompletedMutation(toolName: string, output: u
       archive_products: 'archivedCount',
       restore_products: 'restoredCount',
       generate_product_content: 'appliedCount',
+      update_order_details: 'updatedCount',
+      delete_orders: 'deletedCount',
+      manage_analytics_costs: 'changedCount',
+      manage_analytics_day_overrides: 'changedCount',
+      manage_ecotrack_shipments: 'successCount',
+      change_ecotrack_shipments: 'successCount',
     } as Record<string, string>
   )[toolName];
   if (countKey) return typeof receipt[countKey] === 'number' && receipt[countKey] > 0;

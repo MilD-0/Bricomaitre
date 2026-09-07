@@ -74,8 +74,66 @@ it('preserves evidence of committed batch effects despite sibling failures', () 
     ['archive_products', 'archivedCount'],
     ['restore_products', 'restoredCount'],
     ['generate_product_content', 'appliedCount'],
+    ['update_order_details', 'updatedCount'],
+    ['delete_orders', 'deletedCount'],
+    ['manage_analytics_costs', 'changedCount'],
+    ['manage_analytics_day_overrides', 'changedCount'],
+    ['manage_ecotrack_shipments', 'successCount'],
+    ['change_ecotrack_shipments', 'successCount'],
   ]) {
     expect(adminAiToolConfirmsCompletedMutation(tool!, { ok: false, [key!]: 1 })).toBe(true);
     expect(adminAiToolConfirmsCompletedMutation(tool!, { ok: false, [key!]: 0 })).toBe(false);
+  }
+});
+
+it('recognizes saved status and tracking effects without treating missing rows as changes', () => {
+  for (const items of [[], [{ orderId: 1, status: 1 }]]) {
+    expect(
+      adminAiToolConfirmsCompletedMutation('update_order_status', {
+        ok: false,
+        items,
+        skipped: [{ orderId: 2, reason: 'missing' }],
+        failed: [],
+      }),
+    ).toBe(items.length > 0);
+  }
+  for (const action of ['existing', 'issued']) {
+    expect(
+      adminAiToolConfirmsCompletedMutation('get_order_tracking_links', {
+        ok: false,
+        items: [{ orderId: 1, action }],
+        failed: [{ orderId: 2 }],
+      }),
+    ).toBe(action === 'issued');
+  }
+});
+
+it('recognizes canonical analytics settings and synchronization receipts', () => {
+  expect(
+    adminAiToolConfirmsCompletedMutation('update_analytics_settings', {
+      kind: 'analytics_settings',
+      previous: { planningReturnRate: 10 },
+      current: { planningReturnRate: 20 },
+      changedFields: ['planningReturnRate'],
+    }),
+  ).toBe(true);
+  expect(
+    adminAiToolConfirmsCompletedMutation('sync_analytics_source', {
+      kind: 'analytics_sync',
+      source: 'searchConsole',
+      result: { totals: 3 },
+    }),
+  ).toBe(true);
+  for (const tool of [
+    'update_analytics_settings',
+    'sync_analytics_source',
+    'manage_analytics_costs',
+  ]) {
+    expect(
+      adminAiToolConfirmsCompletedMutation(tool, {
+        kind: 'evaluation_noop',
+        applied: false,
+      }),
+    ).toBe(false);
   }
 });

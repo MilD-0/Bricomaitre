@@ -78,9 +78,13 @@ export function buildAdminAiOrderTools({
       execute: inspectAdminOrderDetails,
     }),
     inspect_ecotrack_shipments: tool({
-      description: ADMIN_AI_INSPECT_ECOTRACK_SHIPMENTS_TOOL_DESCRIPTION,
+      description:
+        runtime.kind === 'evaluation'
+          ? 'Read stored active EcoTrack shipments by exact local order IDs or carrier filters. Evaluation never refreshes the carrier; inspect freshness timestamps and do not claim current provider verification.'
+          : ADMIN_AI_INSPECT_ECOTRACK_SHIPMENTS_TOOL_DESCRIPTION,
       inputSchema: adminAiEcotrackShipmentInspectionSchema,
-      execute: inspectAdminAiEcotrackShipments,
+      execute: (input) =>
+        inspectAdminAiEcotrackShipments(input, { refresh: runtime.kind === 'live' }),
     }),
     inspect_order_shopping_list: tool({
       description:

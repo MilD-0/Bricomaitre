@@ -33,6 +33,19 @@ import {
 
 const actor = { email: 'admin@bricomaitre.com', name: 'Admin' };
 
+it('reads stored shipment evidence without enabling carrier refresh for evaluation', async () => {
+  mocks.loadDetail.mockResolvedValue(shipment());
+  mocks.loadPage.mockResolvedValue({ items: [], pagination: { totalItems: 0 } });
+  await expect(
+    inspectAdminAiEcotrackShipments({ scope: 'exact', orderIds: [91] }, { refresh: false }),
+  ).resolves.toMatchObject({ refreshEnabled: false, foundCount: 1 });
+  expect(mocks.loadDetail).toHaveBeenCalledWith(91, undefined, { refresh: false });
+  await inspectAdminAiEcotrackShipments({ scope: 'filtered' }, { refresh: false });
+  expect(mocks.loadPage).toHaveBeenCalledWith(expect.anything(), false, {
+    ensureFreshVisiblePage: false,
+  });
+});
+
 function shipment(overrides: Record<string, unknown> = {}) {
   return {
     orderId: 91,

@@ -1,11 +1,13 @@
 import 'dotenv/config';
+import { existingScenarioTools, operatorWorkflows } from './ai-eval-workflows';
 
 export type Surface =
   'orders' | 'products' | 'inventory' | 'stats' | 'administration' | 'assets' | 'unknown';
 
-export type Scenario = { id: string; surface: Surface; turns: string[] };
+export type Scenario = { id: string; surface: Surface; turns: string[]; expectedTools?: string[] };
 
 export const suites: Record<string, Scenario[]> = {
+  workflows: operatorWorkflows,
   orders: [
     {
       id: 'orders_workflow',
@@ -30,7 +32,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'orders_exact_deleted_shipment',
       surface: 'orders',
       turns: [
-        'Inspect order 16360. What is its current in-house status, what EcoTrack record is stored, and is that carrier record active or deleted?',
+        'What is happening with order 16360? Tell me its status here and whether its carrier shipment still exists or was deleted.',
       ],
     },
     {
@@ -79,14 +81,14 @@ export const suites: Record<string, Scenario[]> = {
       id: 'catalog_brands',
       surface: 'products',
       turns: [
-        'Which five brands have no active products? Show only brand name and current/archived assignment counts.',
+        'Which five brands have no active products? Show how many current and archived products belong to each.',
       ],
     },
     {
       id: 'catalog_categories',
       surface: 'products',
       turns: [
-        'Show the five root categories with the most direct active products. Include each category’s direct children and descendant count.',
+        'Which five top-level categories have the most active products of their own? Show their immediate subcategories too, and how many subcategories sit below each in total.',
       ],
     },
     {
@@ -109,7 +111,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'analytics_ecotrack_coverage',
       surface: 'stats',
       turns: [
-        'Why is EcoTrack coverage below 92% this month? Check the actual eligible orders and challenge the premise if it is wrong.',
+        'I think fewer than 92% of this month’s orders are covered by EcoTrack. Is that right? Check which orders should be counted and which are missing.',
       ],
     },
     {
@@ -137,7 +139,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'ai_stats_shopping',
       surface: 'stats',
       turns: [
-        'Over the last 30 days, how much paid contribution came from Storefront assistant-influenced orders, what is its coverage, and is it true profit?',
+        'How much did we earn from paid orders where customers used the shop assistant in the last 30 days? How complete is that figure, and does it include all our costs?',
       ],
     },
   ],
@@ -196,7 +198,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'assets_featured_group_meaning',
       surface: 'assets',
       turns: [
-        'Inspect the first active featured group. What products can it include, and what does its prioritizeRecommendations setting do now?',
+        'Look at the first active featured group. Which products belong in it, and what happens if we give that group priority in the shop assistant’s recommendations?',
       ],
     },
     {
@@ -227,22 +229,22 @@ export const suites: Record<string, Scenario[]> = {
       id: 'landing_pages_progressive_detail',
       surface: 'assets',
       turns: [
-        'Inspect the outline of the first live landing page. Explain what is authored here and what comes from live Storefront product data.',
-        'Now inspect only that page’s hero content. Show the page ID, revision, block ID, and heading.',
+        'Open the first published landing page. Which parts were written for the page, and which details come from the product catalog?',
+        'Show me just the opening section of that same page and its heading so I know which part we are looking at.',
       ],
     },
     {
       id: 'landing_pages_create_draft',
       surface: 'assets',
       turns: [
-        'Find the first active in-stock product, then start a French landing-page draft for it aimed at working tradespeople. Do not publish it.',
+        'Pick an active product we have in stock and make a French sales-page draft for tradespeople. Keep it unpublished.',
       ],
     },
     {
       id: 'landing_pages_scoped_revision',
       surface: 'assets',
       turns: [
-        'Inspect the first live landing page, then revise only its hero to be clearer for a non-technical customer. Preserve publication and every other block.',
+        'Open the first published landing page and make only its opening section clearer for an ordinary customer. Keep the page published and leave the rest alone.',
       ],
     },
     {
@@ -270,7 +272,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'cross_coverage_products',
       surface: 'stats',
       turns: [
-        'Check this month’s missing EcoTrack coverage orders. Do the missing orders share any products? Use at most ten missing orders and report only patterns supported by those rows.',
+        'Look at up to ten orders missing from this month’s EcoTrack figures. Do the same products keep appearing? Tell me what you can actually see.',
       ],
     },
     {
@@ -309,7 +311,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'followup_analytics_coverage',
       surface: 'stats',
       turns: [
-        'What is EcoTrack coverage this month? Check the live denominator.',
+        'How complete are our EcoTrack figures this month? How many orders should be included?',
         'Which exact orders are missing, and why?',
       ],
     },
@@ -338,7 +340,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'audit_ecotrack_coverage',
       surface: 'stats',
       turns: [
-        'Why is EcoTrack coverage below 92% this month? Check the actual eligible orders and challenge the premise if it is wrong.',
+        'I think fewer than 92% of this month’s orders are covered by EcoTrack. Is that right? Check which orders should be counted and which are missing.',
       ],
     },
     {
@@ -359,7 +361,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'audit_ai_stats_shopping',
       surface: 'stats',
       turns: [
-        'Over the last 30 days, how much paid contribution came from Storefront assistant-influenced orders, what is its coverage, and is it true profit?',
+        'How much did we earn from paid orders where customers used the shop assistant in the last 30 days? How complete is that figure, and does it include all our costs?',
       ],
     },
     {
@@ -373,7 +375,7 @@ export const suites: Record<string, Scenario[]> = {
       id: 'commerce_inventory_scan',
       surface: 'inventory',
       turns: [
-        'Scan 16360 for inventory receiving. Tell me whether it resolves as an order or a barcode and summarize the exact product quantities. Do not receive anything yet.',
+        'I scanned 16360 at the warehouse. What did it find, and how many of each product are on it? Do not add anything to stock yet.',
       ],
     },
     {
@@ -385,14 +387,14 @@ export const suites: Record<string, Scenario[]> = {
       id: 'commerce_shopping_preview',
       surface: 'orders',
       turns: [
-        'Prepare a shopping-list preview for all orders currently in-house confirmed. Give only order count, line count, total units, shortage units, and unmatched lines. Do not save it or change inventory.',
+        'What do we need to pick for all confirmed orders? Summarize the orders, items and quantities, what we are short of, and anything you cannot match to a product. Just show me for now.',
       ],
     },
     {
       id: 'commerce_shopping_apply',
       surface: 'orders',
       turns: [
-        'Save the shared shopping list for all currently in-house confirmed orders, then decrease inventory for every eligible covered line. Report partial failures honestly.',
+        'Save a shopping list for all confirmed orders and deduct what we can pick from stock. Tell me what was deducted and what is still unresolved.',
       ],
     },
     {
@@ -404,22 +406,26 @@ export const suites: Record<string, Scenario[]> = {
       id: 'commerce_order_export',
       surface: 'orders',
       turns: [
-        'Export the current recent confirmed-order cohort to XLSX. Check the native export preview first, then start it if there are exportable rows. Do not change order statuses.',
+        'Export the recent confirmed orders to Excel. Check that there is something to export first, and leave their statuses alone.',
       ],
     },
     {
       id: 'commerce_generate_content',
       surface: 'products',
       turns: [
-        'Generate every missing Arabic title and description across the active catalog. Leave the proposals pending for operator review.',
+        'Fill in missing Arabic names and descriptions for our active products. Leave your suggestions for me to review before applying them.',
       ],
     },
     {
       id: 'commerce_categorize_catalog',
       surface: 'products',
       turns: [
-        'Categorize every uncategorized active product against the current category hierarchy. Keep uncertain products unchanged and leave proposals for review.',
+        'Suggest categories for all active products that do not have one, using the categories we already have. Leave anything uncertain alone and let me review the suggestions first.',
       ],
     },
   ],
 };
+
+for (const scenario of Object.values(suites).flat()) {
+  scenario.expectedTools ??= existingScenarioTools[scenario.id];
+}

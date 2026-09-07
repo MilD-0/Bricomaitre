@@ -248,6 +248,57 @@ describe('POST /api/ai/chat model-led runtime', () => {
     );
   });
 
+  it.each([
+    ['manage_analytics_costs', { kind: 'analytics_costs', changedCount: 1 }, true],
+    ['manage_analytics_costs', { kind: 'analytics_costs', changedCount: 0 }, false],
+    ['manage_analytics_day_overrides', { kind: 'analytics_day_overrides', changedCount: 1 }, true],
+    [
+      'update_analytics_settings',
+      {
+        kind: 'analytics_settings',
+        current: { planningReturnRate: 15 },
+        changedFields: ['planningReturnRate'],
+      },
+      true,
+    ],
+    ['update_order_status', { ok: false, items: [{ orderId: 1 }], failed: [{ orderId: 2 }] }, true],
+    ['update_order_details', { ok: false, updatedCount: 1, failed: [{ orderId: 2 }] }, true],
+    ['delete_orders', { ok: false, deletedCount: 1, failed: [{ orderId: 2 }] }, true],
+  ])(
+    'preserves saved effects for %s when final narration fails',
+    async (toolName, output, saved) => {
+      mocks.streamCalls = 0;
+      mocks.permissions = ['analytics_manage', 'orders_write'];
+      mocks.streamParts = [
+        {
+          type: 'tool-result',
+          toolCallId: 'saved-1',
+          toolName,
+          input: {},
+          output,
+        },
+      ];
+      mocks.generateText.mockRejectedValueOnce(new Error('Narration unavailable'));
+      const response = await POST(
+        request({ message: 'Apply the requested change.', conversationKey }),
+      );
+      const body = events(await response.text());
+      const text = body
+        .filter((event) => event.type === 'text-delta')
+        .map((event) => event.delta)
+        .join('');
+      expect(text.includes('Changes were saved')).toBe(saved);
+      if (saved) expect(text).toContain('retrying only the failed items');
+      expect(mocks.streamCalls).toBe(1);
+      expect(mocks.insertedValues).toContainEqual(
+        expect.objectContaining({
+          role: 'assistant',
+          content: expect.objectContaining({ text }),
+        }),
+      );
+    },
+  );
+
   it('reports a permanent provider refusal without repeating the empty turn', async () => {
     mocks.streamCalls = 0;
     mocks.streamParts = [

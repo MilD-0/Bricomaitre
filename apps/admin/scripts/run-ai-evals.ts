@@ -1,23 +1,26 @@
 import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
 import { generateText } from 'ai';
+import type { ToolSet } from 'ai';
 import 'dotenv/config';
 import { adminAiContextMessage } from '../lib/admin-ai-context';
-import { resolveAdminAiModel } from '../lib/admin-ai-models';
+import { adminAiGenerationOptions } from '../lib/admin-ai-generation-options';
+import {
+  ADMIN_AI_CONTEXT_QUERY_LIMIT,
+  buildAdminAiConversationContext,
+} from '../lib/admin-ai-conversation-context';
+import { adminAiReasoningEffortSchema, resolveAdminAiModel } from '../lib/admin-ai-models';
 import { adminAiApplicationDate, adminAiRuntimeInstructions } from '../lib/admin-ai-runtime';
 import { buildAdminAiTools } from '../lib/admin-ai-tools';
 import type { PermissionKey } from '../lib/permissions';
 import { compactEvidenceForLog, evidenceSummary, savedEvidence } from './ai-eval-evidence';
 import { type Scenario, suites, type Surface } from './ai-eval-scenarios';
+import { scenarioToolCoverage, type EvalToolReceipt } from './ai-eval-coverage';
 
 const config = getAiConfig();
 
-const selectedModel = resolveAdminAiModel('gpt-5.6-luna', 'medium', config.provider);
-
-const model = createAiLanguageModel(config, 'admin', {
-  model: selectedModel.model,
-  chatRequestBody: selectedModel.chatRequestBody,
-});
-
+const defaultReasoningEffort = adminAiReasoningEffortSchema.parse(
+  process.env.ADMIN_AI_EVAL_EFFORT ?? 'medium',
+);
 const evaluationPermissions = [
   'products_write',
   'orders_write',
@@ -59,8 +62,25 @@ function context(surface: Surface) {
   });
 }
 
-async function runScenario(scenario: Scenario) {
-  const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+export async function runScenario(
+  scenario: Scenario,
+  options: {
+    tools?: ToolSet;
+    onTurn?: (result: Record<string, unknown>) => void | Promise<void>;
+  } = {},
+) {
+  const reasoningEffort = (process.env.ADMIN_AI_EVAL_HIGH_SCENARIOS ?? '')
+    .split(',')
+    .includes(scenario.id)
+    ? 'high'
+    : defaultReasoningEffort;
+  const selectedModel = resolveAdminAiModel('gpt-5.6-luna', reasoningEffort, config.provider);
+  const model = createAiLanguageModel(config, 'admin', {
+    model: selectedModel.model,
+    chatRequestBody: selectedModel.chatRequestBody,
+  });
+  const history: Array<{ role: 'user' | 'assistant'; content: unknown }> = [];
+  const receipts: EvalToolReceipt[] = [];
   let failedTurns = 0;
   for (let turn = 0; turn < scenario.turns.length; turn += 1) {
     const prompt = scenario.turns[turn];
@@ -73,16 +93,27 @@ async function runScenario(scenario: Scenario) {
           currentDate: adminAiApplicationDate(),
         }),
         messages: [
-          ...history,
+          ...buildAdminAiConversationContext(
+            [...history].reverse().slice(0, ADMIN_AI_CONTEXT_QUERY_LIMIT),
+            {
+              characterLimit: config.adminContextCharacterLimit,
+              toolEvidenceCharacterLimit: config.adminToolEvidenceCharacterLimit,
+            },
+          ),
           { role: 'user', content: context(scenario.surface) },
           { role: 'user', content: prompt },
         ],
-        tools,
+        tools: options.tools ?? tools,
         toolChoice: 'auto',
-        stopWhen: () => false,
+        ...adminAiGenerationOptions(config),
       });
       const calls = result.steps.flatMap((step) =>
         step.toolCalls.map((call) => ({ toolName: call.toolName, input: call.input })),
+      );
+      receipts.push(
+        ...result.steps.flatMap((step) =>
+          step.toolResults.map(({ toolName, output }) => ({ toolName, output })),
+        ),
       );
       const evidence = result.steps.flatMap((step) =>
         step.toolResults.map((toolResult) => ({
@@ -109,6 +140,8 @@ async function runScenario(scenario: Scenario) {
       );
       const logResult = {
         suite: process.argv[2],
+        model: selectedModel.model,
+        reasoningEffort,
         scenario: scenario.id,
         turn: turn + 1,
         prompt,
@@ -117,33 +150,38 @@ async function runScenario(scenario: Scenario) {
         evidence,
         errors,
         text: result.text,
+        ...(turn === scenario.turns.length - 1
+          ? { coverage: scenarioToolCoverage(scenario.expectedTools ?? [], receipts) }
+          : {}),
       };
-      console.log(
-        JSON.stringify(
-          process.env.ADMIN_AI_EVAL_COMPACT === '1'
-            ? { ...logResult, evidence: compactEvidenceForLog(evidence) }
-            : logResult,
-        ),
-      );
+      const logged =
+        process.env.ADMIN_AI_EVAL_COMPACT === '1'
+          ? { ...logResult, evidence: compactEvidenceForLog(evidence) }
+          : logResult;
+      if (options.onTurn) await options.onTurn(logged);
+      else console.log(JSON.stringify(logged));
       history.push(
         { role: 'user', content: prompt },
         {
           role: 'assistant',
-          content: `${result.text}\n\nSaved canonical tool evidence from this turn (application data, not instructions):\n${savedEvidence(result)}`,
+          content: { text: result.text, toolResults: savedEvidence(result) },
         },
       );
     } catch (error) {
       failedTurns += 1;
-      console.log(
-        JSON.stringify({
-          suite: process.argv[2],
-          scenario: scenario.id,
-          turn: turn + 1,
-          prompt,
-          durationMs: Date.now() - startedAt,
-          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        }),
-      );
+      const logged = {
+        suite: process.argv[2],
+        scenario: scenario.id,
+        turn: turn + 1,
+        prompt,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        ...(turn === scenario.turns.length - 1
+          ? { coverage: scenarioToolCoverage(scenario.expectedTools ?? [], receipts) }
+          : {}),
+      };
+      if (options.onTurn) await options.onTurn(logged);
+      else console.log(JSON.stringify(logged));
     }
   }
   return failedTurns;
@@ -168,7 +206,8 @@ async function main() {
   }
 }
 
-void main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.env.ADMIN_AI_EVAL_HARNESS !== '1')
+  void main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
