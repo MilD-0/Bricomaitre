@@ -403,49 +403,60 @@ describe('POST /api/ai/chat model-led runtime', () => {
     expect(recoveryEvidence.split('this turn:\n')[1]).toHaveLength(100);
   });
 
-  it('never hides a completed mutation when both model narration passes are empty', async () => {
-    mocks.permissions = ['products_write'];
-    mocks.streamParts = [
-      {
-        type: 'tool-call',
-        toolCallId: 'tool-1',
-        toolName: 'adjust_inventory',
-        input: { mode: 'increase', items: [{ productId: 12, quantity: 1 }] },
-      },
-      {
-        type: 'tool-result',
-        toolCallId: 'tool-1',
-        toolName: 'adjust_inventory',
-        input: { mode: 'increase', items: [{ productId: 12, quantity: 1 }] },
-        output: {
-          ok: true,
-          items: [{ productId: 12, previousQuantity: 2, nextQuantity: 3 }],
-          skipped: [],
-        },
-      },
-    ];
-    mocks.generateText.mockResolvedValueOnce({
-      text: '',
-      usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
-    });
-
-    const response = await POST(request({ message: 'Add one unit.', conversationKey }));
-    const body = events(await response.text());
-
-    expect(body).toEqual(
-      expect.arrayContaining([
+  it.each([
+    [true, false],
+    [false, false],
+    [false, true],
+  ])(
+    'never hides committed effects when complete=%s and narration rejects=%s',
+    async (complete, narrationRejects) => {
+      mocks.streamCalls = 0;
+      mocks.permissions = ['products_write'];
+      mocks.streamParts = [
         {
-          type: 'text-delta',
-          delta:
-            "The application confirms the change completed, but I couldn't finish the written confirmation. The saved action result is authoritative.",
+          type: 'tool-call',
+          toolCallId: 'tool-1',
+          toolName: 'adjust_inventory',
+          input: { mode: 'increase', items: [{ productId: 12, quantity: 1 }] },
         },
-        expect.objectContaining({
-          type: 'result',
-          toolResults: [expect.objectContaining({ toolName: 'adjust_inventory' })],
-        }),
-      ]),
-    );
-  });
+        {
+          type: 'tool-result',
+          toolCallId: 'tool-1',
+          toolName: 'adjust_inventory',
+          input: { mode: 'increase', items: [{ productId: 12, quantity: 1 }] },
+          output: {
+            ok: complete,
+            items: [{ productId: 12, previousQuantity: 2, nextQuantity: 3 }],
+            skipped: complete ? [] : [{ productId: 13, reason: 'insufficient_stock' }],
+          },
+        },
+      ];
+      mocks.generateText.mockResolvedValueOnce({
+        text: '',
+        usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+      });
+
+      if (narrationRejects)
+        mocks.generateText.mockReset().mockRejectedValueOnce(new Error('Narration unavailable'));
+      const response = await POST(request({ message: 'Add one unit.', conversationKey }));
+      const body = events(await response.text());
+
+      expect(mocks.streamCalls).toBe(1);
+      expect(JSON.stringify(body)).not.toContain('I retrieved the application data');
+      expect(body).toEqual(
+        expect.arrayContaining([
+          {
+            type: 'text-delta',
+            delta: `1 item(s) applied, ${complete ? 0 : 1} skipped or failed. Changes were saved, but I couldn't finish the report. Review each action result before retrying only the failed items.`,
+          },
+          expect.objectContaining({
+            type: 'result',
+            toolResults: [expect.objectContaining({ toolName: 'adjust_inventory' })],
+          }),
+        ]),
+      );
+    },
+  );
 
   it('keeps failed tool outcomes in durable evidence for later reasoning', async () => {
     mocks.permissions = ['analytics_manage'];

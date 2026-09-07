@@ -93,6 +93,7 @@ describe('Admin AI live tool construction', () => {
       now,
       runtime: {
         kind: 'live',
+        exportOwnerKey: 'authenticated-user-id',
         actorId: actor.email,
         actor,
         conversationId: 101,
@@ -112,7 +113,7 @@ describe('Admin AI live tool construction', () => {
     expect(mocks.createProduct).toHaveBeenCalledWith({ product }, actor);
     expect(mocks.startOrderExport).toHaveBeenCalledWith(
       { mode: 'confirmed', orderIds: [] },
-      { ownerKey: actor.email, conversationId: 101 },
+      { ownerKey: 'authenticated-user-id', conversationId: 101 },
       now,
     );
     expect(mocks.updateAnnouncement).toHaveBeenCalledWith(

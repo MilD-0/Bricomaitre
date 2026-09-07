@@ -3,6 +3,7 @@ import type { ActionActor } from './action-history';
 export type AdminAiLiveToolRuntime = {
   kind: 'live';
   actorId: string;
+  exportOwnerKey: string;
   actor: ActionActor;
   conversationId: number;
   autoAcceptProposals: boolean;

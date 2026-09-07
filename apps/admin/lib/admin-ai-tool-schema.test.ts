@@ -12,6 +12,7 @@ describe('Admin AI production tool schemas', () => {
       locale: 'en',
       runtime: {
         kind: 'live',
+        exportOwnerKey: 'authenticated-user-id',
         actorId: 'schema-test',
         actor: {},
         conversationId: 1,

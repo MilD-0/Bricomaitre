@@ -120,7 +120,7 @@ export function buildAdminAiOrderTools({
         executeAdminAiToolForRuntime(runtime, input, (live) =>
           startAdminAiOrderExport(
             input,
-            { ownerKey: live.actorId, conversationId: live.conversationId },
+            { ownerKey: live.exportOwnerKey, conversationId: live.conversationId },
             now,
           ),
         ),

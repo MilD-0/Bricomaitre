@@ -50,14 +50,24 @@ export function adminAiToolMutatesApplication(toolName: string) {
 
 export function adminAiToolConfirmsCompletedMutation(toolName: string, output: unknown) {
   if (!mutatingToolNames.has(toolName) || backgroundToolNames.has(toolName)) return false;
-  if (!output || typeof output !== 'object' || (output as { ok?: unknown }).ok !== true) {
-    return false;
+  if (!output || typeof output !== 'object') return false;
+  const receipt = output as Record<string, unknown>;
+  // Batch receipts report both committed items and failures. A failed sibling
+  // must not hide durable changes or encourage repeating the entire batch.
+  if (toolName === 'adjust_inventory' || toolName === 'receive_inventory') {
+    return Array.isArray(receipt.items) && receipt.items.length > 0;
   }
-  if (toolName === 'generate_product_content')
-    return (
-      typeof (output as { appliedCount?: unknown }).appliedCount === 'number' &&
-      (output as { appliedCount: number }).appliedCount > 0
-    );
+  const countKey = (
+    {
+      update_inventory_state: 'updatedCount',
+      update_products: 'updatedCount',
+      archive_products: 'archivedCount',
+      restore_products: 'restoredCount',
+      generate_product_content: 'appliedCount',
+    } as Record<string, string>
+  )[toolName];
+  if (countKey) return typeof receipt[countKey] === 'number' && receipt[countKey] > 0;
+  if (receipt.ok !== true) return false;
   const job = (output as { job?: unknown }).job;
   if (job && typeof job === 'object') {
     const status = (job as { status?: unknown }).status;

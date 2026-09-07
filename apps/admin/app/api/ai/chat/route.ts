@@ -237,6 +237,7 @@ export async function POST(request: NextRequest) {
       runtime: {
         kind: 'live',
         actorId,
+        exportOwnerKey: session.user.id ?? actorId,
         actor,
         conversationId: conversation.id,
         autoAcceptProposals: parsed.data.autoAcceptProposals,
@@ -407,7 +408,7 @@ export async function POST(request: NextRequest) {
               }
               if (!text) {
                 text = hasSuccessfulMutation(toolResults)
-                  ? adminAiCompletedMutationNarrationFailure(locale)
+                  ? adminAiCompletedMutationNarrationFailure(locale, toolResults)
                   : adminAiReliableAnswerFailure(locale, toolResults.length > 0);
               }
               write({ type: 'text-delta', delta: text });
@@ -478,7 +479,7 @@ export async function POST(request: NextRequest) {
               : text.trim()
                 ? interruptedAnswer(locale, text)
                 : hasSuccessfulMutation(toolResults)
-                  ? adminAiCompletedMutationNarrationFailure(locale)
+                  ? adminAiCompletedMutationNarrationFailure(locale, toolResults)
                   : isNonRetryableAiProviderError(error)
                     ? locale === 'fr'
                       ? 'Le service IA a refusé la demande. Vérifiez la configuration du fournisseur et les limites du compte.'

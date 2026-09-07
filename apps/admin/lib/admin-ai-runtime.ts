@@ -248,12 +248,54 @@ export function adminAiReliableAnswerFailure(locale: 'en' | 'fr' | 'ar', hasTool
     : "I couldn't produce a reliable answer. Please try again.";
 }
 
-export function adminAiCompletedMutationNarrationFailure(locale: 'en' | 'fr' | 'ar') {
+export function adminAiCompletedMutationNarrationFailure(
+  locale: 'en' | 'fr' | 'ar',
+  toolResults: unknown[] = [],
+) {
+  let applied = 0,
+    skipped = 0;
+  let hasBatch = false;
+  for (const result of toolResults) {
+    if (!result || typeof result !== 'object') continue;
+    const record = result as { toolName?: string; output?: Record<string, unknown> };
+    if (
+      !record.output ||
+      !['adjust_inventory', 'receive_inventory', 'update_inventory_state'].includes(
+        record.toolName ?? '',
+      )
+    )
+      continue;
+    const receipt = record.output;
+    if (!Array.isArray(receipt.items)) continue;
+    hasBatch = true;
+    applied += receipt.items.length;
+    skipped += Array.isArray(receipt.skipped)
+      ? receipt.skipped.length
+      : Array.isArray(receipt.failed)
+        ? receipt.failed.length
+        : 0;
+  }
+  const counts = hasBatch
+    ? locale === 'fr'
+      ? `${applied} article(s) modifié(s), ${skipped} ignoré(s) ou en échec. `
+      : locale === 'ar'
+        ? `تم تعديل ${applied} عنصر، وتجاوز أو فشل ${skipped} عنصر. `
+        : `${applied} item(s) applied, ${skipped} skipped or failed. `
+    : '';
   if (locale === 'fr') {
-    return 'L’application confirme que la modification a été effectuée, mais je n’ai pas pu terminer la confirmation écrite. Le résultat enregistré de l’action fait foi.';
+    return (
+      counts +
+      'Des modifications ont été enregistrées, mais je n’ai pas pu terminer le compte rendu. Consultez le résultat de chaque action avant de réessayer uniquement les éléments en échec.'
+    );
   }
   if (locale === 'ar') {
-    return 'يؤكد التطبيق أن التغيير تم، لكنني لم أتمكن من إكمال التأكيد المكتوب. نتيجة الإجراء المحفوظة هي المرجع.';
+    return (
+      counts +
+      'تم حفظ تغييرات، لكنني لم أتمكن من إكمال التقرير. راجع نتيجة كل إجراء قبل إعادة محاولة العناصر التي فشلت فقط.'
+    );
   }
-  return "The application confirms the change completed, but I couldn't finish the written confirmation. The saved action result is authoritative.";
+  return (
+    counts +
+    "Changes were saved, but I couldn't finish the report. Review each action result before retrying only the failed items."
+  );
 }

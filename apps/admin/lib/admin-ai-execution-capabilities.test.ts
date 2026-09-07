@@ -44,3 +44,38 @@ it('recognizes verified inline content changes while rejecting queued and pendin
     }),
   ).toBe(false);
 });
+
+it('preserves evidence of committed batch effects despite sibling failures', () => {
+  expect(
+    adminAiToolConfirmsCompletedMutation('adjust_inventory', {
+      ok: false,
+      items: [{ productId: 1, previousQuantity: 10, nextQuantity: 8 }],
+      skipped: [{ productId: 2 }],
+    }),
+  ).toBe(true);
+  expect(
+    adminAiToolConfirmsCompletedMutation('adjust_inventory', {
+      ok: false,
+      items: [],
+      skipped: [{ productId: 2 }],
+    }),
+  ).toBe(false);
+  expect(
+    adminAiToolConfirmsCompletedMutation('receive_inventory', {
+      ok: true,
+      complete: false,
+      items: [],
+      skipped: [{ productId: 2 }],
+    }),
+  ).toBe(false);
+  for (const [tool, key] of [
+    ['update_inventory_state', 'updatedCount'],
+    ['update_products', 'updatedCount'],
+    ['archive_products', 'archivedCount'],
+    ['restore_products', 'restoredCount'],
+    ['generate_product_content', 'appliedCount'],
+  ]) {
+    expect(adminAiToolConfirmsCompletedMutation(tool!, { ok: false, [key!]: 1 })).toBe(true);
+    expect(adminAiToolConfirmsCompletedMutation(tool!, { ok: false, [key!]: 0 })).toBe(false);
+  }
+});
