@@ -105,7 +105,10 @@ function buildOrderChanges(
     changes.firstName = name.firstName;
     changes.lastName = name.lastName;
   }
-  if (phoneNumber1 !== normalizeOrderPhoneForStorage(order.phoneNumber1))
+  if (
+    draft.phoneNumber1 !== initial.phoneNumber1 &&
+    phoneNumber1 !== normalizeOrderPhoneForStorage(order.phoneNumber1)
+  )
     changes.phoneNumber1 = phoneNumber1;
   if (draft.inHouseStatus !== order.inHouseStatus) {
     changes.inHouseStatus = draft.inHouseStatus;

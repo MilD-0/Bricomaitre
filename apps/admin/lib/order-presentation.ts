@@ -8,7 +8,11 @@ export function formatOrderPhoneForDisplay(value: string | null | undefined) {
     return '';
   }
 
-  return trimmed.startsWith('0') ? trimmed : `0${trimmed}`;
+  // Older local numbers omit the domestic prefix. International notation and
+  // free-form legacy text already have meaning; do not invent a prefix for them.
+  return /^[567][\d\s-]*$/.test(trimmed) && trimmed.replace(/\D/g, '').length === 9
+    ? `0${trimmed}`
+    : trimmed;
 }
 
 export function normalizeOrderPhoneForStorage(value: string) {

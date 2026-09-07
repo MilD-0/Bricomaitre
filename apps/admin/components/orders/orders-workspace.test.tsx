@@ -790,6 +790,28 @@ describe('OrdersWorkspace', () => {
     expect(link).toHaveAttribute('target', '_blank');
   });
 
+  it.each(['+213 550 12 34 56', '00213 550 12 34 56', '0550 12 34 56', '550 12 34 56'])(
+    'preserves untouched phone %s when saving an unrelated operator edit',
+    async (phoneNumber1) => {
+      const item = { ...orders[0]!, phoneNumber1 };
+      let savedBody: Record<string, unknown> | null = null;
+      server.use(
+        http.get('/api/orders/1', () => HttpResponse.json({ ok: true, item })),
+        http.get('/api/orders', () => HttpResponse.json({ ...initialOrders, items: [item] })),
+        http.patch('/api/orders/1', async ({ request }) => {
+          savedBody = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({ ok: true, item: { ...item, note: 'Call tomorrow.' } });
+        }),
+      );
+      renderWorkspace({ initialOrders: { ...initialOrders, items: [item] } });
+      const notes = await screen.findByLabelText('Notes');
+      fireEvent.change(notes, { target: { value: 'Call tomorrow.' } });
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      await waitFor(() => expect(savedBody).toMatchObject({ note: 'Call tomorrow.' }));
+      expect(savedBody).not.toHaveProperty('phoneNumber1');
+    },
+  );
+
   it('saves customer, fulfillment, status, products, and notes from the focused editor', async () => {
     const user = userEvent.setup();
     let savedBody: Record<string, unknown> | null = null;

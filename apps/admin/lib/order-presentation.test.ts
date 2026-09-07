@@ -56,6 +56,10 @@ describe('order presentation helpers', () => {
     ['  ', ''],
     ['0555 12 34 56', '0555 12 34 56'],
     ['555 12 34 56', '0555 12 34 56'],
+    ['+213 555 12 34 56', '+213 555 12 34 56'],
+    ['00213 555 12 34 56', '00213 555 12 34 56'],
+    ['213555123456', '213555123456'],
+    ['extension 123', 'extension 123'],
   ])('formats %s for display', (value, expected) => {
     expect(formatOrderPhoneForDisplay(value)).toBe(expected);
   });

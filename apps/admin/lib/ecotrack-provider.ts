@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeAlgerianPhoneNumber } from '@bric/storefront-core/settings';
 
 import { requestEcotrack as requestSharedEcotrack } from '@bric/storefront-core/ecotrack-client';
 
@@ -42,7 +43,7 @@ export function normalizeEcotrackText(value: unknown) {
 }
 
 export function normalizeEcotrackPhone(value: string | null | undefined) {
-  const digits = String(value ?? '').replace(/\D+/g, '');
+  const digits = normalizeAlgerianPhoneNumber(String(value ?? ''));
   if (!digits) return '';
   if (digits.length === 9) return `0${digits}`;
   if (digits.length === 10 && digits.startsWith('0')) return digits;

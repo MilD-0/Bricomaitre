@@ -446,6 +446,15 @@ describe('lib/ecotrack', () => {
     expect(resolved).toBe(true);
   });
 
+  it.each(['+213 550 12 34 56', '00213 550 12 34 56', '0550 12 34 56', '550123456', '٠٥٥٠١٢٣٤٥٦'])(
+    'posts %s using the domestic carrier phone format',
+    (phoneNumber1) => {
+      expect(buildEcotrackOrderPayload({ ...orderRecord, phoneNumber1 }, catalog).telephone).toBe(
+        '0550123456',
+      );
+    },
+  );
+
   it('maps orders to Ecotrack payloads using synced commune data', () => {
     expect(buildEcotrackOrderPayload(orderRecord, catalog)).toEqual({
       reference: '11',
