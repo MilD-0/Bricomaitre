@@ -19,19 +19,18 @@ import {
   getProfitTrackerSettings,
   listProfitTrackerCosts,
 } from '../profit-tracker';
-import type { ProfitTrackerSummary } from '../profit-tracker-metrics';
-import { ANALYTICS_FACT_SEMANTICS_VERSION } from '../analytics-fact-contract';
-import type { AnalyticsFilters, AnalyticsMetric, AnalyticsSource } from './contract';
-import { inclusiveDays } from './date-range';
-import { fridayWeekStart } from './economics-series';
-import { ratio } from './metrics';
 import {
-  datePredicate,
-  timestampPredicate,
-  isoValue,
-  nullableNumeric,
-  numeric,
-} from './query-values';
+  buildProfitTrackerWeeks,
+  summarizeProfitTracker,
+  type ProfitTrackerSummary,
+} from '../profit-tracker-metrics';
+import {
+  ANALYTICS_FACT_SEMANTICS_VERSION,
+  analyticsCalculatorDaySchema,
+} from '../analytics-fact-contract';
+import type { AnalyticsFilters, AnalyticsMetric, AnalyticsSource } from './contract';
+import { addDays, inclusiveDays } from './date-range';
+import { datePredicate, timestampPredicate, isoValue, numeric } from './query-values';
 import {
   type AnalyticsFulfillmentSummary,
   type AnalyticsReturnObservation,
@@ -77,6 +76,7 @@ export async function loadMaterializedEconomicsReport(
   db: Database,
   filters: AnalyticsFilters,
 ): Promise<MaterializedEconomicsReport | null> {
+  const dependencyStartDate = filters.startDate ? addDays(filters.startDate, -7) : null;
   const factWhere = datePredicate(
     analyticsEconomicsDailyFacts.day,
     filters.startDate,
@@ -85,21 +85,7 @@ export async function loadMaterializedEconomicsReport(
   const [factResult, dependencyResult, settings, costs] = await Promise.all([
     db.execute(sql`
       select ${analyticsEconomicsDailyFacts.day}::text as day,
-        ${analyticsEconomicsDailyFacts.postedOrders} as posted_orders,
-        ${analyticsEconomicsDailyFacts.paidOrders} as paid_orders,
-        ${analyticsEconomicsDailyFacts.costCompleteOrders} as cost_complete_orders,
-        ${analyticsEconomicsDailyFacts.paidProfitCompleteOrders} as paid_complete_orders,
-        ${analyticsEconomicsDailyFacts.grossProfitDzd}::double precision as gross_profit,
-        ${analyticsEconomicsDailyFacts.adjustedProfitDzd}::double precision as adjusted_profit,
-        ${analyticsEconomicsDailyFacts.adCostDzd}::double precision as ad_cost,
-        ${analyticsEconomicsDailyFacts.operatingCostDzd}::double precision as operating_cost,
-        ${analyticsEconomicsDailyFacts.netProfitDzd}::double precision as net_profit,
-        ${analyticsEconomicsDailyFacts.trueProfitDzd}::double precision as true_profit,
-        ${analyticsEconomicsDailyFacts.automaticPaidCodDzd}::double precision as paid_cod,
-        ${analyticsEconomicsDailyFacts.automaticPaidFeesDzd}::double precision as paid_fees,
-        ${analyticsEconomicsDailyFacts.automaticPaidProfitDzd}::double precision as paid_profit,
-        ${analyticsEconomicsDailyFacts.fxRateUsed}::double precision as fx_rate,
-        ${analyticsEconomicsDailyFacts.planningReturnRatePct}::double precision as return_rate,
+        ${analyticsEconomicsDailyFacts.calculatorDay} as calculator_day,
         ${analyticsEconomicsDailyFacts.semanticsVersion} as semantics_version,
         ${analyticsEconomicsDailyFacts.refreshedAt} as refreshed_at
       from ${analyticsEconomicsDailyFacts}
@@ -116,7 +102,7 @@ export async function loadMaterializedEconomicsReport(
         order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
       ), requested_cohort as (
         select order_id from first_posted
-        where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
+        where ${datePredicate(sql`first_posted.posted_day`, dependencyStartDate, filters.endDate)}
       )
       select greatest(
         (select max(${orders.updatedAt}) from ${orders}
@@ -134,9 +120,9 @@ export async function loadMaterializedEconomicsReport(
           inner join requested_cohort
             on requested_cohort.order_id = ${ecotrackOrderTrackingEvents.orderId}),
         (select max(${metaAdsDailyInsights.updatedAt}) from ${metaAdsDailyInsights}
-          where ${datePredicate(metaAdsDailyInsights.day, filters.startDate, filters.endDate)}),
+          where ${datePredicate(metaAdsDailyInsights.day, dependencyStartDate, filters.endDate)}),
         (select max(${profitTrackerDays.updatedAt}) from ${profitTrackerDays}
-          where ${datePredicate(profitTrackerDays.day, filters.startDate, filters.endDate)}),
+          where ${datePredicate(profitTrackerDays.day, dependencyStartDate, filters.endDate)}),
         (select max(${profitTrackerOperatingCosts.updatedAt})
           from ${profitTrackerOperatingCosts}),
         (select max(${profitTrackerSettings.updatedAt}) from ${profitTrackerSettings})
@@ -184,15 +170,15 @@ export async function loadMaterializedEconomicsReport(
     latestFactDay &&
     rows.length === inclusiveDays(requiredStartDate, filters.endDate),
   );
-  const latestRow = rows.at(-1);
-  const unresolvedFridayRollforward = Boolean(
-    settings.restFrom &&
-    filters.endDate >= settings.restFrom &&
-    new Date(`${filters.endDate}T00:00:00.000Z`).getUTCDay() === 5 &&
-    numeric(latestRow?.posted_orders) === 0 &&
-    latestRow?.gross_profit == null &&
-    numeric(latestRow?.ad_cost) > 0,
+  const calculatorDays = rows.map((row) =>
+    analyticsCalculatorDaySchema.safeParse(row.calculator_day),
   );
+  if (
+    calculatorDays.some(
+      (parsed, index) => !parsed.success || parsed.data.day.date !== String(rows[index]?.day),
+    )
+  )
+    return null;
   const factsAreUsable = materializedFactsAreUsable({
     requestedStartDate: requiredStartDate,
     requestedEndDate: filters.endDate,
@@ -202,145 +188,38 @@ export async function loadMaterializedEconomicsReport(
     semanticsVersions: rows.map((row) => numeric(row.semantics_version)),
     oldestRefresh: oldestRefresh ?? null,
     dependenciesUpdatedAt: dependencyUpdatedAt,
-    unresolvedFridayRollforward,
   });
   if (!factsAreUsable) return null;
 
   let cumulativeNetDzd = 0;
   let cumulativeNetBeforeReturnsDzd = 0;
   let cumulativeTrueProfitDzd = 0;
-  const ascendingDays = rows.map((row) => {
-    const date = String(row.day);
-    const grossProfitDzd = nullableNumeric(row.gross_profit);
-    const adjustedProfitDzd = nullableNumeric(row.adjusted_profit);
-    const adCostDzd = nullableNumeric(row.ad_cost);
-    const netProfitDzd = nullableNumeric(row.net_profit);
-    const trueProfitDzd = nullableNumeric(row.true_profit);
-    const fxRateUsed = numeric(row.fx_rate) || settings.fxRate;
-    const postedOrders = numeric(row.posted_orders);
-    const costCompleteOrders = numeric(row.cost_complete_orders);
-    const grossProfitSource: EconomicsReport['days'][number]['grossProfitSource'] =
-      grossProfitDzd == null ? 'missing' : 'automatic';
-    const returnRateSource: EconomicsReport['days'][number]['returnRateSource'] =
-      grossProfitDzd == null ? 'missing' : 'default';
-    const confirmedOrdersSource: EconomicsReport['days'][number]['confirmedOrdersSource'] =
-      'automatic';
-    const isRestDay = Boolean(
-      settings.restFrom &&
-      date >= settings.restFrom &&
-      new Date(`${date}T00:00:00.000Z`).getUTCDay() === 5 &&
-      postedOrders === 0 &&
-      grossProfitDzd == null,
-    );
-    cumulativeNetDzd += netProfitDzd ?? 0;
-    cumulativeNetBeforeReturnsDzd +=
-      grossProfitDzd != null && adCostDzd != null ? grossProfitDzd - adCostDzd : 0;
-    cumulativeTrueProfitDzd += trueProfitDzd ?? 0;
-    return {
-      date,
-      spendEur: adCostDzd == null ? null : adCostDzd / fxRateUsed,
-      impressions: null,
-      fbPurchases: null,
-      cpm: null,
-      ctr: null,
-      linkClicks: null,
-      landingPageViews: null,
-      grossProfitDzd,
-      returnRatePct: nullableNumeric(row.return_rate),
-      confirmedOrders: postedOrders,
-      note: null,
-      fxRateUsed,
-      metaSyncedAt: oldestRefresh ?? null,
-      grossProfitSource,
-      returnRateSource,
-      confirmedOrdersSource,
-      postedOrders,
-      costCompleteOrders,
-      projectedCoveragePct: ratio(costCompleteOrders, postedOrders),
-      metrics: {
-        adCostDzd,
-        adjustedProfitDzd,
-        netProfitDzd,
-        profitX:
-          adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0
-            ? adjustedProfitDzd / adCostDzd
-            : null,
-        netProfitBeforeReturnsDzd:
-          grossProfitDzd != null && adCostDzd != null ? grossProfitDzd - adCostDzd : null,
-        profitXBeforeReturns:
-          grossProfitDzd != null && adCostDzd != null && adCostDzd > 0
-            ? grossProfitDzd / adCostDzd
-            : null,
-        costPerConfirmedDzd:
-          adCostDzd != null && postedOrders > 0 ? adCostDzd / postedOrders : null,
-        confirmationRatePct: null,
-        clickToPageRatePct: null,
-      },
-      isRestDay,
-      rolledInDzd: 0,
-      rolledOutDzd: 0,
-      operatingCostDzd: numeric(row.operating_cost),
-      trueProfitDzd,
-      cumulativeNetDzd,
-      cumulativeNetBeforeReturnsDzd,
-      cumulativeTrueProfitDzd,
-    };
+  const ascendingDays = calculatorDays.map((parsed) => {
+    if (!parsed.success) throw new Error('Invalid calculator fact.');
+    const day = parsed.data.day;
+    cumulativeNetDzd += day.metrics.netProfitDzd ?? 0;
+    cumulativeNetBeforeReturnsDzd += day.metrics.netProfitBeforeReturnsDzd ?? 0;
+    cumulativeTrueProfitDzd += day.trueProfitDzd ?? 0;
+    return { ...day, cumulativeNetDzd, cumulativeNetBeforeReturnsDzd, cumulativeTrueProfitDzd };
   });
-  const grossProfitDzd = ascendingDays.reduce((sum, day) => sum + (day.grossProfitDzd ?? 0), 0);
-  const adjustedProfitDzd = ascendingDays.reduce(
-    (sum, day) => sum + (day.metrics.adjustedProfitDzd ?? 0),
-    0,
-  );
-  const ratioAdCostDzd = ascendingDays.reduce((sum, day) => sum + (day.metrics.adCostDzd ?? 0), 0);
-  const operatingCostDzd = ascendingDays.reduce((sum, day) => sum + day.operatingCostDzd, 0);
-  const postedOrders = ascendingDays.reduce((sum, day) => sum + day.postedOrders, 0);
-  const costCompleteOrders = ascendingDays.reduce((sum, day) => sum + day.costCompleteOrders, 0);
+  const days = [...ascendingDays].reverse();
   const profitsSuppressed = settings.defaultReturnRate === 100;
-  const netProfitDzd = profitsSuppressed ? 0 : adjustedProfitDzd - ratioAdCostDzd;
-  const weekGroups = new Map<
-    string,
-    {
-      weekStart: string;
-      trackedDays: number;
-      spendEur: number;
-      adCostDzd: number;
-      adjustedProfitDzd: number;
-      operatingCostDzd: number;
-    }
-  >();
-  for (const day of ascendingDays) {
-    const weekStart = fridayWeekStart(day.date);
-    const current = weekGroups.get(weekStart) ?? {
-      weekStart,
-      trackedDays: 0,
-      spendEur: 0,
-      adCostDzd: 0,
-      adjustedProfitDzd: 0,
-      operatingCostDzd: 0,
-    };
-    current.trackedDays += 1;
-    current.spendEur += day.spendEur ?? 0;
-    current.adCostDzd += day.metrics.adCostDzd ?? 0;
-    current.adjustedProfitDzd += day.metrics.adjustedProfitDzd ?? 0;
-    current.operatingCostDzd += day.operatingCostDzd;
-    weekGroups.set(weekStart, current);
-  }
-  const weeks = [...weekGroups.values()]
-    .map((week) => {
-      const weekNetProfitDzd = profitsSuppressed ? 0 : week.adjustedProfitDzd - week.adCostDzd;
-      return {
-        ...week,
-        netProfitDzd: weekNetProfitDzd,
-        trueProfitDzd: profitsSuppressed ? 0 : weekNetProfitDzd - week.operatingCostDzd,
-        profitX: profitsSuppressed
-          ? 0
-          : week.adCostDzd > 0
-            ? week.adjustedProfitDzd / week.adCostDzd
-            : null,
-      };
-    })
-    .sort((left, right) => right.weekStart.localeCompare(left.weekStart));
-  const projectedCoveragePct = ratio(costCompleteOrders, postedOrders);
+  const summary = summarizeProfitTracker(
+    days,
+    costs,
+    requiredStartDate,
+    latestFactDay,
+    profitsSuppressed,
+  );
+  const weeks = buildProfitTrackerWeeks(days, costs, filters.endDate, profitsSuppressed);
+  const { postedOrders, costCompleteOrders, projectedCoveragePct } = summary;
+  const pendingRollforwardDzd = days[0]?.isRestDay ? days[0].rolledOutDzd : 0;
+  const metaSyncedAt =
+    days
+      .map((day) => day.metaSyncedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null;
   return {
     materializedFacts: true,
     filters: {
@@ -349,36 +228,8 @@ export async function loadMaterializedEconomicsReport(
       endDate: filters.endDate,
     },
     settings,
-    summary: {
-      spendEur: ascendingDays.reduce((sum, day) => sum + (day.spendEur ?? 0), 0),
-      impressions: 0,
-      rawAdCostDzd: ratioAdCostDzd,
-      ratioAdCostDzd,
-      grossProfitDzd,
-      adjustedProfitDzd,
-      netProfitDzd,
-      operatingCostDzd,
-      trueProfitDzd: profitsSuppressed ? 0 : netProfitDzd - operatingCostDzd,
-      profitX: profitsSuppressed
-        ? 0
-        : ratioAdCostDzd > 0
-          ? adjustedProfitDzd / ratioAdCostDzd
-          : null,
-      profitXBeforeReturns: profitsSuppressed
-        ? 0
-        : ratioAdCostDzd > 0
-          ? grossProfitDzd / ratioAdCostDzd
-          : null,
-      confirmedOrders: postedOrders,
-      fbPurchases: 0,
-      costPerConfirmedDzd: postedOrders > 0 ? ratioAdCostDzd / postedOrders : null,
-      confirmationRatePct: null,
-      clickToPageRatePct: null,
-      postedOrders,
-      costCompleteOrders,
-      projectedCoveragePct,
-    },
-    days: [...ascendingDays].reverse(),
+    summary,
+    days,
     weeks,
     costs,
     adsets: [],
@@ -405,17 +256,21 @@ export async function loadMaterializedEconomicsReport(
       projectedCoveragePct,
       settledOrders: 0,
       settlementCoveragePct: null,
-      metaDays: ascendingDays.length,
-      pendingRollforwardDzd: 0,
+      metaDays: days.filter((day) => day.spendEur != null).length,
+      pendingRollforwardDzd,
     },
-    warnings:
-      projectedCoveragePct != null && projectedCoveragePct < 95
+    warnings: [
+      ...(projectedCoveragePct != null && projectedCoveragePct < 95
         ? [
             'Some posted orders use the 30% fallback product margin because purchase-cost snapshots are incomplete.',
           ]
-        : [],
+        : []),
+      ...(pendingRollforwardDzd > 0
+        ? ['The trailing Friday Meta spend is pending roll-forward to the next working day.']
+        : []),
+    ],
     freshness: {
-      metaSyncedAt: oldestRefresh ?? null,
+      metaSyncedAt,
       settledReportThroughDate: null,
     },
   } satisfies MaterializedEconomicsReport;

@@ -1,5 +1,10 @@
 import type { getProfitTrackerReport } from '../profit-tracker';
-import { operatingCostForDay } from '../profit-tracker-metrics';
+import {
+  calculateProfitAmounts,
+  dayProfitsSuppressed,
+  operatingCostForDay,
+  profitSuppressionApplies,
+} from '../profit-tracker-metrics';
 import type {
   AnalyticsEconomicsPoint,
   AnalyticsLeadingOrderForecast,
@@ -274,16 +279,20 @@ export function buildEconomicsForecast(
   leading?: AnalyticsLeadingOrderForecast,
   currentDayRemainingFraction = 0,
 ) {
+  const profitsSuppressed = profitSuppressionApplies(report.settings?.defaultReturnRate);
   const completed = [...report.days]
     .flatMap((day) => {
       if (day.date >= today || day.isRestDay) return [];
       const adjustedProfitDzd =
         day.metrics?.adjustedProfitDzd ??
         (day.postedOrders === 0 && day.metrics?.adCostDzd != null ? 0 : null);
-      const correctedTrueProfitDzd =
-        adjustedProfitDzd != null && day.metrics?.adCostDzd != null
-          ? adjustedProfitDzd - day.metrics.adCostDzd - (day.operatingCostDzd ?? 0)
-          : day.trueProfitDzd;
+      const { trueProfitDzd } = calculateProfitAmounts({
+        adjustedProfitDzd,
+        adCostDzd: day.metrics?.adCostDzd ?? null,
+        operatingCostDzd: day.operatingCostDzd,
+        profitsSuppressed: profitsSuppressed || dayProfitsSuppressed(day),
+      });
+      const correctedTrueProfitDzd = trueProfitDzd ?? day.trueProfitDzd;
       return correctedTrueProfitDzd == null
         ? []
         : [
@@ -335,9 +344,15 @@ export function buildEconomicsForecast(
       const operatingCostDzd = currentDayRemainder
         ? 0
         : operatingCostForDay(date, report.costs ?? []);
-      const forecastTrueProfitDzd = operatingCostDzd === 0 ? 0 : -operatingCostDzd;
+      const forecastTrueProfitDzd = calculateProfitAmounts({
+        adjustedProfitDzd: 0,
+        adCostDzd: 0,
+        operatingCostDzd,
+        profitsSuppressed,
+      }).trueProfitDzd!;
       return {
         date,
+        profitsSuppressed,
         forecastGrossProfitDzd: 0,
         forecastAdjustedProfitDzd: 0,
         forecastAdCostDzd: 0,
@@ -384,24 +399,26 @@ export function buildEconomicsForecast(
     const fullDayAdCostDzd = baselineValue(completed, date, (day) => day.adCostDzd, baselineMethod);
     const forecastGrossProfitDzd =
       fullDayGrossProfitDzd == null ? null : fullDayGrossProfitDzd * share;
-    const forecastAdjustedProfitDzd =
+    const projectedAdjusted =
       fullDayAdjustedProfitDzd == null ? null : fullDayAdjustedProfitDzd * share;
     const forecastAdCostDzd = fullDayAdCostDzd == null ? null : fullDayAdCostDzd * share;
     const forecastOperatingCostDzd = currentDayRemainder
       ? 0
       : operatingCostForDay(date, report.costs ?? []);
-    const forecastNetProfitDzd =
-      forecastAdjustedProfitDzd != null && forecastAdCostDzd != null
-        ? forecastAdjustedProfitDzd - forecastAdCostDzd
-        : null;
-    const forecastTrueProfitDzd =
-      forecastNetProfitDzd != null
-        ? forecastNetProfitDzd - forecastOperatingCostDzd
-        : (weightedAverage(profits) ?? 0) * share;
+    const amounts = calculateProfitAmounts({
+      adjustedProfitDzd: projectedAdjusted,
+      adCostDzd: forecastAdCostDzd,
+      operatingCostDzd: forecastOperatingCostDzd,
+      profitsSuppressed,
+    });
+    const forecastAdjustedProfitDzd = amounts.adjustedProfitDzd;
+    const forecastNetProfitDzd = amounts.netProfitDzd;
+    const forecastTrueProfitDzd = amounts.trueProfitDzd ?? (weightedAverage(profits) ?? 0) * share;
     const horizonScale = Math.sqrt(1 + horizonIndex / 10);
-    const spread = baselineSpread * horizonScale * share;
+    const spread = profitsSuppressed ? 0 : baselineSpread * horizonScale * share;
     return {
       date,
+      profitsSuppressed,
       forecastGrossProfitDzd,
       forecastAdjustedProfitDzd,
       forecastAdCostDzd,
@@ -415,7 +432,9 @@ export function buildEconomicsForecast(
       forecastPaidOrders: currentDayRemainder ? null : (leadingDay?.forecastPaidOrders ?? null),
       knownPipelinePostedOrders: (leadingDay?.expectedPostedOrders ?? 0) * share,
       knownPipelineGrossProfitDzd: (leadingDay?.expectedGrossProfitDzd ?? 0) * share,
-      knownPipelineAdjustedProfitDzd: (leadingDay?.expectedAdjustedProfitDzd ?? 0) * share,
+      knownPipelineAdjustedProfitDzd: profitsSuppressed
+        ? 0
+        : (leadingDay?.expectedAdjustedProfitDzd ?? 0) * share,
       samples: sample.length,
       method: leadingDay
         ? 'historical-baseline-with-pipeline-floor'
@@ -425,7 +444,10 @@ export function buildEconomicsForecast(
   });
 }
 
-type EconomicsForecastPoint = ReturnType<typeof buildEconomicsForecast>[number];
+type EconomicsForecastPoint = Omit<
+  ReturnType<typeof buildEconomicsForecast>[number],
+  'profitsSuppressed'
+> & { profitsSuppressed?: boolean };
 
 function sumForecastMetric(
   rows: EconomicsForecastPoint[],
@@ -449,6 +471,7 @@ export function projectOpenEconomicsSeries(
       return point;
     }
 
+    const profitsSuppressed = remaining.every((row) => row.profitsSuppressed);
     const grossRemainder = sumForecastMetric(remaining, (row) => row.forecastGrossProfitDzd);
     const adjustedRemainder = sumForecastMetric(remaining, (row) => row.forecastAdjustedProfitDzd);
     const adCostRemainder = sumForecastMetric(remaining, (row) => row.forecastAdCostDzd);
@@ -469,12 +492,14 @@ export function projectOpenEconomicsSeries(
       adCostDzdProjected,
       netProfitDzdProjected,
       trueProfitDzdProjected,
-      profitXProjected:
-        adjustedProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
+      profitXProjected: profitsSuppressed
+        ? 0
+        : adjustedProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
           ? adjustedProfitDzdProjected / adCostDzdProjected
           : null,
-      profitXBeforeReturnsProjected:
-        grossProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
+      profitXBeforeReturnsProjected: profitsSuppressed
+        ? 0
+        : grossProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
           ? grossProfitDzdProjected / adCostDzdProjected
           : null,
       cumulativeNetProfitDzdProjected: add(point.cumulativeNetProfitDzd, netRemainder),
@@ -516,6 +541,7 @@ export function appendEconomicsForecastSeries(
     ) {
       continue;
     }
+    const profitsSuppressed = rows.every((row) => row.profitsSuppressed);
     const grossProfitDzd = sumForecastMetric(rows, (row) => row.forecastGrossProfitDzd);
     const adjustedProfitDzd = sumForecastMetric(rows, (row) => row.forecastAdjustedProfitDzd);
     const adCostDzd = sumForecastMetric(rows, (row) => row.forecastAdCostDzd);
@@ -554,12 +580,14 @@ export function appendEconomicsForecastSeries(
       adCostDzdProjected: adCostDzd,
       netProfitDzdProjected: netProfitDzd,
       trueProfitDzdProjected: trueProfitDzd,
-      profitXProjected:
-        adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0
+      profitXProjected: profitsSuppressed
+        ? 0
+        : adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0
           ? adjustedProfitDzd / adCostDzd
           : null,
-      profitXBeforeReturnsProjected:
-        grossProfitDzd != null && adCostDzd != null && adCostDzd > 0
+      profitXBeforeReturnsProjected: profitsSuppressed
+        ? 0
+        : grossProfitDzd != null && adCostDzd != null && adCostDzd > 0
           ? grossProfitDzd / adCostDzd
           : null,
       cumulativeNetProfitDzdProjected: cumulativeNetProfitDzd,

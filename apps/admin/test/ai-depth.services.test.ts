@@ -52,7 +52,7 @@ import { loadAttemptDistribution } from '../lib/analytics/fulfillment-cohorts';
 import { loadAssumptionsView } from '../lib/analytics/assumptions-search-views';
 import { loadFulfillmentView } from '../lib/analytics/acquisition-fulfillment-views';
 import { resolveAnalyticsFilters, clipAnalyticsFilters } from '../lib/analytics/date-range';
-import { ANALYTICS_FACT_SEMANTICS_VERSION } from '../lib/analytics-fact-contract';
+import { refreshAnalyticsFacts } from '../lib/analytics-facts';
 import { getAiStatsData } from '../lib/ai-stats';
 import { getLiveStorefrontAiStats } from '../lib/stats-experience-ai';
 import {
@@ -154,12 +154,12 @@ describe('durable AI evidence', () => {
       startDate: day,
       endDate: day,
     });
-    await db.insert(analyticsEconomicsDailyFacts).values({
-      day,
-      fxRateUsed: '280',
-      planningReturnRatePct: '15',
-      semanticsVersion: ANALYTICS_FACT_SEMANTICS_VERSION,
-      refreshedAt: new Date('2091-06-02T12:00:00Z'),
+    await db.insert(profitTrackerDays).values({ day, fxRateUsed: '280', grossProfitDzd: '1000' });
+    await refreshAnalyticsFacts({
+      db,
+      startDate: day,
+      endDate: day,
+      now: new Date('2091-06-02T12:00:00Z'),
     });
     try {
       expect(await loadMaterializedEconomicsReport(db, filters)).not.toBeNull();
@@ -186,6 +186,7 @@ describe('durable AI evidence', () => {
       expect(report.current.coverage.settledOrders).toBe(1);
     } finally {
       await db.delete(processedOrders).where(eq(processedOrders.tracking, tracking));
+      await db.delete(profitTrackerDays).where(eq(profitTrackerDays.day, day));
       await db
         .delete(analyticsEconomicsDailyFacts)
         .where(eq(analyticsEconomicsDailyFacts.day, day));

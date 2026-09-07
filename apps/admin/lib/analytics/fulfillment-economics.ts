@@ -43,7 +43,19 @@ export async function loadFulfillmentSummary(
   db: Database,
   startDate: string | null,
   endDate: string,
-): Promise<AnalyticsFulfillmentSummary & { matureCutoffDate: string }> {
+  submissionRange = { startDate, endDate },
+): Promise<
+  AnalyticsFulfillmentSummary & {
+    matureCutoffDate: string;
+    submissionCohort: {
+      submittedOrders: number;
+      confirmedOrders: number;
+      postedOrders: number;
+      deliveredOrders: number;
+      paidOrders: number;
+    };
+  }
+> {
   const matureCutoffDate = addDays(endDate, -21);
   const confirmedStatuses = sql.join(
     [...CONFIRMED_LIFECYCLE_ORDER_STATUSES].map((status) => sql`${status}`),
@@ -61,6 +73,8 @@ export async function loadFulfillmentSummary(
     ), posted_cohort as (
       select first_posted.order_id,
         first_posted.posted_day,
+        ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)} as in_posting_cohort,
+        ${timestampPredicate(orders.createdAt, submissionRange.startDate, submissionRange.endDate)} as in_submission_cohort,
         ${effectiveEcotrackStatusSql({
           localStatus: orders.inHouseStatus,
           providerStatus: ecotrackOrderStates.currentStatus,
@@ -90,13 +104,28 @@ export async function loadFulfillmentSummary(
         from ${ecotrackOrderTrackingEvents}
         where ${ecotrackOrderTrackingEvents.orderId} = first_posted.order_id
       ) lifecycle on true
-      where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
+      where (${datePredicate(sql`first_posted.posted_day`, startDate, endDate)})
+        or (${timestampPredicate(orders.createdAt, submissionRange.startDate, submissionRange.endDate)})
     ), order_cohort as (
       select ${orders.id}, ${orders.inHouseStatus}
       from ${orders}
       where ${timestampPredicate(orders.createdAt, startDate, endDate)}
     )
+    , submission_cohort as (
+      select ${orders.id}, ${orders.inHouseStatus},
+        exists (select 1 from ${orderStatusHistory}
+          where ${orderStatusHistory.orderId} = ${orders.id}
+            and ${orderStatusHistory.status} in (${confirmedStatuses})) as was_confirmed
+      from ${orders}
+      where ${timestampPredicate(orders.createdAt, submissionRange.startDate, submissionRange.endDate)}
+    )
     select
+      (select count(*)::int from submission_cohort) as funnel_submitted,
+      (select count(*) filter (where was_confirmed or confirmed in (${confirmedStatuses}))::int from submission_cohort) as funnel_confirmed,
+      (select count(*)::int from posted_cohort where in_submission_cohort) as funnel_posted,
+      (select count(*)::int from posted_cohort where in_submission_cohort and
+        (delivered_at is not null or current_status in (${paidShipmentStatusesSql}))) as funnel_delivered,
+      (select count(*)::int from posted_cohort where in_submission_cohort and current_status in (${paidShipmentStatusesSql})) as funnel_paid,
       (select count(*)::int from order_cohort) as submitted_orders,
       (select count(*) filter (where confirmed in (${confirmedStatuses}))::int from order_cohort)
         as confirmed_orders,
@@ -122,6 +151,7 @@ export async function loadFulfillmentSummary(
         where posted_day <= ${matureCutoffDate}::date and current_status = 'retour_archive'
       )::int as mature_returned_orders
     from posted_cohort
+    where in_posting_cohort
   `);
   const row = (result.rows[0] ?? {}) as Record<string, unknown>;
   const paidOrders = numeric(row.paid_orders);
@@ -129,6 +159,13 @@ export async function loadFulfillmentSummary(
   const maturePaid = numeric(row.mature_paid_orders);
   const matureReturned = numeric(row.mature_returned_orders);
   return {
+    submissionCohort: {
+      submittedOrders: numeric(row.funnel_submitted),
+      confirmedOrders: numeric(row.funnel_confirmed),
+      postedOrders: numeric(row.funnel_posted),
+      deliveredOrders: numeric(row.funnel_delivered),
+      paidOrders: numeric(row.funnel_paid),
+    },
     submittedOrders: numeric(row.submitted_orders),
     confirmedOrders: numeric(row.confirmed_orders),
     postedOrders: numeric(row.posted_orders),
@@ -244,7 +281,7 @@ export async function loadAutomaticPaidEconomics(
         min(
           ${ecotrackOrderTrackingEvents.eventDate}::timestamp
           + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
-        ) as paid_at
+        ) at time zone 'Africa/Algiers' as paid_at
       from ${ecotrackOrderTrackingEvents}
       where ${ecotrackOrderTrackingEvents.status} = 'payed'
       group by ${ecotrackOrderTrackingEvents.orderId}

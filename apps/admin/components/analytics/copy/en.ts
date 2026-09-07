@@ -90,6 +90,8 @@ export const analyticsCopyEn = {
     trajectory: 'Profit',
     signals: 'Signals',
     commerceFunnel: 'Order maturity',
+    commerceFunnelDescription:
+      'Orders submitted in the selected period, followed through their current outcomes. Posting totals elsewhere use the first posting date.',
     cashPipeline: 'Cash pipeline',
     paidEconomics: 'Paid economics',
     reconciliation: 'Settlement reference',

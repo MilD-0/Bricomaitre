@@ -183,6 +183,7 @@ export function CommandView({
           </Section>
           <Section
             title={copy.sections.commerceFunnel}
+            description={copy.sections.commerceFunnelDescription}
             analyticsFocus={{ dimension: 'cash_pipeline' }}
           >
             <Funnel rows={data.fulfillment.funnel} copy={copy} locale={locale} />

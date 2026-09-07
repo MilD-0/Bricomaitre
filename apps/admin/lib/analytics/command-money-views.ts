@@ -51,6 +51,11 @@ export async function loadCommandView(
     commonCutoff(cutoffs.posted, cutoffs.ecotrack),
     commonCoverageStart(cutoffs.postedFrom, cutoffs.ecotrackFrom),
   );
+  const submissionFilters = clipAnalyticsFilters(
+    filters,
+    commonCutoff(cutoffs.orders, cutoffs.ecotrack),
+    cutoffs.ordersFrom,
+  );
   const storefrontFilters = clipAnalyticsFilters(
     filters,
     commonCutoff(cutoffs.orders, cutoffs.storefront),
@@ -86,7 +91,12 @@ export async function loadCommandView(
     })),
     loadStorefrontOrderConversion(db, storefrontFilters),
     priorStorefront ? loadStorefrontOrderConversion(db, priorStorefront) : Promise.resolve(null),
-    loadFulfillmentSummary(db, fulfillmentFilters.startDate, fulfillmentFilters.endDate),
+    loadFulfillmentSummary(
+      db,
+      fulfillmentFilters.startDate,
+      fulfillmentFilters.endDate,
+      submissionFilters,
+    ),
     priorFulfillment
       ? loadFulfillmentSummary(db, priorFulfillment.startDate, priorFulfillment.endDate)
       : Promise.resolve(null),
@@ -192,12 +202,14 @@ export async function loadCommandView(
       fulfillment: {
         summary: fulfillment,
         cashPipeline: withLeadingCashStages(cashPipeline, leadingForecast),
+        funnelDateBasis: 'order_created_at' as const,
+        shipmentDateBasis: 'first_posted_at' as const,
         funnel: [
-          { key: 'submitted', value: fulfillment.submittedOrders },
-          { key: 'confirmed', value: fulfillment.confirmedOrders },
-          { key: 'posted', value: fulfillment.postedOrders },
-          { key: 'delivered', value: fulfillment.deliveredOrders },
-          { key: 'paid', value: fulfillment.paidOrders },
+          { key: 'submitted', value: fulfillment.submissionCohort.submittedOrders },
+          { key: 'confirmed', value: fulfillment.submissionCohort.confirmedOrders },
+          { key: 'posted', value: fulfillment.submissionCohort.postedOrders },
+          { key: 'delivered', value: fulfillment.submissionCohort.deliveredOrders },
+          { key: 'paid', value: fulfillment.submissionCohort.paidOrders },
         ],
       },
       returns,
@@ -211,6 +223,7 @@ export async function loadCommandView(
     effectiveRanges: [
       effectiveRange('economics', economicsFilters, ['orders', 'meta', 'assumptions']),
       effectiveRange('fulfillment', fulfillmentFilters, ['orders', 'ecotrack']),
+      effectiveRange('fulfillmentFunnel', submissionFilters, ['orders', 'ecotrack']),
       effectiveRange('storefront', storefrontFilters, ['orders', 'storefront']),
     ],
     sources,

@@ -6,6 +6,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   text,
   timestamp,
@@ -18,6 +19,7 @@ export const analyticsEconomicsDailyFacts = adminSchema.table(
   'analytics_economics_daily_facts',
   {
     day: date('day').primaryKey(),
+    calculatorDay: jsonb('calculator_day'),
     postedOrders: integer('posted_orders').notNull().default(0),
     paidOrders: integer('paid_orders').notNull().default(0),
     costCompleteOrders: integer('cost_complete_orders').notNull().default(0),

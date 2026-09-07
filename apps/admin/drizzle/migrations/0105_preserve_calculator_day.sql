@@ -1,0 +1,1 @@
+ALTER TABLE "admin"."analytics_economics_daily_facts" ADD COLUMN "calculator_day" jsonb;

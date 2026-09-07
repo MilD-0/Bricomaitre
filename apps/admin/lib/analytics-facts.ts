@@ -13,6 +13,11 @@ import {
 } from './analytics-fact-contract';
 import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import { getProfitTrackerReport } from './profit-tracker';
+import {
+  calculateProfitAmounts,
+  dayProfitsSuppressed,
+  profitSuppressionApplies,
+} from './profit-tracker-metrics';
 import { getReportingDb } from './reporting-db';
 
 type Database = ReturnType<typeof getDb>;
@@ -49,19 +54,23 @@ export function buildAnalyticsEconomicsDailyFactRows(
     const adjustedProfitDzd =
       day.metrics.adjustedProfitDzd ??
       (day.postedOrders === 0 && day.metrics.adCostDzd != null ? 0 : null);
-    const netProfitDzd =
-      adjustedProfitDzd == null || day.metrics.adCostDzd == null
-        ? null
-        : adjustedProfitDzd - day.metrics.adCostDzd;
-    const trueProfitDzd = netProfitDzd == null ? null : netProfitDzd - (day.operatingCostDzd ?? 0);
+    const profitsSuppressed =
+      profitSuppressionApplies(report.settings.defaultReturnRate) || dayProfitsSuppressed(day);
+    const { netProfitDzd, trueProfitDzd } = calculateProfitAmounts({
+      adjustedProfitDzd,
+      adCostDzd: day.metrics.adCostDzd,
+      operatingCostDzd: day.operatingCostDzd,
+      profitsSuppressed,
+    });
     return {
       day: day.date,
+      calculatorDay: { version: 1, day },
       postedOrders: day.postedOrders,
       paidOrders: paid?.paidOrders ?? 0,
       costCompleteOrders: day.costCompleteOrders,
       paidProfitCompleteOrders: paid?.completeOrders ?? 0,
       grossProfitDzd: decimal(day.grossProfitDzd),
-      adjustedProfitDzd: decimal(adjustedProfitDzd),
+      adjustedProfitDzd: decimal(profitsSuppressed ? 0 : adjustedProfitDzd),
       adCostDzd: decimal(day.metrics.adCostDzd) ?? '0.000000',
       operatingCostDzd: decimal(day.operatingCostDzd) ?? '0.000000',
       netProfitDzd: decimal(netProfitDzd),
@@ -138,6 +147,7 @@ export async function refreshAnalyticsFacts(
         .onConflictDoUpdate({
           target: analyticsEconomicsDailyFacts.day,
           set: {
+            calculatorDay: sql`excluded.calculator_day`,
             postedOrders: sql`excluded.posted_orders`,
             paidOrders: sql`excluded.paid_orders`,
             costCompleteOrders: sql`excluded.cost_complete_orders`,
@@ -202,8 +212,8 @@ export async function refreshAnalyticsFacts(
       )
       select first_posted.order_id,
         first_posted.posted_day,
-        lifecycle.delivered_at,
-        lifecycle.paid_at,
+        lifecycle.delivered_at at time zone 'Africa/Algiers',
+        lifecycle.paid_at at time zone 'Africa/Algiers',
         ${buildAnalyticsOrderCohortOutcomeSql(filters.endDate)},
         orders.total_amount,
         state.current_amount,

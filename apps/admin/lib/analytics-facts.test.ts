@@ -68,6 +68,10 @@ describe('Analytics economics facts', () => {
     expect(rows).toEqual([
       {
         day: '2026-08-19',
+        calculatorDay: {
+          version: 1,
+          day: expect.objectContaining({ date: '2026-08-19', grossProfitDzd: 10_000 }),
+        },
         postedOrders: 4,
         paidOrders: 2,
         costCompleteOrders: 3,

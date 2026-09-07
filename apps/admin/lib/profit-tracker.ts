@@ -25,6 +25,8 @@ import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import {
   applyProfitTrackerRollforward,
   buildProfitTrackerWeeks,
+  calculateProfitAmounts,
+  dayProfitsSuppressed,
   operatingCostForDay,
   summarizeProfitTracker,
   type ProfitTrackerDayInput,
@@ -1034,11 +1036,12 @@ export async function loadProfitTrackerReportForRange(
   let cumulativeTrueProfitDzd = 0;
   const enrichedAscending = [...selected].reverse().map((day) => {
     const operatingCostDzd = operatingCostForDay(day.date, costs);
-    const trueProfitDzd = profitsSuppressed
-      ? 0
-      : day.metrics.netProfitDzd == null
-        ? null
-        : day.metrics.netProfitDzd - operatingCostDzd;
+    const { trueProfitDzd } = calculateProfitAmounts({
+      adjustedProfitDzd: day.metrics.adjustedProfitDzd,
+      adCostDzd: day.metrics.adCostDzd,
+      operatingCostDzd,
+      profitsSuppressed: profitsSuppressed || dayProfitsSuppressed(day),
+    });
     cumulativeNetDzd += day.metrics.netProfitDzd || 0;
     cumulativeNetBeforeReturnsDzd += day.metrics.netProfitBeforeReturnsDzd || 0;
     cumulativeTrueProfitDzd += trueProfitDzd || 0;

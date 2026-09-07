@@ -90,6 +90,8 @@ export const analyticsCopyFr = {
     trajectory: 'Trajectoire de l’activité',
     signals: 'File opérateur',
     commerceFunnel: 'Maturité des commandes',
+    commerceFunnelDescription:
+      'Commandes reçues pendant la période sélectionnée, suivies jusqu’à leur état actuel. Les totaux des envois ailleurs utilisent la date du premier envoi au transporteur.',
     cashPipeline: 'Pipeline de trésorerie',
     paidEconomics: 'Économie payée automatique',
     reconciliation: 'Référence de règlement',

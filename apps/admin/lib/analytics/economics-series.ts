@@ -1,4 +1,9 @@
 import type { getProfitTrackerReport } from '../profit-tracker';
+import {
+  calculateProfitAmounts,
+  dayProfitsSuppressed,
+  profitSuppressionApplies,
+} from '../profit-tracker-metrics';
 import type {
   AnalyticsAutomaticPaidDay,
   AnalyticsAutomaticPaidEconomics,
@@ -36,6 +41,7 @@ export function aggregateEconomicsSeries(
   grain: AnalyticsResolvedGrain,
   today: string,
 ): AnalyticsEconomicsPoint[] {
+  const profitsSuppressed = profitSuppressionApplies(report.settings?.defaultReturnRate);
   const realizedByDate = new Map(report.realized.days.map((day) => [day.date, day]));
   type Accumulator = {
     bucket: string;
@@ -46,6 +52,10 @@ export function aggregateEconomicsSeries(
     adCostDzd: number;
     adSamples: number;
     operatingCostDzd: number;
+    profitOperatingCostDzd: number;
+    profitAdCostDzd: number;
+    profitGrossDzd: number;
+    unsuppressedDays: number;
     realizedProfitDzd: number;
     realizedSamples: number;
     postedOrders: number;
@@ -66,6 +76,10 @@ export function aggregateEconomicsSeries(
       adCostDzd: 0,
       adSamples: 0,
       operatingCostDzd: 0,
+      profitOperatingCostDzd: 0,
+      profitAdCostDzd: 0,
+      profitGrossDzd: 0,
+      unsuppressedDays: 0,
       realizedProfitDzd: 0,
       realizedSamples: 0,
       postedOrders: 0,
@@ -79,6 +93,12 @@ export function aggregateEconomicsSeries(
     current.costCompleteOrders += day.costCompleteOrders ?? 0;
     current.settledOrders += realized?.settledOrders ?? 0;
     current.operatingCostDzd += day.operatingCostDzd ?? 0;
+    if (!profitsSuppressed && !dayProfitsSuppressed(day)) {
+      current.unsuppressedDays += 1;
+      current.profitOperatingCostDzd += day.operatingCostDzd ?? 0;
+      current.profitAdCostDzd += day.metrics.adCostDzd ?? 0;
+      current.profitGrossDzd += day.grossProfitDzd ?? 0;
+    }
     if (day.grossProfitDzd != null) {
       current.grossProfitDzd += day.grossProfitDzd;
       current.grossSamples += 1;
@@ -100,7 +120,8 @@ export function aggregateEconomicsSeries(
 
   let cumulativeAdjustedProfitDzd = 0;
   let cumulativeAdCostDzd = 0;
-  let cumulativeOperatingCostDzd = 0;
+  let cumulativeNetProfitDzd = 0;
+  let cumulativeTrueProfitDzd = 0;
   let cumulativeRealizedProfitDzd = 0;
   const latestTrackedDate = [...groups.values()]
     .flatMap((group) => group.days)
@@ -110,15 +131,19 @@ export function aggregateEconomicsSeries(
     .sort((left, right) => left.bucket.localeCompare(right.bucket))
     .map((group) => {
       const grossProfitDzd = group.grossSamples ? group.grossProfitDzd : null;
-      const adjustedProfitDzd = group.adjustedSamples ? group.adjustedProfitDzd : null;
+      const suppressed = profitsSuppressed || group.unsuppressedDays === 0;
       const adCostDzd = group.adSamples ? group.adCostDzd : null;
-      const netProfitDzd =
-        adjustedProfitDzd != null && adCostDzd != null ? adjustedProfitDzd - adCostDzd : null;
-      const trueProfitDzd = netProfitDzd == null ? null : netProfitDzd - group.operatingCostDzd;
+      const { adjustedProfitDzd, netProfitDzd, trueProfitDzd } = calculateProfitAmounts({
+        adjustedProfitDzd: group.adjustedSamples ? group.adjustedProfitDzd : null,
+        adCostDzd: adCostDzd == null ? null : group.profitAdCostDzd,
+        operatingCostDzd: group.profitOperatingCostDzd,
+        profitsSuppressed: suppressed,
+      });
       const realizedProfitDzd = group.realizedSamples ? group.realizedProfitDzd : null;
       if (adjustedProfitDzd != null) cumulativeAdjustedProfitDzd += adjustedProfitDzd;
       if (adCostDzd != null) cumulativeAdCostDzd += adCostDzd;
-      cumulativeOperatingCostDzd += group.operatingCostDzd;
+      cumulativeNetProfitDzd += netProfitDzd ?? 0;
+      cumulativeTrueProfitDzd += trueProfitDzd ?? 0;
       if (realizedProfitDzd != null) cumulativeRealizedProfitDzd += realizedProfitDzd;
       return {
         bucket: group.bucket,
@@ -129,27 +154,32 @@ export function aggregateEconomicsSeries(
         netProfitDzd,
         trueProfitDzd,
         realizedProfitDzd,
-        realizedProfitAfterAdsDzd:
-          realizedProfitDzd != null && adCostDzd != null ? realizedProfitDzd - adCostDzd : null,
+        realizedProfitAfterAdsDzd: profitsSuppressed
+          ? 0
+          : realizedProfitDzd != null && adCostDzd != null
+            ? realizedProfitDzd - adCostDzd
+            : null,
         postedOrders: group.postedOrders,
         settledOrders: group.settledOrders,
-        profitX:
-          adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0
+        profitX: suppressed
+          ? 0
+          : adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0
             ? adjustedProfitDzd / adCostDzd
             : null,
-        profitXBeforeReturns:
-          grossProfitDzd != null && adCostDzd != null && adCostDzd > 0
-            ? grossProfitDzd / adCostDzd
+        profitXBeforeReturns: suppressed
+          ? 0
+          : grossProfitDzd != null && adCostDzd != null && adCostDzd > 0
+            ? group.profitGrossDzd / adCostDzd
             : null,
         projectedCoveragePct:
           group.postedOrders > 0 ? (group.costCompleteOrders / group.postedOrders) * 100 : null,
         cumulativeNetProfitDzd:
-          cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
-            ? cumulativeAdjustedProfitDzd - cumulativeAdCostDzd
+          suppressed || cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
+            ? cumulativeNetProfitDzd
             : null,
         cumulativeTrueProfitDzd:
-          cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
-            ? cumulativeAdjustedProfitDzd - cumulativeAdCostDzd - cumulativeOperatingCostDzd
+          suppressed || cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
+            ? cumulativeTrueProfitDzd
             : null,
         cumulativeRealizedProfitDzd: group.realizedSamples ? cumulativeRealizedProfitDzd : null,
         isPartial:

@@ -90,6 +90,8 @@ export const analyticsCopyAr = {
     trajectory: 'مسار النشاط',
     signals: 'قائمة المتابعة',
     commerceFunnel: 'نضج الطلبات',
+    commerceFunnelDescription:
+      'الطلبات المقدمة خلال الفترة المحددة، مع متابعة نتائجها الحالية. تعتمد إجماليات الإرسال في الأقسام الأخرى على تاريخ أول إرسال إلى الناقل.',
     cashPipeline: 'مسار السيولة',
     paidEconomics: 'اقتصاد الدفع التلقائي',
     reconciliation: 'مرجع التسوية',
