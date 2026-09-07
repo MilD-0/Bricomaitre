@@ -18,6 +18,27 @@ import { recordExplicitActionLog, type ActionActor } from './action-history';
 import { requestEcotrackJson } from './ecotrack-provider';
 import { parseNumericAmount, type DeliveryType } from './orders';
 
+export function resolveEcotrackCommune(
+  catalog: EcotrackCatalogRecord,
+  state: number | null,
+  city: string | null,
+) {
+  if (state === null) {
+    return null;
+  }
+
+  const rawCity = city?.trim() ?? '';
+  if (!rawCity) {
+    return null;
+  }
+
+  return catalog.communes.find(
+    (entry) =>
+      entry.wilayaId === state &&
+      (String(entry.communeId) === rawCity || entry.name.toLowerCase() === rawCity.toLowerCase()),
+  );
+}
+
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';

@@ -9,7 +9,11 @@ import {
   type EcotrackExtendedRateLimitSnapshot,
 } from '@bric/storefront-core/ecotrack-client';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
-import { readEcotrackCatalog, type EcotrackCatalogRecord } from './ecotrack-catalog';
+import {
+  readEcotrackCatalog,
+  resolveEcotrackCommune,
+  type EcotrackCatalogRecord,
+} from './ecotrack-catalog';
 import { applySavedEcotrackMutation } from './ecotrack-mutation-apply';
 import {
   claimEcotrackMutation,
@@ -188,27 +192,6 @@ export async function validateEcotrackToken(
     rateLimit: result.rateLimit,
     raw: result.payload,
   };
-}
-
-function resolveEcotrackCommune(
-  catalog: EcotrackCatalogRecord,
-  state: number | null,
-  city: string | null,
-) {
-  if (state === null) {
-    return null;
-  }
-
-  const rawCity = normalizeEcotrackText(city);
-  if (!rawCity) {
-    return null;
-  }
-
-  return catalog.communes.find(
-    (entry) =>
-      entry.wilayaId === state &&
-      (String(entry.communeId) === rawCity || entry.name.toLowerCase() === rawCity.toLowerCase()),
-  );
 }
 
 export function buildEcotrackOrderPayload(

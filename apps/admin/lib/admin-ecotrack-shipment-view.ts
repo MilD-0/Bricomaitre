@@ -12,7 +12,11 @@ import type {
   EcotrackShipmentListItem,
   EcotrackStatusSummary,
 } from './ecotrack-admin-contracts';
-import { readEcotrackCatalog } from './ecotrack-catalog';
+import {
+  readEcotrackCatalog,
+  resolveEcotrackCommune,
+  type EcotrackCatalogRecord,
+} from './ecotrack-catalog';
 import type { EcotrackShipmentListQuery } from './ecotrack-shipment-list';
 import {
   MAJ_STALE_MS,
@@ -103,7 +107,7 @@ function buildStatusSummary(row: typeof ecotrackOrderStates.$inferSelect): Ecotr
 function toListItem(
   row: ShipmentRow,
   record: OrderRecord,
-  stateNameById: Map<number, string>,
+  catalog: EcotrackCatalogRecord,
 ): EcotrackOrderListItem {
   return {
     orderId: row.order.id,
@@ -120,8 +124,11 @@ function toListItem(
     delivery: record.delivery,
     deliveryLabel: mapDeliveryLabel(record.delivery),
     state: row.order.state,
-    stateName: row.order.state === null ? null : (stateNameById.get(row.order.state) ?? null),
-    city: row.order.city,
+    stateName:
+      row.order.state === null
+        ? null
+        : (catalog.wilayas.find((entry) => entry.wilayaId === row.order.state)?.name ?? null),
+    city: resolveEcotrackCommune(catalog, row.order.state, row.order.city)?.name ?? row.order.city,
     homeAddress: row.order.homeAddress,
     orderProducts: record.orderProducts,
     subtotalOverride: record.subtotalOverride,
@@ -280,11 +287,9 @@ async function loadActiveShipmentSearchRows(
 export function buildListItems(
   rows: ShipmentRow[],
   productLookup: Awaited<ReturnType<typeof getOrderProductLookup>>,
-  stateNameById: Map<number, string>,
+  catalog: EcotrackCatalogRecord,
 ) {
-  return rows.map((row) =>
-    toListItem(row, toOrderRecord(row.order, [], productLookup), stateNameById),
-  );
+  return rows.map((row) => toListItem(row, toOrderRecord(row.order, [], productLookup), catalog));
 }
 
 export async function loadShipmentRowByOrderId(db: Database, orderId: number) {
@@ -311,7 +316,6 @@ export async function buildEcotrackOrderDetailFromRow(
     readEcotrackCatalog(db),
   ]);
   const record = toOrderRecord(row.order, [], productLookup);
-  const stateNameById = new Map(catalog.wilayas.map((entry) => [entry.wilayaId, entry.name]));
   const [majRows, trackingRows] = await Promise.all([
     db
       .select()
@@ -340,7 +344,7 @@ export async function buildEcotrackOrderDetailFromRow(
   ]);
 
   return {
-    ...toListItem(row, record, stateNameById),
+    ...toListItem(row, record, catalog),
     majEntries: majRows.map((entry) => ({
       id: entry.id,
       remarque: entry.remarque,

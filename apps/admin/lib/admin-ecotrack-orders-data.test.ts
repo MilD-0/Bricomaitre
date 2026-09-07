@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseEcotrackShipmentUpdateDraft } from './admin-ecotrack-orders-data';
 import type { EcotrackCatalogRecord } from './ecotrack';
 import { buildUpdatePayload } from './ecotrack-shipment-input';
+import { buildListItems } from './admin-ecotrack-shipment-view';
+import { OrderProductLookup } from './order-records';
 import {
   deriveLatestUpstreamActivityAt,
   getUpstreamTrackingValues,
@@ -17,6 +19,36 @@ import {
 } from './ecotrack-status-policy';
 
 describe('admin ECOTRACK shipment mapping', () => {
+  it.each([
+    [16, '521', 'Ain Benian'],
+    [16, 'ain benian', 'Ain Benian'],
+    [31, '521', '521'],
+    [16, 'Unlisted commune', 'Unlisted commune'],
+  ])('presents commune %s/%s without rewriting the order', (state, city, expected) => {
+    const order = {
+      id: 1,
+      state,
+      city,
+      firstName: 'Phone',
+      lastName: 'Customer',
+      phoneNumber1: '0550123456',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      cartProducts: [],
+      price: null,
+      delivery: 0,
+      inHouseStatus: 11,
+    };
+    const rows = [{ order, currentStatus: 'prete_a_expedier', deletedAt: null }] as never;
+    const catalog = {
+      wilayas: [{ wilayaId: 16, name: 'Alger' }],
+      communes: [{ communeId: 521, wilayaId: 16, name: 'Ain Benian' }],
+    } as EcotrackCatalogRecord;
+    const [item] = buildListItems(rows, new OrderProductLookup(), catalog);
+    expect(item?.city).toBe(expected);
+    expect(order.city).toBe(city);
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });

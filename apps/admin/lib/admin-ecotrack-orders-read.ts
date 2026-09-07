@@ -65,13 +65,12 @@ export async function loadEcotrackOrdersPageData(
     loadActiveShipmentPageRows(db, query),
     readEcotrackCatalog(db),
   ]);
-  const stateNameById = new Map(catalog.wilayas.map((entry) => [entry.wilayaId, entry.name]));
   const buildPageItems = async (rows: typeof pageData.rows) => {
     const productLookup = await getOrderProductLookup(
       db,
       rows.map((row) => row.order),
     );
-    return buildListItems(rows, productLookup, stateNameById);
+    return buildListItems(rows, productLookup, catalog);
   };
   const entries = await buildPageItems(pageData.rows);
 
