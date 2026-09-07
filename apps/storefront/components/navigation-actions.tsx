@@ -57,6 +57,7 @@ export function NavigationActions({
   const alternateHref = useLocaleHref(alternateLocale, alternatePath);
   const [visualLocale, setVisualLocale] = useState<Locale>(locale);
   const cartButtonRef = useRef<HTMLButtonElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const cartCount = getCartItemCount(cartItems);
   const cartSubtotal = getCartSubtotal(cartItems);
   const categoryTree = useMemo(
@@ -154,6 +155,11 @@ export function NavigationActions({
     queueMicrotask(() => cartButtonRef.current?.focus());
   }
 
+  function closeMenu() {
+    setMenuOpen(false);
+    queueMicrotask(() => menuButtonRef.current?.focus());
+  }
+
   function triggerNavigationHaptic() {
     void triggerHaptic('navigation');
   }
@@ -231,6 +237,7 @@ export function NavigationActions({
           </span>
         </button>
         <button
+          ref={menuButtonRef}
           className="navigation-menu-button"
           type="button"
           aria-label={labels.menu}
@@ -247,7 +254,7 @@ export function NavigationActions({
           ariaLabel={labels.menu}
           closeLabel={labels.closeMenu}
           className="navigation-drawer"
-          onClose={() => setMenuOpen(false)}
+          onClose={closeMenu}
           headerAction={renderLocaleToggle('mobile_drawer', 'navigation-drawer-locale-toggle')}
           footer={
             <div className="navigation-drawer-footer-content">

@@ -276,7 +276,7 @@ export function ProductEditorPanel({
           {detailQuery.error.message}
         </p>
       ) : null}
-      {isDirty && detailQuery.data?.item.updatedAt !== sourceUpdatedAt ? (
+      {isEdit && isDirty && currentUpdatedAt !== sourceUpdatedAt ? (
         <div
           role="status"
           className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm sm:px-6"

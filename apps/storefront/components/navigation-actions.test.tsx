@@ -230,6 +230,31 @@ describe('NavigationActions', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: labels.menu })).not.toBeInTheDocument();
   });
+  it.each(['Escape', 'close button', 'outside'])(
+    'returns keyboard focus to the menu opener after dismissal with %s',
+    async (dismissal) => {
+      render(
+        <NavigationActions
+          locale="fr"
+          alternateLocale="ar"
+          alternateLabel="العربية"
+          labels={labels}
+          contact={contact}
+        />,
+      );
+      const opener = screen.getByRole('button', { name: labels.menu });
+      opener.focus();
+      fireEvent.click(opener);
+      const close = screen.getByRole('button', { name: labels.closeMenu });
+      expect(close).toHaveFocus();
+      if (dismissal === 'Escape') fireEvent.keyDown(window, { key: 'Escape' });
+      else if (dismissal === 'close button') fireEvent.click(close);
+      else fireEvent.click(document.querySelector('.mobile-sheet-scrim')!);
+      expect(screen.queryByRole('dialog', { name: labels.menu })).not.toBeInTheDocument();
+      await waitFor(() => expect(opener).toHaveFocus());
+    },
+  );
+
   it('retries missing navigation metadata when the mobile menu is reopened', async () => {
     navigationMeta.mockRejectedValueOnce(new Error('offline'));
     render(
