@@ -388,15 +388,14 @@ export async function createLandingPage(input: {
   });
 }
 
-export async function saveLandingPage(input: {
+async function writeLandingPage(input: {
   id: number;
-  document: unknown;
+  document?: unknown;
   active: boolean;
   expectedRevision: number;
   actorId?: string | null;
   source?: string;
 }) {
-  const document = normalizeLandingPageDocument(input.document);
   const db = getDb();
   return db.transaction(async (tx) => {
     const [current] = await tx
@@ -424,9 +423,14 @@ export async function saveLandingPage(input: {
       .limit(1);
     if (!savedRevision) throw new LandingPageConflictError('The current revision is unavailable.');
 
-    const changed = !documentsMatch(normalizeLandingPageDocument(savedRevision.document), document);
+    const savedDocument = normalizeLandingPageDocument(savedRevision.document);
+    const document =
+      input.document === undefined ? savedDocument : normalizeLandingPageDocument(input.document);
+    const changed = !documentsMatch(savedDocument, document);
+    const visibilityChanged = (current.status === 'published') !== input.active;
     let revision = current.draftRevision;
-    if (changed) {
+    // Visibility is part of the editor revision, so an older save cannot reverse it.
+    if (changed || visibilityChanged) {
       const [next] = await tx
         .select({ revision: sql<number>`coalesce(max(${landingPageRevisions.revision}), 0) + 1` })
         .from(landingPageRevisions)
@@ -456,36 +460,23 @@ export async function saveLandingPage(input: {
   });
 }
 
+export async function saveLandingPage(input: {
+  id: number;
+  document: unknown;
+  active: boolean;
+  expectedRevision: number;
+  actorId?: string | null;
+  source?: string;
+}) {
+  return writeLandingPage({ ...input, document: normalizeLandingPageDocument(input.document) });
+}
+
 export async function setLandingPageActive(input: {
   id: number;
   active: boolean;
   expectedRevision: number;
   actorId?: string | null;
 }) {
-  const db = getDb();
-  return db.transaction(async (tx) => {
-    const [current] = await tx
-      .select({ draftRevision: landingPages.draftRevision })
-      .from(landingPages)
-      .where(eq(landingPages.id, input.id))
-      .limit(1)
-      .for('update');
-    if (!current) throw new LandingPageNotFoundError();
-    if (current.draftRevision !== input.expectedRevision) throw new LandingPageConflictError();
-
-    const now = new Date();
-    await tx
-      .update(landingPages)
-      .set({
-        ...buildLandingPagePublicationUpdate({
-          active: input.active,
-          revision: current.draftRevision,
-          now,
-        }),
-        updatedBy: input.actorId,
-        updatedAt: now,
-      })
-      .where(eq(landingPages.id, input.id));
-    return { id: input.id, active: input.active, currentRevision: current.draftRevision };
-  });
+  const { id, active, currentRevision } = await writeLandingPage(input);
+  return { id, active, currentRevision };
 }

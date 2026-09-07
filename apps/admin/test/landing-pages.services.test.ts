@@ -28,7 +28,26 @@ it('loads current documents across published and inactive campaigns and preserve
     const ar = await createLandingPage({ productId: product!.id, locale: 'ar' });
     const document = buildDefaultLandingPageDocument({ locale: 'fr', title: 'Changed draft' });
     await saveLandingPage({ id: fr.id, document, active: true, expectedRevision: 1 });
-    await setLandingPageActive({ id: fr.id, active: false, expectedRevision: 2 });
+    const unpublished = await setLandingPageActive({
+      id: fr.id,
+      active: false,
+      expectedRevision: 2,
+    });
+    expect(unpublished.currentRevision).toBe(3);
+    // The exact revision held by a second editor before the unpublish is stale.
+    await expect(
+      saveLandingPage({ id: fr.id, document, active: true, expectedRevision: 2 }),
+    ).rejects.toBeInstanceOf(LandingPageConflictError);
+    await expect(
+      setLandingPageActive({ id: fr.id, active: true, expectedRevision: 2 }),
+    ).rejects.toBeInstanceOf(LandingPageConflictError);
+    const unchanged = await saveLandingPage({
+      id: fr.id,
+      document,
+      active: false,
+      expectedRevision: 3,
+    });
+    expect(unchanged).toMatchObject({ currentRevision: 3, changed: false, active: false });
     await expect(
       saveLandingPage({ id: fr.id, document, active: true, expectedRevision: 1 }),
     ).rejects.toBeInstanceOf(LandingPageConflictError);
@@ -40,7 +59,7 @@ it('loads current documents across published and inactive campaigns and preserve
     expect(rows.map((row) => row.id)).toEqual([fr.id, ar.id]);
     expect(rows[0]).toMatchObject({
       status: 'draft',
-      draftRevision: 2,
+      draftRevision: 3,
       publishedRevision: 2,
       document: { seo: { title: 'Changed draft', indexable: false } },
     });

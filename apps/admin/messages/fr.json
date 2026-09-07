@@ -1415,6 +1415,8 @@
     }
   },
   "inventory": {
+    "retry": "Réessayer",
+    "loadError": "Impossible de charger le stock. Réessayez.",
     "searchPlaceholder": "Rechercher par produit, SKU ou code-barres",
     "searchHint": "Seuls les produits avec une quantité supérieure à zéro sont affichés par défaut. Recherchez ou scannez pour faire réapparaître les articles masqués.",
     "scanAdd": "Scanner l’entrée",

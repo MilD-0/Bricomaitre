@@ -356,4 +356,53 @@ describe('taxonomy workspace preview', () => {
     await waitFor(() => expect(status).toHaveAttribute('data-state', 'checked'));
     await screen.findByText('Unavailable');
   });
+  it.each([true, false])(
+    'keeps the current sort when an older mutation finishes with success=%s',
+    async (succeeds) => {
+      let release!: () => void;
+      const patchWait = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let started = false;
+      server.use(
+        http.get('/api/brands', ({ request }) => {
+          const sort = new URL(request.url).searchParams.get('sort');
+          const name = sort === 'products' ? 'Most products record' : 'Old updated record';
+          return HttpResponse.json({
+            writable: true,
+            items: [
+              {
+                id: '1',
+                name,
+                slug: 'brand',
+                isActive: true,
+                status: 'active',
+                productCount: 10,
+                ...audit,
+              },
+            ],
+            pagination,
+          });
+        }),
+        http.patch('/api/brands/1', async () => {
+          started = true;
+          await patchWait;
+          return succeeds
+            ? HttpResponse.json({ ok: true })
+            : HttpResponse.json({ error: 'Mutation failed' }, { status: 503 });
+        }),
+      );
+      renderWorkspace('brands');
+      await screen.findByText('Old updated record');
+      await userEvent.click(screen.getByRole('switch', { name: 'Old updated record · Active' }));
+      await waitFor(() => expect(started).toBe(true));
+      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort' }), 'products');
+      await screen.findByText('Most products record');
+      release();
+      await screen.findByText(succeeds ? 'Saved.' : 'Mutation failed');
+      expect(screen.getByRole('combobox', { name: 'Sort' })).toHaveValue('products');
+      expect(screen.getByText('Most products record')).toBeVisible();
+      expect(screen.queryByText('Old updated record')).not.toBeInTheDocument();
+    },
+  );
 });

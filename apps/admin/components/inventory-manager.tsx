@@ -780,6 +780,23 @@ export function InventoryManager({ title }: { title: string }) {
           />
         </WorkspaceHeader>
 
+        {query.isError ? (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 py-3 text-sm text-destructive"
+          >
+            <p>{t('inventory.loadError')}</p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              {t('inventory.retry')}
+            </Button>
+          </div>
+        ) : null}
+
         <WorkspaceToolbar className="grid gap-3 lg:grid-cols-[minmax(20rem,0.8fr)_minmax(18rem,1.2fr)]">
           <section className="min-w-0">
             <p className="text-sm font-medium">{t('inventory.scan.title')}</p>
@@ -862,7 +879,7 @@ export function InventoryManager({ title }: { title: string }) {
                 <TableBody>
                   {isLoading ? <InventoryTableSkeleton /> : null}
 
-                  {!isLoading && items.length === 0 ? (
+                  {query.isSuccess && items.length === 0 ? (
                     <TableRow className="hover:bg-transparent">
                       <TableCell colSpan={4}>
                         <Empty className="border-none">
@@ -958,7 +975,7 @@ export function InventoryManager({ title }: { title: string }) {
                     </div>
                   ))
                 : null}
-              {!isLoading && items.length === 0 ? (
+              {query.isSuccess && items.length === 0 ? (
                 <Empty className="border-none px-3 py-10">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">

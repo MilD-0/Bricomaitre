@@ -5,7 +5,7 @@
 import { ImageIcon, Plus, Search } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import * as React from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { requestJson } from '../../lib/admin-api';
 import { taxonomyAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
@@ -83,10 +83,6 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
   const localeValue = useLocale();
   const locale = localeValue === 'ar' || localeValue === 'fr' ? localeValue : 'en';
   const t = getTaxonomyCopy(locale);
-  const [data, setData] = React.useState<TaxonomyResponse>(() => emptyResponse(view));
-  const [loaded, setLoaded] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
-  const [loadError, setLoadError] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState('');
   const deferredSearch = React.useDeferredValue(search.trim());
@@ -100,40 +96,29 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
   const responseSchema =
     view === 'brands' ? brandsListResponseSchema : categoriesListResponseSchema;
 
-  const load = React.useCallback(
-    async (signal?: AbortSignal) => {
-      setLoading(true);
-      setLoadError('');
-      const query = new URLSearchParams({
+  const queryKey = ['taxonomy-workspace', view, page, deferredSearch, sort] as const;
+  const query = useQuery({
+    queryKey,
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({
         page: String(page),
         limit: '50',
         search: deferredSearch,
         sort,
       });
-      if (view === 'categories') query.set('includeParentOptions', '1');
-
-      try {
-        const response = await requestJson<unknown>(`${endpoint}?${query}`, { signal });
-        setData(responseSchema.parse(response));
-        setLoaded(true);
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-        setLoadError(error instanceof Error ? error.message : t.loadFailed);
-      } finally {
-        if (!signal?.aborted) setLoading(false);
-      }
+      if (view === 'categories') params.set('includeParentOptions', '1');
+      const response = await requestJson<unknown>(`${endpoint}?${params}`, { signal });
+      return responseSchema.parse(response);
     },
-    [deferredSearch, endpoint, page, responseSchema, sort, t.loadFailed, view],
-  );
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => void load(controller.signal), 0);
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [load]);
+  });
+  const data = query.data ?? emptyResponse(view);
+  const loaded = query.data !== undefined;
+  const loading = query.isFetching;
+  const loadError = query.error
+    ? query.error instanceof Error
+      ? query.error.message
+      : t.loadFailed
+    : '';
 
   const items = data.items;
   const allVisibleSelected = items.length > 0 && items.every((item) => selected.includes(item.id));
@@ -166,20 +151,21 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
     success: string;
     closeEditor?: boolean;
   }) => {
-    const snapshot = data;
-    setData(optimistic);
     setPending(true);
+    await queryClient.cancelQueries({ queryKey, exact: true });
+    const snapshot = queryClient.getQueryData<TaxonomyResponse>(queryKey);
+    queryClient.setQueryData(queryKey, optimistic);
     try {
       await operation();
       await queryClient.invalidateQueries({ queryKey: ['products-meta-workspace'] });
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ['taxonomy-workspace', view] });
       if (closeEditor) setEditor((current) => (current === editor ? null : current));
       toast.success(success);
       return true;
     } catch (error) {
-      setData(snapshot);
+      queryClient.setQueryData(queryKey, snapshot);
       await queryClient.invalidateQueries({ queryKey: ['products-meta-workspace'] });
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ['taxonomy-workspace', view] });
       toast.error(error instanceof Error ? error.message : t.saveFailed);
       return false;
     } finally {
@@ -434,7 +420,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
             variant="outline"
             size="sm"
             className="mt-4"
-            onClick={() => void load()}
+            onClick={() => void query.refetch()}
           >
             {t.loading}
           </Button>

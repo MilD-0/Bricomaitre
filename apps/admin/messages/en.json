@@ -1415,6 +1415,8 @@
     }
   },
   "inventory": {
+    "retry": "Retry",
+    "loadError": "Inventory could not be loaded. Please retry.",
     "searchPlaceholder": "Search by product, SKU, or barcode",
     "searchHint": "Only products with quantity above zero are listed by default. Search or scan to bring back hidden items.",
     "scanAdd": "Scan in",

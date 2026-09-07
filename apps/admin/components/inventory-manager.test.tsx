@@ -408,4 +408,32 @@ describe('InventoryManager', () => {
     });
     expect(applyCalls[0]!.requestId).not.toBe(applyCalls[1]!.requestId);
   });
+  it('distinguishes an unavailable inventory from empty stock and retries the load', async () => {
+    let fail = true;
+    server.use(
+      http.get('/api/inventory', () =>
+        fail
+          ? HttpResponse.json({ error: 'Database unavailable' }, { status: 503 })
+          : HttpResponse.json({
+              writable: true,
+              items: [],
+              pagination: {
+                page: 1,
+                limit: 50,
+                totalItems: 0,
+                totalPages: 1,
+                hasNextPage: false,
+                hasPreviousPage: false,
+              },
+            }),
+      ),
+    );
+    renderInventoryManager();
+    expect(await screen.findByRole('alert')).toHaveTextContent(messages.inventory.loadError);
+    expect(screen.queryByText(messages.inventory.emptyTitle)).not.toBeInTheDocument();
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: messages.inventory.retry }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(screen.getAllByText(messages.inventory.emptyTitle)).toHaveLength(2);
+  });
 });
