@@ -8,18 +8,18 @@ const mocks = vi.hoisted(() => ({
   permissions: ['products_write'] as string[],
 }));
 
-vi.mock('../../../../../lib/background-jobs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../../lib/background-jobs')>()),
+vi.mock('@/lib/background-jobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/background-jobs')>()),
   cancelExportJob: mocks.cancel,
 }));
-vi.mock('../../../../../lib/ai-background-jobs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../../lib/ai-background-jobs')>()),
+vi.mock('@/lib/ai-background-jobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai-background-jobs')>()),
   cancelAdminBackgroundJob: mocks.cancelExact,
 }));
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: async () => ({ user: { email: 'admin@example.com', permissions: mocks.permissions } }),
 }));
-vi.mock('../../../../../lib/rbac', () => ({ requireAppAccess: mocks.denied }));
+vi.mock('@/lib/rbac', () => ({ requireAppAccess: mocks.denied }));
 
 import { POST } from './route';
 
@@ -35,7 +35,7 @@ describe('POST /api/ai/jobs/cancel', () => {
   beforeEach(() => {
     mocks.denied.mockReset().mockImplementation(async () => ({
       response: null,
-      session: await (await import('../../../../../lib/auth')).auth(),
+      session: await (await import('@/lib/auth')).auth(),
     }));
     mocks.cancel.mockReset().mockResolvedValue({ id: 'job-1', status: 'cancelled' });
     mocks.cancelExact

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { readBrandsPage } from '../../../lib/brands-categories-api';
-import { brandFormSchema, taxonomyListQuerySchema } from '../../../lib/brands-categories';
-import { requireMutationAccess } from '../../../lib/rbac';
-import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
-import { revalidateStorefrontProductMeta } from '../../../lib/storefront-revalidate';
-import { createBrandThroughCanonicalWorkflow } from '../../../lib/taxonomy-mutations';
+import { readBrandsPage } from '@/lib/brands-categories-api';
+import { brandFormSchema, taxonomyListQuerySchema } from '@/lib/brands-categories';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
+import { revalidateStorefrontProductMeta } from '@/lib/storefront-revalidate';
+import { createBrandThroughCanonicalWorkflow } from '@/lib/taxonomy-mutations';
 
 function emptyPagination() {
   return {

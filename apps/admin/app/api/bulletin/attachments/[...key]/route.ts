@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireBulletinSession } from '../../../../../lib/bulletin-server';
-import { isS3ObjectNotFound, readPrivateS3Object } from '../../../../../lib/s3-upload';
+import { requireBulletinSession } from '@/lib/bulletin-server';
+import { isS3ObjectNotFound, readPrivateS3Object } from '@/lib/s3-upload';
 
 function resolveBulletinKey(parts: string[]) {
   const key = parts.map((part) => decodeURIComponent(part)).join('/');

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AdminOrderHasActiveEcotrackShipmentError } from '../../../../../lib/admin-order-lifecycle';
-import { AdminOrderNotFoundError } from '../../../../../lib/admin-order-update';
-import { EcotrackMutationConflictError } from '../../../../../lib/ecotrack-mutations';
+import { AdminOrderHasActiveEcotrackShipmentError } from '@/lib/admin-order-lifecycle';
+import { AdminOrderNotFoundError } from '@/lib/admin-order-update';
+import { EcotrackMutationConflictError } from '@/lib/ecotrack-mutations';
 import { DELETE, GET, PATCH, POST } from '../route';
 
 const mocks = vi.hoisted(() => ({
@@ -17,18 +17,18 @@ const mocks = vi.hoisted(() => ({
   token: vi.fn(),
 }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb, getDb: mocks.getDb }));
-vi.mock('../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
-vi.mock('../../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../../lib/admin-orders-data', () => ({ loadOrderDetail: mocks.detail }));
-vi.mock('../../../../../lib/admin-order-tracking', () => ({
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/admin-orders-data', () => ({ loadOrderDetail: mocks.detail }));
+vi.mock('@/lib/admin-order-tracking', () => ({
   ensureAdminOrderPublicToken: mocks.token,
 }));
-vi.mock('../../../../../lib/admin-order-update', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/admin-order-update')>()),
+vi.mock('@/lib/admin-order-update', async (original) => ({
+  ...(await original<typeof import('@/lib/admin-order-update')>()),
   updateAdminOrder: mocks.update,
 }));
-vi.mock('../../../../../lib/admin-order-lifecycle', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/admin-order-lifecycle')>()),
+vi.mock('@/lib/admin-order-lifecycle', async (original) => ({
+  ...(await original<typeof import('@/lib/admin-order-lifecycle')>()),
   deleteAdminOrder: mocks.remove,
 }));
 const actor = { email: 'operator@example.invalid', name: 'Operator' };

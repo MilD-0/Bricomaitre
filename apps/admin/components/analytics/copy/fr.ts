@@ -1,3 +1,5 @@
+import type { AnalyticsCopy } from '../analytics-copy';
+
 export const analyticsCopyFr = {
   loading: 'Mise à jour de la vue…',
   updated: 'Mis à jour',
@@ -473,4 +475,4 @@ export const analyticsCopyFr = {
     manual: 'Manuel',
     missing: 'Absent',
   },
-} as const;
+} as const satisfies AnalyticsCopy;

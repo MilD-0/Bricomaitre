@@ -3,28 +3,25 @@ import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { productPromoCodes, products } from '@bric/db/schema';
-import {
-  ActionHistoryEntityNotFoundError,
-  mutateEntityWithHistory,
-} from '../../../../lib/action-history';
-import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
+import { ActionHistoryEntityNotFoundError, mutateEntityWithHistory } from '@/lib/action-history';
+import { startProductCatalogFeedRefreshJob } from '@/lib/background-jobs';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
+import { productPatchSchema, productPayloadSchema } from '@/lib/products';
 import {
   archiveProductThroughCanonicalWorkflow,
   ProductIntegrityConflictError,
   ProductMutationNotFoundError,
   replaceProductThroughCanonicalWorkflow,
-} from '../../../../lib/product-update-workflow';
-import { assertUniqueProductIdentifiers } from '../../../../lib/product-integrity';
-import { hasPermission, normalizePermissions } from '../../../../lib/permissions';
-import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
-import { captureAdminException, getRequestId } from '../../../../lib/sentry';
-import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
+} from '@/lib/product-update-workflow';
+import { assertUniqueProductIdentifiers } from '@/lib/product-integrity';
+import { hasPermission, normalizePermissions } from '@/lib/permissions';
+import { requireAppAccess, requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId } from '@/lib/sentry';
+import { CACHE_TAGS, revalidateServerTags } from '@/lib/server-cache';
 import {
   revalidateStorefrontLandingPages,
   revalidateStorefrontProducts,
-} from '../../../../lib/storefront-revalidate';
+} from '@/lib/storefront-revalidate';
 
 function toProductPromoResponse(row: typeof productPromoCodes.$inferSelect) {
   return {

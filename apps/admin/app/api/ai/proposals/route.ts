@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 
-import { loadAiProposalInbox } from '../../../../lib/ai-proposal-inbox';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { loadAiProposalInbox } from '@/lib/ai-proposal-inbox';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function GET() {
   const { response: denied } = await requireMutationAccess('products');

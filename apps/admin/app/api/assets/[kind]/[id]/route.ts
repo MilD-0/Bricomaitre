@@ -1,4 +1,4 @@
-import { ActionHistoryEntityNotFoundError } from '../../../../../lib/action-history';
+import { ActionHistoryEntityNotFoundError } from '@/lib/action-history';
 import { NextRequest, NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
@@ -7,15 +7,15 @@ import {
   assetActiveToggleSchema,
   assetReplacementRequestSchema,
   featuredProductGroupToggleSchema,
-} from '../../../../../lib/assets';
+} from '@/lib/assets';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { requireMutationAccess } from '../../../../../lib/rbac';
+import { requireMutationAccess } from '@/lib/rbac';
 import {
   adminAssetKindSchema,
   deleteAdminAsset,
   replaceAdminAsset,
   updateAdminAssetStates,
-} from '../../../../../lib/asset-mutations';
+} from '@/lib/asset-mutations';
 
 export async function PATCH(
   req: NextRequest,

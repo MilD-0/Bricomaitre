@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { bulletinPostPatchSchema } from '../../../../lib/bulletin';
-import { getBulletinViewer, requireBulletinSession } from '../../../../lib/bulletin-server';
+import { bulletinPostPatchSchema } from '@/lib/bulletin';
+import { getBulletinViewer, requireBulletinSession } from '@/lib/bulletin-server';
 import {
   BulletinMutationForbiddenError,
   BulletinPostNotFoundError,
   deleteBulletinPost,
   updateBulletinPost,
-} from '../../../../lib/bulletin-mutations';
+} from '@/lib/bulletin-mutations';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 function mutationError(error: unknown) {

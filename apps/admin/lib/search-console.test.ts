@@ -2,11 +2,8 @@ import { generateKeyPairSync } from 'node:crypto';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  fetchSearchConsoleSnapshot,
-  readSearchConsoleConfig,
-  SearchConsoleSyncError,
-} from './search-console';
+import { readSearchConsoleConfig, SearchConsoleSyncError } from './search-console';
+import { fetchSearchConsoleSnapshot } from './search-console/fetch';
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
 const credentials = {

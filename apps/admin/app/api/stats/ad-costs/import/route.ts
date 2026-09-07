@@ -4,17 +4,13 @@ import {
   ADMIN_AD_COST_IMPORT_QUEUE,
   getLatestExportJob,
   startAdCostsImportJob,
-} from '../../../../../lib/background-jobs';
-import { requireAnalyticsAccess } from '../../../../../lib/rbac';
-import {
-  captureAdminException,
-  getRequestId,
-  withRequestIdHeaders,
-} from '../../../../../lib/sentry';
+} from '@/lib/background-jobs';
+import { requireAnalyticsAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 import {
   validateAndBufferSpreadsheetUploads,
   validateSpreadsheetRequestLength,
-} from '../../../../../lib/upload-validation';
+} from '@/lib/upload-validation';
 
 function getRequesterKey(email: string | null | undefined) {
   return email?.trim() || 'ops';

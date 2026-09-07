@@ -7,7 +7,7 @@ import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
-import { requireMutationAccess } from '../../../../../lib/rbac';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied } = await requireMutationAccess('orders');

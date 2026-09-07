@@ -11,11 +11,11 @@ const { authMock, getLatestExportJobMock, startProductExportJobMock, cancelExpor
     cancelExportJobMock: vi.fn(),
   }));
 
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_PRODUCT_EXPORT_QUEUE: 'admin-product-export',
   getLatestExportJob: getLatestExportJobMock,
   startProductExportJob: startProductExportJobMock,

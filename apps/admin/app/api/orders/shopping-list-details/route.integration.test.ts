@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({ access: vi.fn(), getDb: vi.fn(), hasDb: vi.fn() }));
-vi.mock('../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.access }));
 vi.mock('@bric/db/client', () => ({ getDb: mocks.getDb, hasDb: mocks.hasDb }));
 const request = (body: unknown) =>
   new NextRequest('http://localhost/api/orders/shopping-list-details', {

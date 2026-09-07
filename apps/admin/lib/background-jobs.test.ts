@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterCatalogFeedProducts } from './background-jobs';
+import { filterCatalogFeedProducts } from './commerce-jobs/enqueue';
 
 describe('filterCatalogFeedProducts', () => {
   it('keeps only active in-stock products for the storefront catalog feed', () => {

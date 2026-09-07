@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { fetchSingleEcotrackLabel } from '../../../../../../../lib/admin-ecotrack-orders-data';
+import { fetchSingleEcotrackLabel } from '@/lib/admin-ecotrack-orders-data';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { requireMutationAccess } from '../../../../../../../lib/rbac';
-import {
-  captureAdminException,
-  getRequestId,
-  withRequestIdHeaders,
-} from '../../../../../../../lib/sentry';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId(request);

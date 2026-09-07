@@ -1,3 +1,5 @@
+import type { AnalyticsCopy } from '../analytics-copy';
+
 export const analyticsCopyAr = {
   loading: 'جارٍ تحديث العرض…',
   updated: 'آخر تحديث',
@@ -470,4 +472,4 @@ export const analyticsCopyAr = {
     manual: 'يدوي',
     missing: 'مفقود',
   },
-} as const;
+} as const satisfies AnalyticsCopy;

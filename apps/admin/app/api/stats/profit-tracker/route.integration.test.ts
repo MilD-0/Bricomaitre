@@ -7,11 +7,10 @@ const { getReportMock, requireOpsAccessMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
-vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireOpsAccessMock }));
-vi.mock('../../../../lib/profit-tracker', async () => {
-  const actual = await vi.importActual<typeof import('../../../../lib/profit-tracker')>(
-    '../../../../lib/profit-tracker',
-  );
+vi.mock('@/lib/rbac', () => ({ requireAnalyticsAccess: requireOpsAccessMock }));
+vi.mock('@/lib/profit-tracker', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/profit-tracker')>('@/lib/profit-tracker');
   return { ...actual, getProfitTrackerReport: getReportMock };
 });
 

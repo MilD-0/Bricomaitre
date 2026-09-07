@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { AdminSession } from '../../../../lib/auth';
+import type { AdminSession } from '@/lib/auth';
 import { getJobSnapshot } from '@bric/runtime/jobs';
 import { parsePositiveIntegerIds } from '@bric/runtime/http-input';
 
@@ -9,9 +9,9 @@ import {
   cancelExportJob,
   getLatestExportJob,
   startOrderEcotrackJob,
-} from '../../../../lib/background-jobs';
-import { requireMutationAccess } from '../../../../lib/rbac';
-import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../../lib/sentry';
+} from '@/lib/background-jobs';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 function getRequesterKey(session: AdminSession | null) {
   return session?.user?.id ?? session?.user?.email ?? null;

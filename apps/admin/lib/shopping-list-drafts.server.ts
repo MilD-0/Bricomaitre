@@ -14,10 +14,8 @@ import {
   type ShoppingListDraftPayload,
 } from './shopping-list-drafts';
 
-import {
-  hydrateShoppingListStockCredits,
-  initializeLegacyShoppingListAllocations,
-} from './shopping-list-stock-allocations';
+import { hydrateShoppingListStockCredits } from './stock-allocations/credits';
+import { initializeLegacyShoppingListAllocations } from './stock-allocations/legacy';
 
 type Database = ReturnType<typeof getDb>;
 

@@ -9,18 +9,17 @@ const { deleteCostMock, updateCostMock, refreshFactsMock, requireMutationMock } 
   }),
 );
 
-vi.mock('../../../../../../lib/analytics-facts', () => ({
+vi.mock('@/lib/analytics-facts', () => ({
   refreshAnalyticsFactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
-vi.mock('../../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationMock,
 }));
-vi.mock('../../../../../../lib/profit-tracker', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../../lib/profit-tracker')>(
-    '../../../../../../lib/profit-tracker',
-  );
+vi.mock('@/lib/profit-tracker', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/profit-tracker')>('@/lib/profit-tracker');
   return {
     ...actual,
     deleteProfitTrackerCost: deleteCostMock,

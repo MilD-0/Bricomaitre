@@ -12,16 +12,16 @@ const mocks = vi.hoisted(() => ({
   ConflictError: class extends Error {},
   NotFoundError: class extends Error {},
 }));
-vi.mock('../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
-vi.mock('../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../lib/landing-pages', () => ({
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/landing-pages', () => ({
   getLandingPageDetail: mocks.detail,
   LandingPageConflictError: mocks.ConflictError,
   LandingPageNotFoundError: mocks.NotFoundError,
   saveLandingPage: mocks.saveActive,
   setLandingPageActive: mocks.setActive,
 }));
-vi.mock('../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   buildStorefrontLandingPagePreviewUrl: mocks.previewUrl,
   revalidateStorefrontLandingPages: mocks.revalidate,
 }));

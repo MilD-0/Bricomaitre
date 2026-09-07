@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
@@ -15,10 +23,13 @@ it('clears inherited production services and upload credentials before verificat
       join(root, 'ops/scripts/build-public-apps.sh'),
       join(directory, 'ops/scripts/build-public-apps.sh'),
     );
-    copyFileSync(
-      join(root, 'apps/storefront/test/fixture-storefront-api.mjs'),
-      join(directory, 'apps/storefront/test/fixture-storefront-api.mjs'),
-    );
+    for (const file of readdirSync(join(root, 'apps/storefront/test'))) {
+      if (!file.startsWith('fixture-') || !file.endsWith('.mjs')) continue;
+      copyFileSync(
+        join(root, 'apps/storefront/test', file),
+        join(directory, 'apps/storefront/test', file),
+      );
+    }
     cpSync(
       join(root, 'apps/storefront/test/fixtures'),
       join(directory, 'apps/storefront/test/fixtures'),

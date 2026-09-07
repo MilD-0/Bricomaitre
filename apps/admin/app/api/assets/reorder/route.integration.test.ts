@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActionHistoryConflictError,
   ActionHistoryEntityNotFoundError,
-} from '../../../../lib/action-history-state';
+} from '@/lib/action-history-state';
 import { POST } from './route';
 
 const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, reorderMock } = vi.hoisted(
@@ -22,15 +22,15 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/asset-mutations', () => ({ reorderAdminAssets: reorderMock }));
+vi.mock('@/lib/asset-mutations', () => ({ reorderAdminAssets: reorderMock }));
 
 describe('app/api/assets/reorder/route', () => {
   beforeEach(() => {

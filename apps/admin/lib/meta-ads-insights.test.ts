@@ -20,13 +20,9 @@ function emptyMetaPage() {
   });
 }
 
-import {
-  fetchMetaAdsInsightRows,
-  mapMetaAdsInsightRow,
-  MetaAdsSyncError,
-  readMetaAdsConfig,
-  syncMetaAdsInsights,
-} from './meta-ads-insights';
+import { MetaAdsSyncError, readMetaAdsConfig, syncMetaAdsInsights } from './meta-ads-insights';
+import { fetchMetaAdsInsightRows } from './meta-ads/fetch';
+import { mapMetaAdsInsightRow } from './meta-ads/mapping';
 
 describe('Meta Ads Insights ingestion', () => {
   it('requires a dedicated token and numeric ad account', () => {

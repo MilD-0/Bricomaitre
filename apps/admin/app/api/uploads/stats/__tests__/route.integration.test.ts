@@ -17,15 +17,15 @@ const { requireOpsAccessMock, authMock, getLatestExportJobMock, startStatsImport
     startStatsImportJobMock: vi.fn(),
   }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsAccessMock,
 }));
 
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_STATS_IMPORT_QUEUE: 'admin-stats-import',
   getLatestExportJob: getLatestExportJobMock,
   startStatsImportJob: startStatsImportJobMock,

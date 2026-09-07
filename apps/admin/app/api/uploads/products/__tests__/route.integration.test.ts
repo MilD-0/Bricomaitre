@@ -17,7 +17,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
   },
 }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 

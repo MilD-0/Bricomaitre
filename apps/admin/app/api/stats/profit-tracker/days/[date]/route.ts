@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 
-import { reportingDateSchema } from '../../../../../../lib/analytics/contract';
+import { reportingDateSchema } from '@/lib/analytics/contract';
 import { hasDb } from '@bric/db/client';
-import { refreshAnalyticsFactsAfterMutation } from '../../../../../../lib/analytics-facts';
-import { deleteProfitTrackerDay } from '../../../../../../lib/profit-tracker';
-import { requireMutationAccess } from '../../../../../../lib/rbac';
+import { refreshAnalyticsFactsAfterMutation } from '@/lib/analytics-facts';
+import { deleteProfitTrackerDay } from '@/lib/profit-tracker';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ date: string }> }) {
   const { response: denied } = await requireMutationAccess('stats');

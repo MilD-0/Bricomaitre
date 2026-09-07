@@ -1,12 +1,8 @@
 import { landingPageCreateSchema } from '@bric/storefront-core/landing-pages';
 import { NextRequest, NextResponse } from 'next/server';
 
-import {
-  createLandingPage,
-  listLandingPages,
-  listLandingPageSummaries,
-} from '../../../lib/landing-pages';
-import { requireMutationAccess } from '../../../lib/rbac';
+import { createLandingPage, listLandingPages, listLandingPageSummaries } from '@/lib/landing-pages';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function GET(request: NextRequest) {
   const { response: denied } = await requireMutationAccess('assets');

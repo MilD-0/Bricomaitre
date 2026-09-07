@@ -11,15 +11,15 @@ const { requireOpsAccessMock, authMock, getLatestExportJobMock, startEcotrackSyn
     startEcotrackSyncJobMock: vi.fn(),
   }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireOpsAccess: requireOpsAccessMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_ECOTRACK_SYNC_QUEUE: 'admin-ecotrack-sync',
   getLatestExportJob: getLatestExportJobMock,
   startEcotrackSyncJob: startEcotrackSyncJobMock,

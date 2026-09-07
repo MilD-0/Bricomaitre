@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { getMarketingDestinationDiagnostics } from '../../../../lib/marketing-diagnostics';
-import { requireAnalyticsAccess } from '../../../../lib/rbac';
+import { getMarketingDestinationDiagnostics } from '@/lib/marketing-diagnostics';
+import { requireAnalyticsAccess } from '@/lib/rbac';
 
 export async function GET() {
   const { response: denied } = await requireAnalyticsAccess();

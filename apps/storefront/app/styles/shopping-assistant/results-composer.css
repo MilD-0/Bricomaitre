@@ -1,0 +1,323 @@
+.shopping-assistant-results {
+  display: grid;
+  gap: calc(0.5rem * var(--sf-density));
+  margin-block-start: calc(0.65rem * var(--sf-density));
+}
+.shopping-assistant-feedback {
+  display: flex;
+  gap: calc(0.25rem * var(--sf-density));
+  margin-block-start: calc(0.55rem * var(--sf-density));
+}
+.shopping-assistant-feedback button {
+  width: 1.8rem;
+  height: 1.8rem;
+  display: grid;
+  place-items: center;
+  border: var(--sf-border-width, 1px) solid transparent;
+  border-radius: var(--sf-radius-control, 0.6rem);
+  background: transparent;
+  color: var(--sf-text-muted, #778184);
+  cursor: pointer;
+}
+.shopping-assistant-feedback button:hover,
+.shopping-assistant-feedback button[aria-pressed='true'] {
+  border-color: var(--sf-border-brand, #b8d9d6);
+  background: var(--sf-surface-subtle, #eaf6f4);
+  color: var(--brand-teal-strong);
+}
+.shopping-assistant-product {
+  min-height: 5.1rem;
+  display: grid;
+  gap: calc(0.4rem * var(--sf-density));
+  border: var(--sf-border-width, 1px) solid var(--sf-border-default, #dce1e2);
+  border-radius: var(--sf-radius-card, 1.05rem);
+  corner-shape: squircle;
+  background: var(--sf-surface-raised, #fff);
+  padding: calc(0.45rem * var(--sf-density));
+  box-shadow: var(--sf-shadow-raised, 0 8px 20px rgba(31, 45, 48, 0.045));
+  transition:
+    border-color var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
+    transform var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
+    box-shadow var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease);
+}
+.shopping-assistant-product-link {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(0.65rem * var(--sf-density));
+}
+.shopping-assistant-product:hover {
+  border-color: var(--sf-border-brand, #8bbebb);
+  transform: translateY(-1px);
+  box-shadow: var(--sf-shadow-raised, 0 10px 24px rgba(1, 91, 96, 0.09));
+}
+.shopping-assistant-product-media {
+  width: 4.2rem;
+  height: 4.2rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--sf-radius-control, 0.85rem);
+  corner-shape: squircle;
+  background: var(--sf-surface-subtle, #f5f6f5);
+  color: var(--sf-text-brand, #79a5a2);
+}
+.shopping-assistant-product-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.shopping-assistant-product-copy {
+  min-width: 0;
+  display: grid;
+  gap: calc(0.18rem * var(--sf-density));
+}
+.shopping-assistant-product-copy > span {
+  font-size: var(--sf-type-micro, 0.58rem);
+  font-weight: var(--sf-weight-bold, 730);
+}
+.shopping-assistant-product-copy .is-available {
+  color: var(--sf-text-success, #147348);
+}
+.shopping-assistant-product-copy .is-unavailable {
+  color: var(--sf-text-danger, #a93d34);
+}
+.shopping-assistant-product-copy strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--sf-text-strong, #252e31);
+  font-size: var(--sf-type-caption, 0.7rem);
+  font-weight: var(--sf-weight-bold, 700);
+  line-height: var(--sf-leading-snug, 1.35);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.shopping-assistant-product-copy b {
+  color: var(--brand-teal-strong);
+  font-size: var(--sf-type-caption, 0.71rem);
+  font-weight: var(--sf-weight-heavy, 800);
+}
+.shopping-assistant-product-action {
+  color: var(--brand-teal-strong);
+  font-size: var(--sf-type-micro, 0.63rem);
+  font-weight: var(--sf-weight-bold, 750);
+}
+.shopping-assistant-product-cart {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(0.35rem * var(--sf-density));
+  border-radius: var(--sf-radius-control, 0.7rem);
+  background: var(--brand-teal-strong);
+  color: var(--sf-text-inverse, #fff);
+  font-size: var(--sf-type-micro, 0.65rem);
+  font-weight: var(--sf-weight-heavy, 780);
+}
+.shopping-assistant-product-cart:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.shopping-assistant-thinking {
+  min-height: 2.3rem;
+  display: flex;
+  align-items: center;
+  gap: calc(0.28rem * var(--sf-density));
+  color: var(--sf-text-muted, #6b7679);
+}
+.shopping-assistant-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(0.28rem * var(--sf-density));
+}
+.shopping-assistant-thinking-dots i {
+  display: block;
+  width: 0.36rem;
+  height: 0.36rem;
+  border-radius: var(--sf-radius-round, 50%);
+  background: var(--brand-teal);
+  animation: shopping-assistant-dot var(--sf-duration-slow, 900ms)
+    var(--sf-ease-in-out, ease-in-out) infinite alternate;
+}
+.shopping-assistant-thinking-dots i:nth-child(2) {
+  animation-delay: var(--sf-duration-fast, 150ms);
+}
+.shopping-assistant-thinking-dots i:nth-child(3) {
+  animation-delay: var(--sf-duration-deliberate, 300ms);
+}
+.shopping-assistant-thinking svg {
+  flex: 0 0 auto;
+  color: var(--brand-teal-strong);
+}
+.shopping-assistant-thinking em {
+  margin-inline-start: calc(0.3rem * var(--sf-density));
+  font-size: var(--sf-type-micro, 0.65rem);
+  font-style: normal;
+}
+@keyframes shopping-assistant-dot {
+  to {
+    opacity: 0.25;
+    transform: translateY(-0.2rem);
+  }
+}
+.shopping-assistant-error {
+  border: var(--sf-border-width, 1px) solid var(--sf-border-danger, #efc9c4);
+  border-radius: var(--sf-radius-control, 0.85rem);
+  background: var(--sf-surface-danger-soft, #fff5f3);
+  padding: calc(0.65rem * var(--sf-density)) calc(0.75rem * var(--sf-density));
+  color: var(--sf-text-danger, #92382f);
+  font-size: var(--sf-type-caption, 0.68rem);
+  line-height: var(--sf-leading-snug, 1.45);
+}
+.shopping-assistant-error p {
+  margin: 0;
+}
+.shopping-assistant-error button {
+  min-height: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(0.35rem * var(--sf-density));
+  margin-block-start: calc(0.45rem * var(--sf-density));
+  border: var(--sf-border-width, 1px) solid var(--sf-border-danger, #e6aaa2);
+  border-radius: var(--sf-radius-control, 0.6rem);
+  background: var(--sf-surface-raised, #fff);
+  padding-inline: calc(0.6rem * var(--sf-density));
+  color: var(--sf-text-danger, #873129);
+  font: inherit;
+  font-weight: var(--sf-weight-bold, 750);
+  cursor: pointer;
+}
+.shopping-assistant-form {
+  min-height: 3.1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.6rem;
+  align-items: center;
+  gap: calc(0.45rem * var(--sf-density));
+  border: var(--sf-border-width, 1px) solid var(--sf-border-default, #cbd3d5);
+  border-radius: var(--sf-radius-card, 1.1rem);
+  corner-shape: squircle;
+  background: var(--sf-surface-raised, #fff);
+  padding: calc(0.25rem * var(--sf-density));
+  transition:
+    border-color var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
+    box-shadow var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease);
+}
+.shopping-assistant-form:focus-within {
+  border-color: var(--brand-teal);
+  box-shadow: var(--sf-shadow-ring, 0 0 0 3px rgba(1, 115, 122, 0.1));
+}
+.shopping-assistant-form input {
+  min-width: 0;
+  height: 2.55rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding-inline: calc(0.65rem * var(--sf-density));
+  color: var(--sf-text-strong, #252d30);
+  font-size: var(--sf-type-caption, 0.75rem);
+}
+.shopping-assistant-form input::placeholder {
+  color: var(--sf-text-muted, #858d90);
+}
+.shopping-assistant-form button {
+  width: 2.6rem;
+  height: 2.6rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--sf-radius-control, 0.85rem);
+  corner-shape: squircle;
+  background: var(--brand-teal);
+  color: var(--sf-text-inverse, #fff);
+  cursor: pointer;
+  transition:
+    background-color var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
+    transform var(--sf-duration-fast, 130ms) var(--sf-ease-standard, ease);
+}
+.shopping-assistant-form button:hover:not(:disabled) {
+  background: var(--brand-teal-strong);
+  transform: translateY(-1px);
+}
+.shopping-assistant-form button:disabled {
+  background: var(--sf-surface-muted, #cbd1d2);
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .shopping-assistant-launcher {
+    width: 3.25rem;
+    height: 3.25rem;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    gap: 0;
+    border: var(--sf-border-width, 1px) solid var(--sf-border-inverse, rgba(255, 255, 255, 0.32));
+    border-radius: var(--sf-radius-card, 1.1rem);
+    background: linear-gradient(135deg, var(--brand-teal) 0%, var(--brand-teal-strong) 100%);
+    padding: 0;
+    color: var(--sf-text-inverse, #fff);
+    font-size: var(--sf-type-caption, 0.72rem);
+    box-shadow: var(
+      --sf-shadow-floating,
+      0 12px 28px rgba(0, 77, 82, 0.25),
+      0 3px 8px rgba(0, 77, 82, 0.16)
+    );
+  }
+  [dir='rtl'] .shopping-assistant-launcher {
+    padding: 0;
+  }
+  .shopping-assistant-launcher.is-sticky-commerce {
+    inset-block-end: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+  .shopping-assistant-launcher-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+  .shopping-assistant-launcher-icon {
+    width: 2.55rem;
+    height: 2.55rem;
+    border-radius: var(--sf-radius-control, 0.85rem);
+    background: transparent;
+  }
+  .shopping-assistant-launcher-icon > .lucide-message-circle {
+    width: 1.9rem;
+    height: 1.9rem;
+    stroke-width: 2.35;
+  }
+  .shopping-assistant-launcher-spark {
+    inset-block-start: 0.05rem;
+    inset-inline-end: 0.05rem;
+    width: 0.9rem;
+    height: 0.9rem;
+    color: var(--sf-text-commerce, #ffe6a7);
+  }
+  .shopping-assistant-sheet {
+    width: 100%;
+  }
+  .shopping-assistant-conversation {
+    padding: calc(0.8rem * var(--sf-density));
+  }
+  .shopping-assistant-product-link {
+    grid-template-columns: 3.8rem minmax(0, 1fr) auto;
+  }
+  .shopping-assistant-product-media {
+    width: 3.8rem;
+    height: 3.8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shopping-assistant-launcher,
+  .shopping-assistant-product,
+  .shopping-assistant-prompts button {
+    transition: none;
+  }
+  .shopping-assistant-thinking-dots i {
+    animation: none;
+  }
+}

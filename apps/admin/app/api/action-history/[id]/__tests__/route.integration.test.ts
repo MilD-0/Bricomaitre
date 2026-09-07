@@ -14,12 +14,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: mocks.getDb, hasDb: mocks.hasDb }));
-vi.mock('../../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/rbac', () => ({
   canMutateResource: mocks.canMutateResource,
   requireSettingsAccess: mocks.requireSettingsAccess,
 }));
-vi.mock('../../../../../lib/action-history', () => ({
+vi.mock('@/lib/action-history', () => ({
   getActionEntityConfig: mocks.getActionEntityConfig,
   loadActionHistoryDetail: mocks.loadDetail,
 }));

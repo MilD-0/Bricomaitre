@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { refreshAnalyticsFactsAfterMutation } from '../../../../../lib/analytics-facts';
+import { refreshAnalyticsFactsAfterMutation } from '@/lib/analytics-facts';
 import {
   getProfitTrackerSettings,
   profitTrackerSettingsSchema,
   updateProfitTrackerSettings,
-} from '../../../../../lib/profit-tracker';
-import { requireAnalyticsAccess, requireMutationAccess } from '../../../../../lib/rbac';
+} from '@/lib/profit-tracker';
+import { requireAnalyticsAccess, requireMutationAccess } from '@/lib/rbac';
 
 export async function GET() {
   const { response: denied } = await requireAnalyticsAccess();

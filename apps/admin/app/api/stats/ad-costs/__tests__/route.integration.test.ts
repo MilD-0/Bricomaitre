@@ -29,22 +29,21 @@ vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
 }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsAccessMock,
 }));
 
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
+vi.mock('@/lib/reporting-refresh-trigger', () => ({
   triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
 }));
 
-vi.mock('../../../../../lib/stats-ad-costs', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/stats-ad-costs')>(
-    '../../../../../lib/stats-ad-costs',
-  );
+vi.mock('@/lib/stats-ad-costs', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/stats-ad-costs')>('@/lib/stats-ad-costs');
 
   return {
     ...actual,

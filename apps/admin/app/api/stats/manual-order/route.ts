@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { getRequestSearchParams } from '../../../../lib/request';
+import { getRequestSearchParams } from '@/lib/request';
 import {
   createManualOrder,
   listManualOrders,
   ManualOrderConflictError,
   manualOrderInputSchema,
   manualOrderListQuerySchema,
-} from '../../../../lib/manual-orders';
-import { requireAnalyticsAccess } from '../../../../lib/rbac';
-import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
+} from '@/lib/manual-orders';
+import { requireAnalyticsAccess } from '@/lib/rbac';
+import { triggerAdminReportingRefresh } from '@/lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
   const { response: denied } = await requireAnalyticsAccess();

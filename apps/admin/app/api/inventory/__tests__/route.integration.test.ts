@@ -14,7 +14,7 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 

@@ -25,15 +25,15 @@ vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_ORDER_ECOTRACK_QUEUE: 'admin-order-ecotrack',
   getLatestExportJob: getLatestExportJobMock,
   startOrderEcotrackJob: startOrderEcotrackJobMock,

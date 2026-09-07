@@ -9,12 +9,12 @@ const mocks = vi.hoisted(() => ({
   safe: vi.fn(),
   object: vi.fn(),
 }));
-vi.mock('../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.access }));
 vi.mock('@bric/db/client', () => ({
   getDb: () => ({ query: { products: { findFirst: mocks.product } } }),
 }));
-vi.mock('../../../../../lib/remote-url-safety', () => ({ isSafeRemoteHttpsUrl: mocks.safe }));
-vi.mock('../../../../../lib/s3-upload', () => ({
+vi.mock('@/lib/remote-url-safety', () => ({ isSafeRemoteHttpsUrl: mocks.safe }));
+vi.mock('@/lib/s3-upload', () => ({
   readPrivateS3Object: mocks.object,
   buildCloudfrontUrl: (origin: string, key: string) => `${origin.replace(/\/$/, '')}/${key}`,
 }));

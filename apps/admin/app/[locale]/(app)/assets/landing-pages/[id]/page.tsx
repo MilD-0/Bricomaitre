@@ -1,12 +1,9 @@
 import { notFound } from 'next/navigation';
 
-import { LandingPageBuilder } from '../../../../../../components/assets/landing-page-builder';
-import {
-  getLandingPageDetail,
-  LandingPageNotFoundError,
-} from '../../../../../../lib/landing-pages';
-import { requirePageAccess } from '../../../../../../lib/page-access';
-import { getStorefrontPublicBaseUrl } from '../../../../../../lib/storefront-public-url';
+import { LandingPageBuilder } from '@/components/assets/landing-page-builder';
+import { getLandingPageDetail, LandingPageNotFoundError } from '@/lib/landing-pages';
+import { requirePageAccess } from '@/lib/page-access';
+import { getStorefrontPublicBaseUrl } from '@/lib/storefront-public-url';
 
 export default async function LandingPageBuilderPage({
   params,

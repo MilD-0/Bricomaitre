@@ -128,6 +128,12 @@ decorative “AI product” styling.
 
 ## Implementation And Verification
 
+Keep authored TypeScript, TSX, JavaScript modules, shell, and CSS files at or below
+500 physical lines, including tests. Split by responsibility; preserve behavior
+and test cases. `pnpm files:check` enforces this limit, and `pnpm dead-code:check`
+checks dependency cycles as well as unused code. SQL migrations and seed data are
+outside the source-file limit.
+
 Behavior-bearing changes need proportionate evidence, not mechanically a new
 test file. Existing tests may be enough when they directly prove the behavior.
 Cover meaningful success, failure, and boundary cases at the layer that can

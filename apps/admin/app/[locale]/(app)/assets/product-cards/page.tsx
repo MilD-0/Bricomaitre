@@ -1,4 +1,4 @@
-import { AssetsWorkspacePage } from '../../../../../components/assets/assets-workspace-page';
+import { AssetsWorkspacePage } from '@/components/assets/assets-workspace-page';
 
 export default async function ProductCardsPage({
   params,

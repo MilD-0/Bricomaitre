@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { refreshAnalyticsFactsAfterMutation } from '../../../../../../lib/analytics-facts';
+import { refreshAnalyticsFactsAfterMutation } from '@/lib/analytics-facts';
 import {
   deleteProfitTrackerCost,
   profitTrackerCostSchema,
   updateProfitTrackerCost,
-} from '../../../../../../lib/profit-tracker';
-import { requireMutationAccess } from '../../../../../../lib/rbac';
+} from '@/lib/profit-tracker';
+import { requireMutationAccess } from '@/lib/rbac';
 
 async function costId(params: Promise<{ id: string }>) {
   const { id } = await params;

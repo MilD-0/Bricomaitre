@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { ActionHistoryEntityNotFoundError } from '../../../../lib/action-history-state';
-import { ProductIntegrityConflictError } from '../../../../lib/product-integrity';
+import { ActionHistoryEntityNotFoundError } from '@/lib/action-history-state';
+import { ProductIntegrityConflictError } from '@/lib/product-integrity';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { updateAdminInventoryProduct } from '../../../../lib/admin-inventory-workflow';
+import { updateAdminInventoryProduct } from '@/lib/admin-inventory-workflow';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { applyInventoryQuantityChange } from '../../../../lib/inventory-actions';
-import { inventoryBarcodeSchema } from '../../../../lib/inventory';
-import { requireMutationAccess } from '../../../../lib/rbac';
-import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
-import { revalidateStorefrontProducts } from '../../../../lib/storefront-revalidate';
+import { applyInventoryQuantityChange } from '@/lib/inventory-actions';
+import { inventoryBarcodeSchema } from '@/lib/inventory';
+import { requireMutationAccess } from '@/lib/rbac';
+import { CACHE_TAGS, revalidateServerTags } from '@/lib/server-cache';
+import { revalidateStorefrontProducts } from '@/lib/storefront-revalidate';
 
 const inventoryMutationSchema = z.union([
   z.object({

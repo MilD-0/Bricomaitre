@@ -1,13 +1,10 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  getCanonicalOrderProjectionDays,
-  resolveProfitTrackerDaySources,
-  stateAwareProjectedContribution,
-  toCanonicalOrderProjectionDay,
-  upsertProfitTrackerDay,
-} from './profit-tracker';
+import { getCanonicalOrderProjectionDays, upsertProfitTrackerDay } from './profit-tracker';
+import { resolveProfitTrackerDaySources } from './profit-tracker/calculation';
+import { stateAwareProjectedContribution } from './profit-tracker/calculation';
+import { toCanonicalOrderProjectionDay } from './profit-tracker/projections';
 import { applyProfitTrackerRollforward } from './profit-tracker-metrics';
 
 const automatic = {

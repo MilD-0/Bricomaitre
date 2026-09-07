@@ -7,11 +7,11 @@ const { authMock, loadDailyOrderStatusOverviewMock } = vi.hoisted(() => ({
   loadDailyOrderStatusOverviewMock: vi.fn(),
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/admin-orders-data', () => ({
+vi.mock('@/lib/admin-orders-data', () => ({
   loadDailyOrderStatusOverview: loadDailyOrderStatusOverviewMock,
 }));
 

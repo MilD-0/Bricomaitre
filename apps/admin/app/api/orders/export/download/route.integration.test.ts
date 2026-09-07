@@ -13,16 +13,16 @@ const { authMock, canMutateMock, latestJobMock, readObjectMock, deleteObjectMock
   }),
 );
 
-vi.mock('../../../../../lib/auth', () => ({ auth: authMock }));
-vi.mock('../../../../../lib/permissions', () => ({
+vi.mock('@/lib/auth', () => ({ auth: authMock }));
+vi.mock('@/lib/permissions', () => ({
   normalizePermissions: (permissions: unknown) => permissions,
 }));
-vi.mock('../../../../../lib/rbac', () => ({ canMutateResource: canMutateMock }));
-vi.mock('../../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/rbac', () => ({ canMutateResource: canMutateMock }));
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_ORDER_EXPORT_QUEUE: 'admin-order-export',
   getLatestExportJob: latestJobMock,
 }));
-vi.mock('../../../../../lib/s3-upload', () => ({
+vi.mock('@/lib/s3-upload', () => ({
   readPrivateS3Object: readObjectMock,
   deletePrivateS3Object: deleteObjectMock,
   isS3ObjectNotFound: (error: unknown) =>

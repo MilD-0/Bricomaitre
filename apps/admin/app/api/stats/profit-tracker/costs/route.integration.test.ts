@@ -9,19 +9,18 @@ const { listCostsMock, createCostMock, refreshFactsMock, requireOpsMock, require
     requireMutationMock: vi.fn(),
   }));
 
-vi.mock('../../../../../lib/analytics-facts', () => ({
+vi.mock('@/lib/analytics-facts', () => ({
   refreshAnalyticsFactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true, getDb: () => ({}) }));
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsMock,
   requireMutationAccess: requireMutationMock,
 }));
-vi.mock('../../../../../lib/profit-tracker', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/profit-tracker')>(
-    '../../../../../lib/profit-tracker',
-  );
+vi.mock('@/lib/profit-tracker', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/profit-tracker')>('@/lib/profit-tracker');
   return {
     ...actual,
     listProfitTrackerCosts: listCostsMock,
@@ -30,7 +29,7 @@ vi.mock('../../../../../lib/profit-tracker', async () => {
 });
 
 import { GET, POST } from './route';
-import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
+import { AdminMutationIdempotencyConflictError } from '@/lib/admin-mutation-idempotency';
 
 describe('profit tracker costs route', () => {
   beforeEach(() => {

@@ -7,14 +7,13 @@ const { syncMock, reportMock, requireMutationMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
-vi.mock('../../../../../lib/rbac', () => ({ requireMutationAccess: requireMutationMock }));
-vi.mock('../../../../../lib/meta-ads-insights', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/meta-ads-insights')>(
-    '../../../../../lib/meta-ads-insights',
-  );
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: requireMutationMock }));
+vi.mock('@/lib/meta-ads-insights', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/meta-ads-insights')>('@/lib/meta-ads-insights');
   return { ...actual, syncMetaAdsInsights: syncMock };
 });
-vi.mock('../../../../../lib/profit-tracker', () => ({ getProfitTrackerReport: reportMock }));
+vi.mock('@/lib/profit-tracker', () => ({ getProfitTrackerReport: reportMock }));
 
 import { POST } from './route';
 

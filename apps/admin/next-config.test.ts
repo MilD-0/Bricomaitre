@@ -6,7 +6,7 @@ vi.mock('next-intl/plugin', () => ({
   default: vi.fn(() => (config: unknown) => config),
 }));
 
-vi.mock('@sentry/nextjs', () => ({
+vi.mock('@sentry/nextjs/config', () => ({
   withSentryConfig,
 }));
 

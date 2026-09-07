@@ -15,11 +15,11 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/action-history', () => ({
+vi.mock('@/lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 

@@ -8,7 +8,7 @@ const { getDbMock, hasDbMock, requireMutationAccessMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: getDbMock, hasDb: hasDbMock }));
-vi.mock('../../../../../lib/rbac', () => ({ requireMutationAccess: requireMutationAccessMock }));
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: requireMutationAccessMock }));
 
 import { GET } from './route';
 

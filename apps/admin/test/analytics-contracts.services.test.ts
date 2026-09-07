@@ -29,11 +29,8 @@ import {
 import { getLiveWebsiteProductMetrics } from '../lib/stats-live-commerce';
 import { loadStorefrontOrderConversion } from '../lib/analytics/storefront-commerce-data';
 import { resolveAnalyticsFilters } from '../lib/analytics/date-range';
-import {
-  getCanonicalOrderProjectionDays,
-  getProfitTrackerReport,
-  toCanonicalOrderProjectionDay,
-} from '../lib/profit-tracker';
+import { getCanonicalOrderProjectionDays, getProfitTrackerReport } from '../lib/profit-tracker';
+import { toCanonicalOrderProjectionDay } from '../lib/profit-tracker/projections';
 import { loadSourceHealth } from '../lib/analytics/source-health';
 
 const db = getDb();

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { loadAdministrationAccessGrants } from '../../../../lib/admin-administration-data';
-import { userAccessGrantFormSchema } from '../../../../lib/permissions';
-import { requireSettingsAccess } from '../../../../lib/rbac';
+import { loadAdministrationAccessGrants } from '@/lib/admin-administration-data';
+import { userAccessGrantFormSchema } from '@/lib/permissions';
+import { requireSettingsAccess } from '@/lib/rbac';
 import {
   AccessGrantAlreadyExistsError,
   PrivilegedAccessManagedInCodeError,
   createAdministrationAccessGrant,
-} from '../../../../lib/administration-mutations';
+} from '@/lib/administration-mutations';
 
 export async function GET() {
   const { response: denied } = await requireSettingsAccess();

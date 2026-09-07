@@ -6,10 +6,10 @@ import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   ProductMutationNotFoundError,
   restoreProductThroughCanonicalWorkflow,
-} from '../../../../../lib/product-update-workflow';
-import { requireMutationAccess } from '../../../../../lib/rbac';
-import { CACHE_TAGS, revalidateServerTags } from '../../../../../lib/server-cache';
-import { revalidateStorefrontProducts } from '../../../../../lib/storefront-revalidate';
+} from '@/lib/product-update-workflow';
+import { requireMutationAccess } from '@/lib/rbac';
+import { CACHE_TAGS, revalidateServerTags } from '@/lib/server-cache';
+import { revalidateStorefrontProducts } from '@/lib/storefront-revalidate';
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied, session } = await requireMutationAccess('products');

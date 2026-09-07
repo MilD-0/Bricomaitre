@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { roleDefinitionFormSchema } from '../../../../../lib/permissions';
-import { requireSettingsAccess } from '../../../../../lib/rbac';
+import { roleDefinitionFormSchema } from '@/lib/permissions';
+import { requireSettingsAccess } from '@/lib/rbac';
 import {
   AdministrationRoleNotFoundError,
   updateAdministrationRoleDefinition,
-} from '../../../../../lib/administration-mutations';
+} from '@/lib/administration-mutations';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied, session } = await requireSettingsAccess();

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { inspectAdminInventoryScan } from '../../../../lib/admin-inventory-workflow';
-import { inventoryScanQuerySchema } from '../../../../lib/inventory';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { inspectAdminInventoryScan } from '@/lib/admin-inventory-workflow';
+import { inventoryScanQuerySchema } from '@/lib/inventory';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function POST(req: NextRequest) {
   const { response: denied } = await requireMutationAccess('products');

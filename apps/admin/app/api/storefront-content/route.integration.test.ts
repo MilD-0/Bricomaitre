@@ -15,14 +15,14 @@ const {
   saveStorefrontAnnouncementMock: vi.fn(),
 }));
 
-vi.mock('../../../lib/auth', () => ({ auth: authMock }));
-vi.mock('../../../lib/rbac', () => ({ requireMutationAccess: requireMutationAccessMock }));
-vi.mock('../../../lib/storefront-content', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../lib/storefront-content')>()),
+vi.mock('@/lib/auth', () => ({ auth: authMock }));
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: requireMutationAccessMock }));
+vi.mock('@/lib/storefront-content', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/storefront-content')>()),
   loadStorefrontContentAdmin: loadStorefrontContentAdminMock,
   saveStorefrontAnnouncement: saveStorefrontAnnouncementMock,
 }));
-vi.mock('../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontSettings: revalidateStorefrontSettingsMock,
 }));
 

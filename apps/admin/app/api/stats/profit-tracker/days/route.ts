@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { refreshAnalyticsFactsAfterMutation } from '../../../../../lib/analytics-facts';
+import { refreshAnalyticsFactsAfterMutation } from '@/lib/analytics-facts';
 import {
   getProfitTrackerReport,
   profitTrackerDaySchema,
   profitTrackerRangeSchema,
   upsertProfitTrackerDay,
-} from '../../../../../lib/profit-tracker';
-import { requireAnalyticsAccess, requireMutationAccess } from '../../../../../lib/rbac';
+} from '@/lib/profit-tracker';
+import { requireAnalyticsAccess, requireMutationAccess } from '@/lib/rbac';
 
 export async function GET(request: NextRequest) {
   const { response: denied } = await requireAnalyticsAccess();

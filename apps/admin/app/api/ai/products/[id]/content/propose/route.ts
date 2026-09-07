@@ -8,8 +8,8 @@ import {
   AiContentNotFoundError,
   AiProposalConflictError,
   proposeProductContent,
-} from '../../../../../../../lib/ai-product-content';
-import { requireMutationAccess } from '../../../../../../../lib/rbac';
+} from '@/lib/ai-product-content';
+import { requireMutationAccess } from '@/lib/rbac';
 
 const requestSchema = z.object({
   fields: z.array(productContentFieldSchema).min(1).optional(),

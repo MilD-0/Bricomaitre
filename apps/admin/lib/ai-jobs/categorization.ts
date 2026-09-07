@@ -1,0 +1,358 @@
+import {
+  PRODUCT_CATEGORIZATION_PROMPT_VERSION,
+  type ProductCategorizationClassifier,
+  createProductCategorizationClassifier,
+  getAiConfig,
+  resolveAiModel,
+} from '@bric/ai-core';
+import { getDb } from '@bric/db/client';
+import { aiProposals, aiRuns, brands, categories, products } from '@bric/db/schema';
+import { startOwnedJob } from '@bric/runtime/jobs';
+import { and, asc, count, eq, gt, isNull, sql } from 'drizzle-orm';
+import {
+  proposeProductCategoryAssignment,
+  reviewProductCategoryProposal,
+} from '../ai-product-category-proposals';
+import {
+  ADMIN_AI_CATEGORIZATION_QUEUE,
+  type AiCategorizationPayload,
+  type QueueJobMeta,
+  assistantJobOrigin,
+  toClientJob,
+} from '../background-job-contract';
+import { refreshAppliedAiProposalConsumers } from './refresh';
+
+export async function startAiCategorizationJob(
+  ownerKey: string,
+  payload: Omit<AiCategorizationPayload, keyof QueueJobMeta>,
+  requestId?: string,
+) {
+  const result = await startOwnedJob<AiCategorizationPayload>({
+    queueName: ADMIN_AI_CATEGORIZATION_QUEUE,
+    kind: 'ai-product-categorization',
+    ownerKey,
+    origin: assistantJobOrigin(payload),
+    conversationId: payload.conversationId,
+    requestId,
+    activeScope: 'global',
+    data: payload as AiCategorizationPayload,
+  });
+  return { kind: result.kind, job: toClientJob(result.job) };
+}
+
+type CategorizationProduct = {
+  id: number;
+  updatedAt: Date;
+  title: string;
+  description: string | null;
+  sku: string | null;
+  brand: string | null;
+  categoryId: number | null;
+  category: string | null;
+};
+
+type CategorizationCategory = {
+  id: number;
+  updatedAt: Date;
+  name: string;
+  nameAr: string | null;
+  parentId: number | null;
+  parentName: string | null;
+};
+
+export type AiCategorizationDependencies = {
+  classifier: {
+    classify(
+      input: Parameters<ProductCategorizationClassifier['classify']>[0],
+    ): Promise<
+      Awaited<ReturnType<ProductCategorizationClassifier['classify']>> & { runId: number }
+    >;
+  };
+  listCategories: () => Promise<CategorizationCategory[]>;
+  countProducts: (scope: AiCategorizationPayload['scope']) => Promise<number>;
+  listProductsAfter: (
+    scope: AiCategorizationPayload['scope'],
+    lastId: number,
+    limit: number,
+  ) => Promise<CategorizationProduct[]>;
+  listPendingProductIds: () => Promise<Set<number>>;
+  proposeCategory: (input: {
+    productId: number;
+    categoryId: number;
+    reasoning: string;
+    confidence: number;
+    runId: number;
+    sourceUpdatedAt: Date;
+    categoryUpdatedAt: Date;
+    actorId?: string | null;
+  }) => Promise<{ id: number }>;
+  applyProposal: (proposalId: number, actor: AiCategorizationPayload['actor']) => Promise<unknown>;
+  refreshConsumers: (trigger: string) => Promise<void>;
+};
+
+function createAiCategorizationDependencies(actorId?: string | null): AiCategorizationDependencies {
+  const db = getDb();
+  return {
+    classifier: {
+      async classify(input) {
+        const config = getAiConfig();
+        const [run] = await db
+          .insert(aiRuns)
+          .values({
+            surface: 'admin',
+            task: 'product_categorization',
+            status: 'running',
+            actorId,
+            model: resolveAiModel(config, 'admin'),
+            promptVersion: PRODUCT_CATEGORIZATION_PROMPT_VERSION,
+          })
+          .returning({ id: aiRuns.id });
+        try {
+          const result = await createProductCategorizationClassifier(config).classify(input);
+          await db
+            .update(aiRuns)
+            .set({
+              status: 'completed',
+              model: result.model,
+              ...result.usage,
+              completedAt: new Date(),
+            })
+            .where(eq(aiRuns.id, run.id));
+          return { ...result, runId: run.id };
+        } catch (error) {
+          await db
+            .update(aiRuns)
+            .set({
+              status: 'failed',
+              errorCode: error instanceof Error ? error.name : 'UnknownError',
+              completedAt: new Date(),
+            })
+            .where(eq(aiRuns.id, run.id));
+          throw error;
+        }
+      },
+    },
+    async listCategories() {
+      const rows = await db
+        .select({
+          id: categories.id,
+          updatedAt: categories.updatedAt,
+          name: categories.name,
+          nameAr: categories.nameAr,
+          parentId: categories.parentId,
+        })
+        .from(categories)
+        .where(eq(categories.isActive, true))
+        .orderBy(asc(categories.id));
+      const names = new Map(rows.map((row) => [row.id, row.name]));
+      return rows.map((row) => ({
+        ...row,
+        parentName: row.parentId ? (names.get(row.parentId) ?? null) : null,
+      }));
+    },
+    async countProducts(scope) {
+      const [{ value }] = await db
+        .select({ value: count() })
+        .from(products)
+        .where(
+          and(
+            eq(products.active, true),
+            scope === 'uncategorized' ? isNull(products.categoryId) : undefined,
+          ),
+        );
+      return value;
+    },
+    listProductsAfter: (scope, lastId, limit) =>
+      db
+        .select({
+          id: products.id,
+          updatedAt: products.updatedAt,
+          title: products.title,
+          description: products.description,
+          sku: products.sku,
+          brand: brands.name,
+          categoryId: products.categoryId,
+          category: categories.name,
+        })
+        .from(products)
+        .leftJoin(brands, eq(products.brandId, brands.id))
+        .leftJoin(categories, eq(products.categoryId, categories.id))
+        .where(
+          and(
+            eq(products.active, true),
+            scope === 'uncategorized' ? isNull(products.categoryId) : undefined,
+            gt(products.id, lastId),
+          ),
+        )
+        .orderBy(asc(products.id))
+        .limit(limit),
+    async listPendingProductIds() {
+      const rows = await db
+        .select({ entityId: aiProposals.entityId })
+        .from(aiProposals)
+        .innerJoin(products, eq(products.id, aiProposals.entityId))
+        .innerJoin(
+          categories,
+          sql`${categories.id}::text = ${aiProposals.payload}->'changes'->>'categoryId'`,
+        )
+        .where(
+          and(
+            eq(aiProposals.entityType, 'products'),
+            eq(aiProposals.proposalType, 'product_category'),
+            eq(aiProposals.status, 'proposed'),
+            gt(aiProposals.expiresAt, new Date()),
+            eq(aiProposals.sourceUpdatedAt, products.updatedAt),
+            eq(categories.isActive, true),
+            sql`(${aiProposals.payload}->'dependencies'->'category'->>'updatedAt')::timestamptz = ${categories.updatedAt}`,
+          ),
+        );
+      return new Set(rows.map((row) => row.entityId));
+    },
+    proposeCategory: proposeProductCategoryAssignment,
+    applyProposal: async (proposalId, actor) => {
+      const result = await reviewProductCategoryProposal({
+        proposalId,
+        action: 'approve',
+        actorId: actor.email,
+        actorName: actor.name,
+      });
+      return result;
+    },
+    refreshConsumers: refreshAppliedAiProposalConsumers,
+  };
+}
+
+export async function runAiCategorizationJob(
+  payload: AiCategorizationPayload,
+  helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+    throwIfCancelled: () => Promise<void>;
+  },
+  dependencies: AiCategorizationDependencies = createAiCategorizationDependencies(
+    payload.actor.email,
+  ),
+) {
+  const categories = await dependencies.listCategories();
+  if (categories.length === 0)
+    throw new Error('No active categories are available for catalog categorization.');
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const total = await dependencies.countProducts(payload.scope);
+  const pendingProductIds = await dependencies.listPendingProductIds();
+  const counters = {
+    processed: 0,
+    proposed: 0,
+    applied: 0,
+    autoApplyFailed: 0,
+    unchanged: 0,
+    ambiguous: 0,
+    alreadyProposed: 0,
+    failed: 0,
+  };
+  const ambiguousProductIds: number[] = [];
+  const failedProductIds: number[] = [];
+  let lastId = 0;
+
+  try {
+    while (counters.processed < total) {
+      await helpers.throwIfCancelled();
+      const page = await dependencies.listProductsAfter(payload.scope, lastId, payload.batchSize);
+      if (page.length === 0) break;
+      for (const product of page) {
+        await helpers.throwIfCancelled();
+        lastId = product.id;
+        if (pendingProductIds.has(product.id)) {
+          counters.alreadyProposed += 1;
+        } else {
+          try {
+            const result = await dependencies.classifier.classify({
+              product: {
+                id: product.id,
+                title: product.title,
+                description: product.description?.slice(0, 12_000) ?? null,
+                brand: product.brand,
+                sku: product.sku,
+                currentCategoryId: product.categoryId,
+                currentCategory: product.category,
+              },
+              categories,
+              adminContext: payload.context,
+            });
+            const decision = result.decision;
+            if (
+              decision.ambiguous ||
+              decision.categoryId === null ||
+              !categoryIds.has(decision.categoryId) ||
+              decision.confidence < payload.confidenceThreshold
+            ) {
+              counters.ambiguous += 1;
+              if (ambiguousProductIds.length < 100) ambiguousProductIds.push(product.id);
+            } else if (decision.categoryId === product.categoryId) {
+              counters.unchanged += 1;
+            } else {
+              const proposal = await dependencies.proposeCategory({
+                productId: product.id,
+                categoryId: decision.categoryId,
+                reasoning: decision.reasoning,
+                confidence: decision.confidence,
+                runId: result.runId,
+                sourceUpdatedAt: product.updatedAt,
+                categoryUpdatedAt: categories.find(
+                  (category) => category.id === decision.categoryId,
+                )!.updatedAt,
+                actorId: payload.actor.email,
+              });
+              pendingProductIds.add(product.id);
+              if (payload.autoApply) {
+                try {
+                  await dependencies.applyProposal(proposal.id, payload.actor);
+                  counters.applied += 1;
+                } catch {
+                  counters.proposed += 1;
+                  counters.autoApplyFailed += 1;
+                }
+              } else {
+                counters.proposed += 1;
+              }
+            }
+          } catch {
+            counters.failed += 1;
+            if (failedProductIds.length < 100) failedProductIds.push(product.id);
+          }
+        }
+        counters.processed += 1;
+        await helpers.updateProgress({
+          phase: 'classifying-products',
+          current: counters.processed,
+          total,
+        });
+      }
+      await helpers.updateSummary({ ...counters, total, lastProductId: lastId });
+    }
+  } finally {
+    if (counters.applied > 0)
+      await dependencies.refreshConsumers('ai-product-categorization:auto-apply');
+  }
+  const accounted =
+    counters.proposed +
+    counters.applied +
+    counters.unchanged +
+    counters.ambiguous +
+    counters.alreadyProposed +
+    counters.failed;
+  const summary = {
+    ...counters,
+    total,
+    accounted,
+    complete: counters.processed === total && accounted === total,
+    lastProductId: lastId,
+    ambiguousProductIds,
+    failedProductIds,
+  };
+  await helpers.updateSummary(summary);
+  if (!summary.complete)
+    throw new Error(
+      `Catalog categorization stopped after ${counters.processed} of ${total} products.`,
+    );
+  return summary;
+}

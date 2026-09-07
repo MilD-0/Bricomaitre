@@ -5,13 +5,15 @@ import {
   ShoppingListDraftConflictError,
 } from './shopping-list-drafts.server';
 
-vi.mock('./shopping-list-stock-allocations', () => ({
+vi.mock('./stock-allocations/legacy', () => ({
   initializeLegacyShoppingListAllocations: vi.fn(),
+}));
+vi.mock('./stock-allocations/credits', () => ({
   hydrateShoppingListStockCredits: vi.fn(async (_db, draft) => draft),
 }));
 
 import { buildGeneratedShoppingListDraft } from './shopping-list-drafts';
-import { hydrateShoppingListStockCredits } from './shopping-list-stock-allocations';
+import { hydrateShoppingListStockCredits } from './stock-allocations/credits';
 
 const payload = {
   sourceMode: 'selected' as const,

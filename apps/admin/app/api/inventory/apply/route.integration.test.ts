@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from './route';
-import { inventoryApplyResponseSchema } from '../../../../lib/inventory';
+import { inventoryApplyResponseSchema } from '@/lib/inventory';
 
 const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, applyAdminInventoryBatchMock } =
   vi.hoisted(() => ({
@@ -18,15 +18,15 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/admin-inventory-workflow', () => ({
+vi.mock('@/lib/admin-inventory-workflow', () => ({
   applyAdminInventoryBatch: applyAdminInventoryBatchMock,
 }));
 

@@ -30,23 +30,23 @@ vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsAccessMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_STATS_IMPORT_QUEUE: 'admin-stats-import',
   getLatestExportJob: getLatestExportJobMock,
   startAdminReportingRefreshJob: startAdminReportingRefreshJobMock,
 }));
 
-vi.mock('../../../../lib/stats-order-import', async () => {
-  const actual = await vi.importActual<typeof import('../../../../lib/stats-order-import')>(
-    '../../../../lib/stats-order-import',
+vi.mock('@/lib/stats-order-import', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/stats-order-import')>(
+    '@/lib/stats-order-import',
   );
 
   return {
@@ -57,7 +57,7 @@ vi.mock('../../../../lib/stats-order-import', async () => {
   };
 });
 
-vi.mock('../../../../lib/server-cache', () => ({
+vi.mock('@/lib/server-cache', () => ({
   CACHE_TAGS: {
     stats: 'stats',
     statsHistory: 'stats-history',

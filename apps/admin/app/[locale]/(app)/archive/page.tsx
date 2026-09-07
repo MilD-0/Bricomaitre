@@ -1,11 +1,8 @@
 import { getDb, hasDb } from '@bric/db/client';
 
-import { ProductArchive } from '../../../../components/products/product-archive';
-import {
-  archivedProductListQuerySchema,
-  loadArchivedProductsPage,
-} from '../../../../lib/product-archive';
-import { requirePageAccess } from '../../../../lib/page-access';
+import { ProductArchive } from '@/components/products/product-archive';
+import { archivedProductListQuerySchema, loadArchivedProductsPage } from '@/lib/product-archive';
+import { requirePageAccess } from '@/lib/page-access';
 
 export default async function ProductArchivePage({
   params,

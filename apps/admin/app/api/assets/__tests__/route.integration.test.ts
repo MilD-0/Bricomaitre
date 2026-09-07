@@ -24,19 +24,19 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/action-history', () => ({
+vi.mock('@/lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
-vi.mock('../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontAssets: revalidateStorefrontAssetsMock,
 }));
 

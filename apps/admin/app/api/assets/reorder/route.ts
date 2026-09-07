@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   ActionHistoryConflictError,
   ActionHistoryEntityNotFoundError,
-} from '../../../../lib/action-history-state';
+} from '@/lib/action-history-state';
 import { getDb, hasDb } from '@bric/db/client';
-import { reorderAdminAssets } from '../../../../lib/asset-mutations';
-import { assetReorderSchema } from '../../../../lib/assets';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { reorderAdminAssets } from '@/lib/asset-mutations';
+import { assetReorderSchema } from '@/lib/assets';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function POST(req: NextRequest) {
   const { response: denied, session } = await requireMutationAccess('assets');

@@ -1,12 +1,12 @@
 import { getDb, hasDb } from '@bric/db/client';
 
-import { AiProposalWorkspace } from '../../../../components/products/ai-proposal-workspace';
+import { AiProposalWorkspace } from '@/components/products/ai-proposal-workspace';
 import {
   aiProposalInboxQuerySchema,
   loadAiProposalInbox,
   parseAiProposalInboxQuery,
-} from '../../../../lib/ai-proposal-inbox';
-import { requirePageAccess } from '../../../../lib/page-access';
+} from '@/lib/ai-proposal-inbox';
+import { requirePageAccess } from '@/lib/page-access';
 
 export default async function AiProposalsPage({
   params,

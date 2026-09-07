@@ -5,14 +5,14 @@ import {
   ADMIN_BACKGROUND_JOB_TYPES,
   allowedAdminBackgroundJobTypes,
   cancelAdminBackgroundJob,
-} from '../../../../../lib/ai-background-jobs';
+} from '@/lib/ai-background-jobs';
 import {
   ADMIN_AI_CATEGORIZATION_QUEUE,
   ADMIN_AI_CONTENT_QUEUE,
   cancelExportJob,
-} from '../../../../../lib/background-jobs';
-import { hasPermission, normalizePermissions } from '../../../../../lib/permissions';
-import { requireAppAccess } from '../../../../../lib/rbac';
+} from '@/lib/background-jobs';
+import { hasPermission, normalizePermissions } from '@/lib/permissions';
+import { requireAppAccess } from '@/lib/rbac';
 
 const requestSchema = z.union([
   z.object({ kind: z.enum(['content', 'categorization']).default('content') }).strict(),

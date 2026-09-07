@@ -6,7 +6,8 @@ import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../test/mocks/server';
-import { LandingPageBuilder, type LandingPageDetail } from './landing-page-builder';
+import { LandingPageBuilder } from './landing-page-builder';
+import type { LandingPageDetail } from './landing-builder/blocks';
 
 const page: LandingPageDetail = {
   id: 7,

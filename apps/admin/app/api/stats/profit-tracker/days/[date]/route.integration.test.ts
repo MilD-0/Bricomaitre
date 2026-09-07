@@ -6,15 +6,15 @@ const { deleteDayMock, refreshFactsMock, requireMutationMock } = vi.hoisted(() =
   requireMutationMock: vi.fn(),
 }));
 
-vi.mock('../../../../../../lib/analytics-facts', () => ({
+vi.mock('@/lib/analytics-facts', () => ({
   refreshAnalyticsFactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
-vi.mock('../../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationMock,
 }));
-vi.mock('../../../../../../lib/profit-tracker', () => ({
+vi.mock('@/lib/profit-tracker', () => ({
   deleteProfitTrackerDay: deleteDayMock,
 }));
 

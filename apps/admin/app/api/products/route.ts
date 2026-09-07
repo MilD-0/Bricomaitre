@@ -5,16 +5,16 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import { getDb, hasDb } from '@bric/db/client';
 import { orders, products } from '@bric/db/schema';
 import { CONFIRMED_LIFECYCLE_ORDER_STATUSES } from '@bric/storefront-core/order-domain';
-import { startProductCatalogFeedRefreshJob } from '../../../lib/background-jobs';
-import { productListQuerySchema, productPayloadSchema } from '../../../lib/products';
+import { startProductCatalogFeedRefreshJob } from '@/lib/background-jobs';
+import { productListQuerySchema, productPayloadSchema } from '@/lib/products';
 import {
   createProductThroughCanonicalWorkflow,
   ProductIntegrityConflictError,
-} from '../../../lib/product-update-workflow';
-import { requireMutationAccess } from '../../../lib/rbac';
-import { captureAdminException, getRequestId } from '../../../lib/sentry';
-import { CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
-import { revalidateStorefrontProducts } from '../../../lib/storefront-revalidate';
+} from '@/lib/product-update-workflow';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId } from '@/lib/sentry';
+import { CACHE_TAGS, revalidateServerTags } from '@/lib/server-cache';
+import { revalidateStorefrontProducts } from '@/lib/storefront-revalidate';
 
 type ProductListQuery = ReturnType<typeof productListQuerySchema.parse>;
 type ProductMetricRow = {

@@ -5,9 +5,9 @@ import { eq } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
-import { requireMutationAccess } from '../../../../../lib/rbac';
-import { isSafeRemoteHttpsUrl } from '../../../../../lib/remote-url-safety';
-import { buildCloudfrontUrl, readPrivateS3Object } from '../../../../../lib/s3-upload';
+import { requireMutationAccess } from '@/lib/rbac';
+import { isSafeRemoteHttpsUrl } from '@/lib/remote-url-safety';
+import { buildCloudfrontUrl, readPrivateS3Object } from '@/lib/s3-upload';
 
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 let activeThumbnails = 0;

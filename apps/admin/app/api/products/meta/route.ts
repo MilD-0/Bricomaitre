@@ -4,8 +4,8 @@ import { asc } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { brands, categories } from '@bric/db/schema';
-import { requireAppAccess } from '../../../../lib/rbac';
-import { CACHE_TAGS } from '../../../../lib/server-cache';
+import { requireAppAccess } from '@/lib/rbac';
+import { CACHE_TAGS } from '@/lib/server-cache';
 
 const getCachedProductsMeta = unstable_cache(
   async () =>

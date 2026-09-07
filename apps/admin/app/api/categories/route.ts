@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { readCategoriesPage } from '../../../lib/brands-categories-api';
-import { categoryFormSchema, taxonomyListQuerySchema } from '../../../lib/brands-categories';
-import { CategoryHierarchyError } from '../../../lib/category-hierarchy';
-import { requireMutationAccess } from '../../../lib/rbac';
-import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
-import { revalidateStorefrontProductMeta } from '../../../lib/storefront-revalidate';
-import { createCategoryThroughCanonicalWorkflow } from '../../../lib/taxonomy-mutations';
+import { readCategoriesPage } from '@/lib/brands-categories-api';
+import { categoryFormSchema, taxonomyListQuerySchema } from '@/lib/brands-categories';
+import { CategoryHierarchyError } from '@/lib/category-hierarchy';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
+import { revalidateStorefrontProductMeta } from '@/lib/storefront-revalidate';
+import { createCategoryThroughCanonicalWorkflow } from '@/lib/taxonomy-mutations';
 
 function emptyPagination() {
   return {

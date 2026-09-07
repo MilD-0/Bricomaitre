@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 
-import { analyticsQuerySchema, getAnalyticsStorefrontDetails } from '../../../../lib/analytics';
-import { requireAnalyticsAccess } from '../../../../lib/rbac';
+import { analyticsQuerySchema, getAnalyticsStorefrontDetails } from '@/lib/analytics';
+import { requireAnalyticsAccess } from '@/lib/rbac';
 
 export async function GET(request: NextRequest) {
   const { response: denied } = await requireAnalyticsAccess();

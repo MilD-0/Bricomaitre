@@ -34,32 +34,32 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/action-history', () => ({
+vi.mock('@/lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
-vi.mock('../../../../lib/product-update-workflow', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../lib/product-update-workflow')>()),
+vi.mock('@/lib/product-update-workflow', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/product-update-workflow')>()),
   createProductThroughCanonicalWorkflow: createProductMock,
 }));
 
-vi.mock('../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   startProductCatalogFeedRefreshJob: startProductCatalogFeedRefreshJobMock,
 }));
 
-vi.mock('../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontProducts: revalidateStorefrontProductsMock,
 }));
 
-vi.mock('../../../../lib/server-cache', () => ({
+vi.mock('@/lib/server-cache', () => ({
   CACHE_TAGS: {
     products: 'products',
     productsMeta: 'products-meta',
@@ -67,7 +67,7 @@ vi.mock('../../../../lib/server-cache', () => ({
   revalidateServerTags: revalidateServerTagsMock,
 }));
 
-vi.mock('../../../../lib/sentry', () => ({
+vi.mock('@/lib/sentry', () => ({
   getRequestId: vi.fn(() => 'request-1'),
   captureAdminException: captureAdminExceptionMock,
 }));

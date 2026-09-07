@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { searchAssetProductOptions } from '../../../../lib/admin-assets-data';
-import { assetProductOptionQuerySchema } from '../../../../lib/assets';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { searchAssetProductOptions } from '@/lib/admin-assets-data';
+import { assetProductOptionQuerySchema } from '@/lib/assets';
+import { requireMutationAccess } from '@/lib/rbac';
 
 function parseIds(value: string | null) {
   if (!value) return [];

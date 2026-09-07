@@ -8,11 +8,11 @@ const { authMock, appShellMock, redirectMock, connectionMock } = vi.hoisted(() =
   connectionMock: vi.fn(),
 }));
 
-vi.mock('../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../components/layout/app-shell', () => ({
+vi.mock('@/components/layout/app-shell', () => ({
   AppShell: appShellMock,
 }));
 

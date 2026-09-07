@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { getProfitTrackerReport, profitTrackerRangeSchema } from '../../../../lib/profit-tracker';
-import { requireAnalyticsAccess } from '../../../../lib/rbac';
+import { getProfitTrackerReport, profitTrackerRangeSchema } from '@/lib/profit-tracker';
+import { requireAnalyticsAccess } from '@/lib/rbac';
 
 export async function GET(request: NextRequest) {
   const { response: denied } = await requireAnalyticsAccess();

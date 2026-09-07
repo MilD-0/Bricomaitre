@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildSearchOpportunities,
-  canonicalSearchPath,
-  isBrandedSearchQuery,
-  searchPageLabel,
-} from './analytics-search';
+import { buildSearchOpportunities } from './search-analytics/opportunities';
+import { canonicalSearchPath } from './search-analytics/values';
+import { isBrandedSearchQuery } from './search-analytics/values';
+import { searchPageLabel } from './search-analytics/values';
 
 describe('Analytics Search intelligence', () => {
   it('normalizes storefront locale paths without conflating hosts or query strings', () => {

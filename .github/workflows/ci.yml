@@ -232,7 +232,6 @@ jobs:
 
   production-builds:
     name: Production builds
-    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:

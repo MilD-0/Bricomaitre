@@ -5,12 +5,8 @@ import { eq } from 'drizzle-orm';
 import { getDb, hasDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { isSafeRemoteHttpsUrl } from '../../../../../lib/remote-url-safety';
-import {
-  captureAdminException,
-  getRequestId,
-  withRequestIdHeaders,
-} from '../../../../../lib/sentry';
+import { isSafeRemoteHttpsUrl } from '@/lib/remote-url-safety';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 

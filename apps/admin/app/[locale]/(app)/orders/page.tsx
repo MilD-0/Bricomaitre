@@ -1,8 +1,8 @@
-import { OrdersWorkspace } from '../../../../components/orders/orders-workspace';
-import { loadOrdersPageData } from '../../../../lib/admin-orders-data';
+import { OrdersWorkspace } from '@/components/orders/orders-workspace';
+import { loadOrdersPageData } from '@/lib/admin-orders-data';
 import { getDb, hasDb } from '@bric/db/client';
-import { readEcotrackCatalog } from '../../../../lib/ecotrack';
-import { requirePageAccess } from '../../../../lib/page-access';
+import { readEcotrackCatalog } from '@/lib/ecotrack';
+import { requirePageAccess } from '@/lib/page-access';
 
 export default async function OrdersPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

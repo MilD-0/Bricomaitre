@@ -7,8 +7,8 @@ import {
   AiProductNotFoundError,
   proposeProductRelation,
   UnsupportedProductRelationError,
-} from '../../../../../../../lib/ai-product-knowledge';
-import { requireMutationAccess } from '../../../../../../../lib/rbac';
+} from '@/lib/ai-product-knowledge';
+import { requireMutationAccess } from '@/lib/rbac';
 
 const requestSchema = z.object({
   targetProductId: z.number().int().positive(),

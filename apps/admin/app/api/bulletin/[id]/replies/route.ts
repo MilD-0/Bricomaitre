@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { bulletinReplySchema } from '../../../../../lib/bulletin';
-import { requireBulletinSession } from '../../../../../lib/bulletin-server';
-import {
-  BulletinPostNotFoundError,
-  createBulletinReply,
-} from '../../../../../lib/bulletin-mutations';
+import { bulletinReplySchema } from '@/lib/bulletin';
+import { requireBulletinSession } from '@/lib/bulletin-server';
+import { BulletinPostNotFoundError, createBulletinReply } from '@/lib/bulletin-mutations';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

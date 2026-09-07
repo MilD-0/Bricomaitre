@@ -21,7 +21,7 @@ const {
   buildMetaCatalogExportFileNameMock: vi.fn(),
 }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
@@ -30,7 +30,7 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../../lib/meta-catalog', () => ({
+vi.mock('@/lib/meta-catalog', () => ({
   buildMetaCatalogExportRows: buildMetaCatalogExportRowsMock,
   buildMetaCatalogWorkbook: buildMetaCatalogWorkbookMock,
   toXlsxBuffer: toXlsxBufferMock,

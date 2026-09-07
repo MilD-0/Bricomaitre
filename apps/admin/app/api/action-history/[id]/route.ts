@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
-import { getActionEntityConfig, loadActionHistoryDetail } from '../../../../lib/action-history';
-import { canMutateResource, requireSettingsAccess } from '../../../../lib/rbac';
+import { getActionEntityConfig, loadActionHistoryDetail } from '@/lib/action-history';
+import { canMutateResource, requireSettingsAccess } from '@/lib/rbac';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied, session } = await requireSettingsAccess();

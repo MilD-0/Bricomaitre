@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { AdminSession } from '../../../../../lib/auth';
+import type { AdminSession } from '@/lib/auth';
 
-import { auth } from '../../../../../lib/auth';
-import { ADMIN_PRODUCT_EXPORT_QUEUE, getLatestExportJob } from '../../../../../lib/background-jobs';
-import { canExportAllProducts } from '../../../../../lib/permissions';
+import { auth } from '@/lib/auth';
+import { ADMIN_PRODUCT_EXPORT_QUEUE, getLatestExportJob } from '@/lib/background-jobs';
+import { canExportAllProducts } from '@/lib/permissions';
 
 function getRequesterKey(session: AdminSession | null) {
   return session?.user?.id ?? session?.user?.email ?? null;

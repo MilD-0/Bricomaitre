@@ -11,6 +11,11 @@ if (!reportPath) {
 const allowedFixturePaths = [
   'apps/admin/app/api/ai/chat/route.integration.test.ts',
   'apps/admin/components/admin-ai-chat.test.tsx',
+  'apps/admin/components/admin-ai-chat.conversations.test.tsx',
+  'apps/admin/components/admin-ai-chat.evidence.test.tsx',
+  'apps/admin/components/admin-ai-chat.outcomes.test.tsx',
+  'apps/admin/components/admin-ai-chat.sidebar.test.tsx',
+  'apps/admin/app/api/ai/chat/route.recovery.integration.test.ts',
   'apps/admin/lib/admin-ai-chat-stream.test.ts',
   'apps/admin/lib/admin-ai-runtime.test.ts',
   'apps/admin/tests/browser/admin-ai-assistant.spec.ts',

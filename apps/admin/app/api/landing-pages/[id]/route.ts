@@ -9,12 +9,12 @@ import {
   LandingPageNotFoundError,
   saveLandingPage,
   setLandingPageActive,
-} from '../../../../lib/landing-pages';
-import { requireMutationAccess } from '../../../../lib/rbac';
+} from '@/lib/landing-pages';
+import { requireMutationAccess } from '@/lib/rbac';
 import {
   buildStorefrontLandingPagePreviewUrl,
   revalidateStorefrontLandingPages,
-} from '../../../../lib/storefront-revalidate';
+} from '@/lib/storefront-revalidate';
 
 const requestSchema = z.discriminatedUnion('action', [
   z.strictObject({

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ access: vi.fn(), search: vi.fn() }));
-vi.mock('../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
-vi.mock('../../../../lib/admin-assets-data', () => ({ searchAssetProductOptions: mocks.search }));
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('@/lib/admin-assets-data', () => ({ searchAssetProductOptions: mocks.search }));
 
 import { GET } from './route';
 

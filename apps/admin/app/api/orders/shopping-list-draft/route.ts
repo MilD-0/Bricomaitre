@@ -2,18 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { requireMutationAccess } from '@/lib/rbac';
 import {
   shoppingListDraftSaveRequestSchema,
   shoppingListDraftQuerySchema,
   shoppingListDraftResetRequestSchema,
-} from '../../../../lib/shopping-list-drafts';
+} from '@/lib/shopping-list-drafts';
 import {
   resetAdminShoppingListDraft,
   loadAdminShoppingListDraft,
   saveAdminShoppingListDraft,
   ShoppingListDraftConflictError,
-} from '../../../../lib/shopping-list-drafts.server';
+} from '@/lib/shopping-list-drafts.server';
 
 function parseDraftQuery(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;

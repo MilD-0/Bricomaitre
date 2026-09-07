@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { requireMutationAccess } from '@/lib/rbac';
 
 const querySchema = z.object({
   search: z.string().trim().max(200),

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
-import { requireMutationAccess, canMutateResource } from '../../../../../lib/rbac';
+import { requireMutationAccess, canMutateResource } from '@/lib/rbac';
 import {
   applyShoppingListInventory,
   shoppingListInventoryApplySchema,
-} from '../../../../../lib/shopping-list-inventory.server';
-import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list-drafts.server';
-import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
+} from '@/lib/shopping-list-inventory.server';
+import { ShoppingListDraftConflictError } from '@/lib/shopping-list-drafts.server';
+import { AdminMutationIdempotencyConflictError } from '@/lib/admin-mutation-idempotency';
 
 export async function POST(req: NextRequest) {
   const { response: denied, session } = await requireMutationAccess('orders');

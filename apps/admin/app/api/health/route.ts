@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { getAdminHealth } from '../../../lib/health';
-import { getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
+import { getAdminHealth } from '@/lib/health';
+import { getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);

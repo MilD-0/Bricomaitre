@@ -1,0 +1,209 @@
+.product-detail {
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: start;
+  padding-block: calc(0.75rem * var(--sf-density)) calc(2.5rem * var(--sf-density));
+}
+
+.product-media {
+  min-width: 0;
+}
+.product-media-stage {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: var(--sf-border-width, 1px) solid var(--sf-border-default, #d2d7dc);
+  border-radius: var(--sf-radius-panel, clamp(1.45rem, 3vw, var(--squircle-lg)));
+  corner-shape: squircle;
+  background: var(--sf-surface-raised, #fff);
+  box-shadow: var(--sf-shadow-floating, 0 22px 55px rgba(1, 90, 96, 0.075));
+}
+.product-media-track {
+  height: 100%;
+  display: flex;
+  touch-action: pan-y pinch-zoom;
+}
+.product-media-slide {
+  position: relative;
+  min-width: 0;
+  flex: 0 0 100%;
+}
+.product-media-zoom-trigger {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  padding: clamp(1.25rem, 4vw, 2.6rem);
+  cursor: zoom-in;
+}
+.product-media-zoom-trigger > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform var(--sf-duration-standard, 220ms)
+    var(--sf-ease-emphasized, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+.product-media-zoom-label {
+  position: absolute;
+  inset-inline-end: 0.75rem;
+  inset-block-end: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(0.4rem * var(--sf-density));
+  min-height: 2.65rem;
+  border: var(--sf-border-width, 1px) solid var(--sf-border-default, #c9cfd4);
+  border-radius: var(--squircle-sm);
+  corner-shape: squircle;
+  background: var(--sf-surface-glass, rgba(255, 255, 255, 0.94));
+  padding: calc(0.55rem * var(--sf-density)) calc(0.75rem * var(--sf-density));
+  color: var(--brand-graphite);
+  font-size: var(--sf-type-caption, 0.76rem);
+  font-weight: var(--sf-weight-bold, 700);
+  box-shadow: var(--sf-shadow-raised, 0 5px 16px rgba(23, 28, 33, 0.12));
+  transition:
+    background-color var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease),
+    box-shadow var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease),
+    transform var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease);
+}
+.product-media-zoom-label svg {
+  width: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.product-lightbox {
+  --pswp-bg: var(--sf-surface-overlay, rgba(13, 20, 21, 0.97));
+}
+.product-lightbox .pswp__img {
+  object-fit: contain !important;
+  object-position: center !important;
+}
+.product-lightbox-controls {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  pointer-events: none;
+}
+.product-lightbox-toolbar {
+  position: absolute;
+  inset-block-start: 0.75rem;
+  inset-inline-end: 0.75rem;
+  display: flex;
+  gap: calc(0.45rem * var(--sf-density));
+  pointer-events: auto;
+}
+.product-lightbox-control {
+  width: 2.75rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  border: var(--sf-border-width, 1px) solid var(--sf-border-inverse, rgba(255, 255, 255, 0.22));
+  border-radius: var(--sf-radius-card, 1rem);
+  corner-shape: squircle;
+  background: var(--sf-surface-overlay, rgba(38, 42, 44, 0.78));
+  color: var(--sf-text-inverse, #fff);
+  box-shadow: var(--sf-shadow-raised, 0 8px 24px rgba(0, 0, 0, 0.2));
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+.product-lightbox-control:hover {
+  border-color: var(--sf-border-inverse, rgba(255, 255, 255, 0.44));
+  background: var(--sf-surface-overlay, rgba(55, 60, 62, 0.94));
+  color: var(--sf-text-inverse, #fff);
+  transform: translateY(-1px);
+}
+.product-lightbox-control:disabled {
+  border-color: var(--sf-border-inverse, rgba(255, 255, 255, 0.1));
+  background: var(--sf-surface-overlay, rgba(30, 34, 36, 0.38));
+  color: var(--sf-text-inverse, rgba(255, 255, 255, 0.38));
+}
+.product-lightbox-control > div {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+.product-lightbox-counter {
+  position: absolute;
+  inset-block-start: 0.85rem;
+  inset-inline-start: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: calc(0.35rem * var(--sf-density));
+  min-height: 2.55rem;
+  border-radius: var(--sf-radius-control, 0.9rem);
+  corner-shape: squircle;
+  background: var(--sf-surface-overlay, rgba(28, 32, 34, 0.58));
+  padding-inline: calc(0.85rem * var(--sf-density));
+  color: var(--sf-text-inverse, #fff);
+  font-size: var(--sf-type-small, 0.78rem);
+  font-weight: var(--sf-weight-bold, 750);
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
+}
+.product-lightbox-counter span {
+  color: var(--sf-text-inverse, rgba(255, 255, 255, 0.48));
+}
+.product-lightbox-previous,
+.product-lightbox-next {
+  position: absolute;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+}
+.product-lightbox-previous {
+  inset-inline-start: 0.75rem;
+}
+.product-lightbox-next {
+  inset-inline-end: 0.75rem;
+}
+.product-image-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: calc(1rem * var(--sf-density));
+  color: var(--sf-text-muted, #68717a);
+  font-size: var(--sf-type-small, 0.85rem);
+}
+.product-image-placeholder svg {
+  width: 5rem;
+  fill: none;
+  stroke: var(--sf-text-subtle, #8b949c);
+  stroke-width: 2;
+}
+.product-media-thumbnails {
+  display: flex;
+  gap: calc(0.65rem * var(--sf-density));
+  overflow-x: auto;
+  padding: calc(0.8rem * var(--sf-density)) calc(0.2rem * var(--sf-density))
+    calc(0.35rem * var(--sf-density));
+  scrollbar-width: thin;
+}
+.product-media-thumbnail {
+  position: relative;
+  flex: 0 0 4.6rem;
+  width: 4.6rem;
+  height: 4.6rem;
+  overflow: hidden;
+  border: var(--sf-border-width-strong, 2px) solid transparent;
+  border-radius: var(--squircle-sm);
+  corner-shape: squircle;
+  background: var(--sf-surface-raised, #fff);
+  padding: calc(0.25rem * var(--sf-density));
+  cursor: pointer;
+  box-shadow: var(--sf-shadow-raised, 0 4px 12px rgba(23, 28, 33, 0.04));
+  transition:
+    border-color var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
+    box-shadow var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease),
+    transform var(--sf-duration-fast, 150ms) var(--sf-ease-standard, ease);
+}
+.product-media-thumbnail[aria-pressed='true'] {
+  border-color: var(--brand-teal);
+  box-shadow: var(--sf-shadow-raised, 0 7px 18px rgba(1, 115, 122, 0.13));
+}
+.product-media-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

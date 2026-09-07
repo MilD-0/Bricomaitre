@@ -18,9 +18,9 @@ const {
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock, getDb: getDbMock }));
-vi.mock('../../../../lib/rbac', () => ({ requireSettingsAccess: requireSettingsAccessMock }));
-vi.mock('../../../../lib/action-history', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../lib/action-history')>()),
+vi.mock('@/lib/rbac', () => ({ requireSettingsAccess: requireSettingsAccessMock }));
+vi.mock('@/lib/action-history', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/action-history')>()),
   listActionHistory: listActionHistoryMock,
   toActionHistoryListItem: toActionHistoryListItemMock,
 }));

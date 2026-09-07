@@ -17,7 +17,7 @@ const {
 
 import { POST } from '../route';
 
-vi.mock('../../../../../lib/s3-upload', () => ({
+vi.mock('@/lib/s3-upload', () => ({
   ensurePrivateS3Config: ensurePrivateS3ConfigMock,
   getS3UploadClient: getS3UploadClientMock,
   uploadPrivateBufferToS3: uploadPrivateBufferToS3Mock,
@@ -25,7 +25,7 @@ vi.mock('../../../../../lib/s3-upload', () => ({
   buildDatedObjectKey: buildDatedObjectKeyMock,
 }));
 
-vi.mock('../../../../../lib/bulletin-server', () => ({
+vi.mock('@/lib/bulletin-server', () => ({
   requireBulletinSession: requireBulletinSessionMock,
 }));
 

@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  runAiCategorizationJob,
-  type AiCategorizationDependencies,
-  type AiCategorizationPayload,
-} from './background-jobs';
+import { runAiCategorizationJob, type AiCategorizationPayload } from './background-jobs';
+import type { AiCategorizationDependencies } from './ai-jobs/categorization';
 
 const categories = [
   {

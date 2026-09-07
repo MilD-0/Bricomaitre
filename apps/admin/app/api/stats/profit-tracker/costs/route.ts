@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
-import { refreshAnalyticsFactsAfterMutation } from '../../../../../lib/analytics-facts';
+import { AdminMutationIdempotencyConflictError } from '@/lib/admin-mutation-idempotency';
+import { refreshAnalyticsFactsAfterMutation } from '@/lib/analytics-facts';
 import {
   createProfitTrackerCost,
   listProfitTrackerCosts,
   profitTrackerCostCreateSchema,
-} from '../../../../../lib/profit-tracker';
-import { requireAnalyticsAccess, requireMutationAccess } from '../../../../../lib/rbac';
+} from '@/lib/profit-tracker';
+import { requireAnalyticsAccess, requireMutationAccess } from '@/lib/rbac';
 
 export async function GET() {
   const { response: denied } = await requireAnalyticsAccess();

@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
   deleteRows: vi.fn(),
   refreshConsumers: vi.fn(),
 }));
-vi.mock('../../../../../lib/rbac', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/rbac')>()),
+vi.mock('@/lib/rbac', async (original) => ({
+  ...(await original<typeof import('@/lib/rbac')>()),
   requireAppAccess: mocks.appAccess,
 }));
 vi.mock('@bric/db/client', () => ({
@@ -24,21 +24,21 @@ vi.mock('@bric/db/client', () => ({
     }),
   }),
 }));
-vi.mock('../../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../../lib/ai-product-content', () => ({
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/ai-product-content', () => ({
   AiContentNotFoundError: class AiContentNotFoundError extends Error {},
   AiProposalConflictError: class AiProposalConflictError extends Error {},
   reviewProductContentProposal: mocks.review,
 }));
-vi.mock('../../../../../lib/ai-product-category-proposals', () => ({
+vi.mock('@/lib/ai-product-category-proposals', () => ({
   reviewProductCategoryProposal: mocks.reviewAdmin,
 }));
-vi.mock('../../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   refreshAppliedAiProposalConsumers: mocks.refreshConsumers,
 }));
 
 import { DELETE, PATCH } from './route';
-import { AiProposalReviewConflictError } from '../../../../../lib/ai-proposal-review';
+import { AiProposalReviewConflictError } from '@/lib/ai-proposal-review';
 
 const request = (action: string) =>
   new NextRequest('http://localhost/api/ai/proposals/4', {

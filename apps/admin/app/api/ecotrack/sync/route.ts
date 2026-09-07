@@ -4,9 +4,9 @@ import {
   ADMIN_ECOTRACK_SYNC_QUEUE,
   getLatestExportJob,
   startEcotrackSyncJob,
-} from '../../../../lib/background-jobs';
-import { requireOpsAccess } from '../../../../lib/rbac';
-import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../../lib/sentry';
+} from '@/lib/background-jobs';
+import { requireOpsAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 function getRequesterKey(email: string | null | undefined) {
   return email?.trim() || 'ops';

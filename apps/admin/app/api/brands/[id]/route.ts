@@ -1,16 +1,16 @@
-import { ActionHistoryEntityNotFoundError } from '../../../../lib/action-history-state';
+import { ActionHistoryEntityNotFoundError } from '@/lib/action-history-state';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { readBrand } from '../../../../lib/brands-categories-api';
-import { brandUpdateSchema } from '../../../../lib/brands-categories';
+import { readBrand } from '@/lib/brands-categories-api';
+import { brandUpdateSchema } from '@/lib/brands-categories';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
-import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
+import { requireAppAccess, requireMutationAccess } from '@/lib/rbac';
+import { revalidateStorefrontProductMeta } from '@/lib/storefront-revalidate';
 import {
   deleteBrandThroughCanonicalWorkflow,
   updateBrandThroughCanonicalWorkflow,
-} from '../../../../lib/taxonomy-mutations';
+} from '@/lib/taxonomy-mutations';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied } = await requireAppAccess();

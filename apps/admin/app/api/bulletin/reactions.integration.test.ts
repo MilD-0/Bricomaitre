@@ -2,10 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as postReaction } from './[id]/reactions/route';
 import { POST as replyReaction } from './replies/[replyId]/reactions/route';
-import {
-  BulletinPostNotFoundError,
-  BulletinReplyNotFoundError,
-} from '../../../lib/bulletin-mutations';
+import { BulletinPostNotFoundError, BulletinReplyNotFoundError } from '@/lib/bulletin-mutations';
 
 const { authMock, mutation, getDbMock, hasDbMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
@@ -13,10 +10,10 @@ const { authMock, mutation, getDbMock, hasDbMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   hasDbMock: vi.fn(),
 }));
-vi.mock('../../../lib/auth', () => ({ auth: authMock }));
+vi.mock('@/lib/auth', () => ({ auth: authMock }));
 vi.mock('@bric/db/client', () => ({ getDb: getDbMock, hasDb: hasDbMock }));
-vi.mock('../../../lib/bulletin-mutations', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../lib/bulletin-mutations')>()),
+vi.mock('@/lib/bulletin-mutations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/bulletin-mutations')>()),
   setBulletinPostReaction: mutation,
   setBulletinReplyReaction: mutation,
 }));

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { deleteManualOrder } from '../../../../../lib/manual-orders';
-import { requireAnalyticsAccess } from '../../../../../lib/rbac';
-import { triggerAdminReportingRefresh } from '../../../../../lib/reporting-refresh-trigger';
+import { deleteManualOrder } from '@/lib/manual-orders';
+import { requireAnalyticsAccess } from '@/lib/rbac';
+import { triggerAdminReportingRefresh } from '@/lib/reporting-refresh-trigger';
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied, session } = await requireAnalyticsAccess();

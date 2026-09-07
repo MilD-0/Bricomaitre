@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { userAccessGrantFormSchema } from '../../../../../lib/permissions';
-import { requireSettingsAccess } from '../../../../../lib/rbac';
+import { userAccessGrantFormSchema } from '@/lib/permissions';
+import { requireSettingsAccess } from '@/lib/rbac';
 import {
   AccessGrantNotFoundError,
   deleteAdministrationAccessGrant,
   PrivilegedAccessManagedInCodeError,
   updateAdministrationAccessGrant,
-} from '../../../../../lib/administration-mutations';
+} from '@/lib/administration-mutations';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied, session } = await requireSettingsAccess();

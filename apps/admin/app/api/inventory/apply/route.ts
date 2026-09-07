@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { applyAdminInventoryBatch } from '../../../../lib/admin-inventory-workflow';
-import { inventoryApplyRequestSchema } from '../../../../lib/inventory';
-import { requireMutationAccess } from '../../../../lib/rbac';
-import { AdminMutationIdempotencyConflictError } from '../../../../lib/admin-mutation-idempotency';
+import { applyAdminInventoryBatch } from '@/lib/admin-inventory-workflow';
+import { inventoryApplyRequestSchema } from '@/lib/inventory';
+import { requireMutationAccess } from '@/lib/rbac';
+import { AdminMutationIdempotencyConflictError } from '@/lib/admin-mutation-idempotency';
 
 export async function POST(req: NextRequest) {
   const { response: denied, session } = await requireMutationAccess('products');

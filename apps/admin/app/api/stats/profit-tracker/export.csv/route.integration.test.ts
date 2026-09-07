@@ -7,11 +7,10 @@ const { exportCsvMock, requireOpsMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
-vi.mock('../../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireOpsMock }));
-vi.mock('../../../../../lib/profit-tracker', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/profit-tracker')>(
-    '../../../../../lib/profit-tracker',
-  );
+vi.mock('@/lib/rbac', () => ({ requireAnalyticsAccess: requireOpsMock }));
+vi.mock('@/lib/profit-tracker', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/profit-tracker')>('@/lib/profit-tracker');
   return { ...actual, exportProfitTrackerCsv: exportCsvMock };
 });
 

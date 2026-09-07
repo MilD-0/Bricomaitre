@@ -1,17 +1,17 @@
-import { ActionHistoryEntityNotFoundError } from '../../../../lib/action-history-state';
+import { ActionHistoryEntityNotFoundError } from '@/lib/action-history-state';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { readCategory } from '../../../../lib/brands-categories-api';
-import { categoryUpdateSchema } from '../../../../lib/brands-categories';
-import { CategoryHierarchyError } from '../../../../lib/category-hierarchy';
+import { readCategory } from '@/lib/brands-categories-api';
+import { categoryUpdateSchema } from '@/lib/brands-categories';
+import { CategoryHierarchyError } from '@/lib/category-hierarchy';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
-import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
+import { requireAppAccess, requireMutationAccess } from '@/lib/rbac';
+import { revalidateStorefrontProductMeta } from '@/lib/storefront-revalidate';
 import {
   deleteCategoryThroughCanonicalWorkflow,
   updateCategoryThroughCanonicalWorkflow,
-} from '../../../../lib/taxonomy-mutations';
+} from '@/lib/taxonomy-mutations';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied } = await requireAppAccess();

@@ -6,7 +6,7 @@ const { getAdminHealthMock } = vi.hoisted(() => ({
   getAdminHealthMock: vi.fn(),
 }));
 
-vi.mock('../../../lib/health', () => ({
+vi.mock('@/lib/health', () => ({
   getAdminHealth: getAdminHealthMock,
 }));
 

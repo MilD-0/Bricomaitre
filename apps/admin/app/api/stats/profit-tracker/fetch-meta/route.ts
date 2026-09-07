@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { hasDb } from '@bric/db/client';
-import { MetaAdsSyncError, syncMetaAdsInsights } from '../../../../../lib/meta-ads-insights';
-import { getProfitTrackerReport } from '../../../../../lib/profit-tracker';
-import { requireMutationAccess } from '../../../../../lib/rbac';
+import { MetaAdsSyncError, syncMetaAdsInsights } from '@/lib/meta-ads-insights';
+import { getProfitTrackerReport } from '@/lib/profit-tracker';
+import { requireMutationAccess } from '@/lib/rbac';
 
-import { reportingDateSchema as dateSchema } from '../../../../../lib/analytics/contract';
+import { reportingDateSchema as dateSchema } from '@/lib/analytics/contract';
 const inputSchema = z
   .union([
     z.object({ date: dateSchema }).strict(),

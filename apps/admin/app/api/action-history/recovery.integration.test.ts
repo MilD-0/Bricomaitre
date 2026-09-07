@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as undo } from './[id]/undo/route';
 import { POST as redo } from './[id]/redo/route';
-import { ActionHistoryConflictError } from '../../../lib/action-history';
+import { ActionHistoryConflictError } from '@/lib/action-history';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -11,13 +11,13 @@ const mocks = vi.hoisted(() => ({
   apply: vi.fn(),
   refresh: vi.fn(),
 }));
-vi.mock('../../../lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('@bric/db/client', () => ({ getDb: mocks.getDb, hasDb: mocks.hasDb }));
-vi.mock('../../../lib/action-history-effects', () => ({
+vi.mock('@/lib/action-history-effects', () => ({
   refreshActionHistoryConsumers: mocks.refresh,
 }));
-vi.mock('../../../lib/action-history', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../lib/action-history')>()),
+vi.mock('@/lib/action-history', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/action-history')>()),
   applyHistoryAction: mocks.apply,
 }));
 const db = { select: () => ({ from: () => ({ where: () => ({ limit: mocks.entries }) }) }) };

@@ -2,9 +2,9 @@ import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { readEcotrackCatalog } from '../../../../lib/ecotrack';
-import { requireMutationAccess } from '../../../../lib/rbac';
-import { CACHE_TAGS } from '../../../../lib/server-cache';
+import { readEcotrackCatalog } from '@/lib/ecotrack';
+import { requireMutationAccess } from '@/lib/rbac';
+import { CACHE_TAGS } from '@/lib/server-cache';
 
 const getCachedCatalog = unstable_cache(
   async () => readEcotrackCatalog(getDb()),

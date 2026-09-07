@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { POST } from './route';
-import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list-drafts.server';
+import { ShoppingListDraftConflictError } from '@/lib/shopping-list-drafts.server';
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
   apply: vi.fn(),
   permissions: ['orders_write', 'products_write'] as string[],
 }));
-vi.mock('../../../../../lib/rbac', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/rbac')>()),
+vi.mock('@/lib/rbac', async (original) => ({
+  ...(await original<typeof import('@/lib/rbac')>()),
   requireMutationAccess: mocks.access,
 }));
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: async () => ({ user: { email: 'operator@example.com', permissions: mocks.permissions } }),
 }));
 vi.mock('@bric/db/client', () => ({ hasDb: () => true, getDb: () => ({}) }));
-vi.mock('../../../../../lib/shopping-list-inventory.server', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/shopping-list-inventory.server')>()),
+vi.mock('@/lib/shopping-list-inventory.server', async (original) => ({
+  ...(await original<typeof import('@/lib/shopping-list-inventory.server')>()),
   applyShoppingListInventory: mocks.apply,
 }));
 const payload = {
@@ -37,7 +37,7 @@ beforeEach(() => {
   mocks.permissions = ['orders_write', 'products_write'];
   mocks.access.mockImplementation(async () => ({
     response: null,
-    session: await (await import('../../../../../lib/auth')).auth(),
+    session: await (await import('@/lib/auth')).auth(),
   }));
 });
 it.each(['orders', 'products'])('requires %s mutation permission', async (resource) => {

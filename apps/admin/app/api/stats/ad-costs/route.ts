@@ -9,10 +9,10 @@ import {
   listAdCosts,
   listAdSpendImportBatches,
   upsertAdCostEntry,
-} from '../../../../lib/stats-ad-costs';
-import { statsQuerySchema } from '../../../../lib/stats-contract';
-import { requireAnalyticsAccess } from '../../../../lib/rbac';
-import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
+} from '@/lib/stats-ad-costs';
+import { statsQuerySchema } from '@/lib/stats-contract';
+import { requireAnalyticsAccess } from '@/lib/rbac';
+import { triggerAdminReportingRefresh } from '@/lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
   const { response: denied } = await requireAnalyticsAccess();

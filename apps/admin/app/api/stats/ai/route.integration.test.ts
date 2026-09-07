@@ -8,11 +8,9 @@ const { getAiStatsDataMock, hasDbMock, requireAnalyticsAccessMock } = vi.hoisted
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
-vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
-vi.mock('../../../../lib/ai-stats', async () => {
-  const actual = await vi.importActual<typeof import('../../../../lib/ai-stats')>(
-    '../../../../lib/ai-stats',
-  );
+vi.mock('@/lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
+vi.mock('@/lib/ai-stats', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/ai-stats')>('@/lib/ai-stats');
   return { ...actual, getAiStatsData: getAiStatsDataMock };
 });
 

@@ -6,20 +6,20 @@ const mocks = vi.hoisted(() => ({
   permissions: ['products_write'] as string[],
 }));
 
-vi.mock('../../../../lib/ai-background-jobs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../lib/ai-background-jobs')>()),
+vi.mock('@/lib/ai-background-jobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai-background-jobs')>()),
   listAdminBackgroundJobs: mocks.jobs,
 }));
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: async () => ({ user: { email: 'admin@example.com', permissions: mocks.permissions } }),
 }));
-vi.mock('../../../../lib/ai-task-followups', () => ({
+vi.mock('@/lib/ai-task-followups', () => ({
   publishAiTaskTerminalMessage: mocks.publish,
 }));
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAppAccess: async () => ({
     response: null,
-    session: await (await import('../../../../lib/auth')).auth(),
+    session: await (await import('@/lib/auth')).auth(),
   }),
 }));
 

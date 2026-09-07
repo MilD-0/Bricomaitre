@@ -5,9 +5,9 @@ import { GET } from './route';
 
 const mocks = vi.hoisted(() => ({ access: vi.fn(), hasDb: vi.fn(), diagnostics: vi.fn() }));
 
-vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: mocks.access }));
+vi.mock('@/lib/rbac', () => ({ requireAnalyticsAccess: mocks.access }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb }));
-vi.mock('../../../../lib/marketing-diagnostics', () => ({
+vi.mock('@/lib/marketing-diagnostics', () => ({
   getMarketingDestinationDiagnostics: mocks.diagnostics,
 }));
 

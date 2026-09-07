@@ -8,11 +8,11 @@ const { loadAssetsMetaDataMock, requireAppAccessMock } = vi.hoisted(() => ({
   requireAppAccessMock: vi.fn(),
 }));
 
-vi.mock('../../../../lib/admin-assets-data', () => ({
+vi.mock('@/lib/admin-assets-data', () => ({
   loadAssetsMetaData: loadAssetsMetaDataMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAppAccess: requireAppAccessMock,
 }));
 

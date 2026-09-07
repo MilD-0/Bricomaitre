@@ -28,29 +28,29 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/action-history', () => ({
+vi.mock('@/lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
-vi.mock('../../../../../lib/inventory-actions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../../lib/inventory-actions')>()),
+vi.mock('@/lib/inventory-actions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/inventory-actions')>()),
   applyInventoryQuantityChange: applyInventoryQuantityChangeMock,
 }));
 
-vi.mock('../../../../../lib/server-cache', () => ({
+vi.mock('@/lib/server-cache', () => ({
   CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
   revalidateServerTags: revalidateServerTagsMock,
 }));
 
-vi.mock('../../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontProducts: revalidateStorefrontProductsMock,
 }));
 

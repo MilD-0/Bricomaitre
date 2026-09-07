@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
-import { loadAdministrationRoles } from '../../../../lib/admin-administration-data';
-import { roleDefinitionFormSchema } from '../../../../lib/permissions';
-import { requireSettingsAccess } from '../../../../lib/rbac';
+import { loadAdministrationRoles } from '@/lib/admin-administration-data';
+import { roleDefinitionFormSchema } from '@/lib/permissions';
+import { requireSettingsAccess } from '@/lib/rbac';
 import {
   AdministrationRoleAlreadyExistsError,
   createAdministrationRoleDefinition,
-} from '../../../../lib/administration-mutations';
+} from '@/lib/administration-mutations';
 
 export async function GET() {
   const { response: denied } = await requireSettingsAccess();

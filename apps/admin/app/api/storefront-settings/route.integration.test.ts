@@ -10,13 +10,13 @@ const mocks = vi.hoisted(() => ({
   revalidate: vi.fn(),
 }));
 
-vi.mock('../../../lib/rbac', () => ({ requireMutationAccess: mocks.authorize }));
-vi.mock('../../../lib/storefront-settings', () => ({
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.authorize }));
+vi.mock('@/lib/storefront-settings', () => ({
   getStorefrontAiModelOptions: () => ['openai/gpt-4.1-mini'],
   loadStorefrontSettings: mocks.load,
   saveStorefrontSettings: mocks.save,
 }));
-vi.mock('../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontSettings: mocks.revalidate,
 }));
 

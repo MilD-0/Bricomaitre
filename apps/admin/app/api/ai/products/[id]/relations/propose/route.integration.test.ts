@@ -8,10 +8,10 @@ const mocks = vi.hoisted(() => ({
   propose: vi.fn(),
 }));
 
-vi.mock('../../../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.mutationAccess }));
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.mutationAccess }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb }));
-vi.mock('../../../../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../../../../lib/ai-product-knowledge', () => ({
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/ai-product-knowledge', () => ({
   AiProductNotFoundError: class AiProductNotFoundError extends Error {},
   UnsupportedProductRelationError: class UnsupportedProductRelationError extends Error {},
   proposeProductRelation: mocks.propose,
@@ -96,8 +96,7 @@ describe('admin product relation AI proposal route', () => {
   });
 
   it('rejects a generated relation when catalog evidence is too weak', async () => {
-    const { UnsupportedProductRelationError } =
-      await import('../../../../../../../lib/ai-product-knowledge');
+    const { UnsupportedProductRelationError } = await import('@/lib/ai-product-knowledge');
     const error = new UnsupportedProductRelationError();
     error.message = 'Insufficient relationship evidence.';
     mocks.propose.mockRejectedValue(error);

@@ -8,10 +8,10 @@ const { requireSessionMock, readObjectMock } = vi.hoisted(() => ({
   readObjectMock: vi.fn(),
 }));
 
-vi.mock('../../../../../lib/bulletin-server', () => ({
+vi.mock('@/lib/bulletin-server', () => ({
   requireBulletinSession: requireSessionMock,
 }));
-vi.mock('../../../../../lib/s3-upload', () => ({
+vi.mock('@/lib/s3-upload', () => ({
   readPrivateS3Object: readObjectMock,
   isS3ObjectNotFound: (error: unknown) =>
     Boolean(error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey'),

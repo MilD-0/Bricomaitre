@@ -1,9 +1,9 @@
-import { ActionHistoryEntityNotFoundError } from '../../../../../lib/action-history-state';
+import { ActionHistoryEntityNotFoundError } from '@/lib/action-history-state';
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, PATCH, PUT } from '../route';
-import { ProductMutationNotFoundError } from '../../../../../lib/product-update-workflow';
+import { ProductMutationNotFoundError } from '@/lib/product-update-workflow';
 
 const {
   hasDbMock,
@@ -38,36 +38,36 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAppAccess: requireAppAccessMock,
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/action-history', async () => ({
-  ActionHistoryEntityNotFoundError: (await import('../../../../../lib/action-history-state'))
+vi.mock('@/lib/action-history', async () => ({
+  ActionHistoryEntityNotFoundError: (await import('@/lib/action-history-state'))
     .ActionHistoryEntityNotFoundError,
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
-vi.mock('../../../../../lib/product-update-workflow', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../../lib/product-update-workflow')>()),
+vi.mock('@/lib/product-update-workflow', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/product-update-workflow')>()),
   archiveProductThroughCanonicalWorkflow: archiveProductMock,
 }));
 
-vi.mock('../../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   startProductCatalogFeedRefreshJob: startProductCatalogFeedRefreshJobMock,
 }));
 
-vi.mock('../../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontProducts: revalidateStorefrontProductsMock,
   revalidateStorefrontLandingPages: revalidateStorefrontLandingPagesMock,
 }));
 
-vi.mock('../../../../../lib/server-cache', () => ({
+vi.mock('@/lib/server-cache', () => ({
   CACHE_TAGS: {
     products: 'products',
     productsMeta: 'products-meta',
@@ -75,7 +75,7 @@ vi.mock('../../../../../lib/server-cache', () => ({
   revalidateServerTags: revalidateServerTagsMock,
 }));
 
-vi.mock('../../../../../lib/sentry', () => ({
+vi.mock('@/lib/sentry', () => ({
   getRequestId: vi.fn(() => 'request-2'),
   captureAdminException: captureAdminExceptionMock,
 }));

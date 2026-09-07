@@ -1,4 +1,4 @@
-import { ActionHistoryEntityNotFoundError } from '../../../../../../lib/action-history-state';
+import { ActionHistoryEntityNotFoundError } from '@/lib/action-history-state';
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,22 +25,22 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../../lib/action-history', async () => ({
-  ActionHistoryEntityNotFoundError: (await import('../../../../../../lib/action-history-state'))
+vi.mock('@/lib/action-history', async () => ({
+  ActionHistoryEntityNotFoundError: (await import('@/lib/action-history-state'))
     .ActionHistoryEntityNotFoundError,
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
   mutateEntityWithHistoryTransaction: mutateEntityWithHistoryMock,
 }));
 
-vi.mock('../../../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontAssets: revalidateStorefrontAssetsMock,
 }));
 

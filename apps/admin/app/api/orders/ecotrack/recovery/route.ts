@@ -1,13 +1,13 @@
 import { hasDb } from '@bric/db/client';
 import { NextRequest, NextResponse } from 'next/server';
-import { EcotrackMutationConflictError } from '../../../../../lib/ecotrack-mutations';
+import { EcotrackMutationConflictError } from '@/lib/ecotrack-mutations';
 import {
   ecotrackRecoveryRequestSchema,
   listEcotrackRecoveries,
   recoverEcotrackMutation,
-} from '../../../../../lib/ecotrack-recovery';
-import { requireMutationAccess } from '../../../../../lib/rbac';
-import { captureAdminException, getRequestId } from '../../../../../lib/sentry';
+} from '@/lib/ecotrack-recovery';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId } from '@/lib/sentry';
 
 export async function GET() {
   const { response: denied } = await requireMutationAccess('orders');

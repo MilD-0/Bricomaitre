@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { EcotrackMutationConflictError } from '../../../../../../lib/ecotrack-mutations';
-import { handleEcotrackShipmentMutation } from '../../../../../../lib/ecotrack-route-handler';
+import { EcotrackMutationConflictError } from '@/lib/ecotrack-mutations';
+import { handleEcotrackShipmentMutation } from '@/lib/ecotrack-route-handler';
 import {
   deletePostedEcotrackOrder,
   loadEcotrackOrderDetail,
   parseEcotrackShipmentUpdateDraft,
   updatePostedEcotrackOrder,
-} from '../../../../../../lib/admin-ecotrack-orders-data';
+} from '@/lib/admin-ecotrack-orders-data';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { requireMutationAccess } from '../../../../../../lib/rbac';
-import {
-  captureAdminException,
-  getRequestId,
-  withRequestIdHeaders,
-} from '../../../../../../lib/sentry';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 async function readOrderId(params: Promise<{ id: string }>) {
   const { id } = await params;

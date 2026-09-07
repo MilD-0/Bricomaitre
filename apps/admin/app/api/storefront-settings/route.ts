@@ -6,9 +6,9 @@ import {
   getStorefrontAiModelOptions,
   loadStorefrontSettings,
   saveStorefrontSettings,
-} from '../../../lib/storefront-settings';
-import { requireMutationAccess } from '../../../lib/rbac';
-import { revalidateStorefrontSettings } from '../../../lib/storefront-revalidate';
+} from '@/lib/storefront-settings';
+import { requireMutationAccess } from '@/lib/rbac';
+import { revalidateStorefrontSettings } from '@/lib/storefront-revalidate';
 
 export async function GET() {
   const { response: denied } = await requireMutationAccess('settings');

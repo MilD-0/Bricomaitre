@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  runAiContentJob,
-  type AiContentJobDependencies,
-  type AiContentPayload,
-} from './background-jobs';
+import { runAiContentJob, type AiContentPayload } from './background-jobs';
+import type { AiContentJobDependencies } from './ai-jobs/content';
 
 function payload(overrides: Partial<AiContentPayload> = {}): AiContentPayload {
   return {

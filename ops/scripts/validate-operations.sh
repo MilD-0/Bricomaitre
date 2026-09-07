@@ -84,9 +84,11 @@ else
 fi
 
 mapfile -d '' shell_scripts < <(
-  find "$workspace_dir/ops/scripts" -type f -name '*.sh' -print0 | sort -z
+  # Blue/green modules share the loader's variables and are checked in that context.
+  find "$workspace_dir/ops/scripts" -type f -name '*.sh' \
+    ! -path "$workspace_dir/ops/scripts/blue-green/*" -print0 | sort -z
 )
-"$shellcheck_bin" --external-sources --source-path=SCRIPTDIR "${shell_scripts[@]}"
+"$shellcheck_bin" --check-sourced --external-sources --source-path=SCRIPTDIR "${shell_scripts[@]}"
 
 node "$workspace_dir/ops/scripts/validate-markdown-links.mjs"
 

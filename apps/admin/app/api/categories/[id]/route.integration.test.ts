@@ -30,24 +30,24 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAppAccess: requireAppAccessMock,
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/brands-categories-api', () => ({
+vi.mock('@/lib/brands-categories-api', () => ({
   readCategory: readCategoryMock,
   resolveCategorySlug: resolveCategorySlugMock,
 }));
 
-vi.mock('../../../../lib/action-history', () => ({
+vi.mock('@/lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
-vi.mock('../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontProductMeta: revalidateStorefrontProductMetaMock,
 }));
 

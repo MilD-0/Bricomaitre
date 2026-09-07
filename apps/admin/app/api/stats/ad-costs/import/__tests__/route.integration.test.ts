@@ -23,15 +23,15 @@ const { requireOpsAccessMock, authMock, getLatestExportJobMock, startAdCostsImpo
     startAdCostsImportJobMock: vi.fn(),
   }));
 
-vi.mock('../../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsAccessMock,
 }));
 
-vi.mock('../../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_AD_COST_IMPORT_QUEUE: 'admin-ad-cost-import',
   getLatestExportJob: getLatestExportJobMock,
   startAdCostsImportJob: startAdCostsImportJobMock,

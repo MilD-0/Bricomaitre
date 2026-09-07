@@ -1,10 +1,10 @@
-import { Skeleton } from '../../../../components/ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   WorkspaceActions,
   WorkspaceFrame,
   WorkspaceHeader,
   WorkspaceNavigation,
-} from '../../../../components/ui/workspace';
+} from '@/components/ui/workspace';
 
 export default function AssetsLoading() {
   return (

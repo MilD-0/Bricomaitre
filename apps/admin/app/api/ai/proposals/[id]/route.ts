@@ -3,12 +3,12 @@ import { z } from 'zod';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { AiContentNotFoundError } from '../../../../../lib/ai-product-content';
+import { AiContentNotFoundError } from '@/lib/ai-product-content';
 import {
   AiProposalReviewConflictError,
   aiProposalReviewConflictPayload,
-} from '../../../../../lib/ai-proposal-review';
-import { requireAppAccess, canMutateResource } from '../../../../../lib/rbac';
+} from '@/lib/ai-proposal-review';
+import { requireAppAccess, canMutateResource } from '@/lib/rbac';
 import {
   AiProposalReviewNotFoundError,
   AiProposalExpiredDeletionConflictError,
@@ -17,7 +17,7 @@ import {
   executeAiProposalReview,
   readAiProposalReviewTarget,
   refreshAppliedAiProposalConsumers,
-} from '../../../../../lib/ai-proposal-review-workflow';
+} from '@/lib/ai-proposal-review-workflow';
 
 const requestSchema = z.object({ action: z.enum(['approve', 'reject']) });
 

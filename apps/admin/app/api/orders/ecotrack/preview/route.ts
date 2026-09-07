@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { parsePositiveIntegerIds } from '@bric/runtime/http-input';
-import { buildEcotrackPostingPreview } from '../../../../../lib/ecotrack';
-import { requireMutationAccess } from '../../../../../lib/rbac';
+import { buildEcotrackPostingPreview } from '@/lib/ecotrack';
+import { requireMutationAccess } from '@/lib/rbac';
 
 function parseRequestBody(body: unknown): {
   mode: 'selected' | 'confirmed' | null;

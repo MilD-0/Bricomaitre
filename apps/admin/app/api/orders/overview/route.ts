@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
 
-import { loadDailyOrderStatusOverview } from '../../../../lib/admin-orders-data';
-import { auth } from '../../../../lib/auth';
-import {
-  canViewProfitStats,
-  hasPermission,
-  normalizePermissions,
-} from '../../../../lib/permissions';
+import { loadDailyOrderStatusOverview } from '@/lib/admin-orders-data';
+import { auth } from '@/lib/auth';
+import { canViewProfitStats, hasPermission, normalizePermissions } from '@/lib/permissions';
 
 export async function GET(request: Request) {
   const session = await auth();

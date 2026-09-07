@@ -5,8 +5,8 @@ import {
   actionHistoryQuerySchema,
   listActionHistory,
   toActionHistoryListItem,
-} from '../../../lib/action-history';
-import { requireSettingsAccess } from '../../../lib/rbac';
+} from '@/lib/action-history';
+import { requireSettingsAccess } from '@/lib/rbac';
 
 export async function GET(req: NextRequest) {
   const { response: denied } = await requireSettingsAccess();

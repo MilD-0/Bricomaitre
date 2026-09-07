@@ -8,9 +8,9 @@ const mocks = vi.hoisted(() => ({
   summaries: vi.fn(),
   create: vi.fn(),
 }));
-vi.mock('../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
-vi.mock('../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../lib/landing-pages', () => ({
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/landing-pages', () => ({
   listLandingPages: mocks.list,
   listLandingPageSummaries: mocks.summaries,
   createLandingPage: mocks.create,

@@ -1,4 +1,4 @@
-import { AdministrationPage } from '../../../../../components/administration/administration-page';
+import { AdministrationPage } from '@/components/administration/administration-page';
 
 export default async function Page({
   params,

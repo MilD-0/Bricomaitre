@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, POST, PUT } from './route';
 import { PgDialect } from 'drizzle-orm/pg-core';
-import { buildShoppingListScopeKey } from '../../../../lib/shopping-list-drafts';
+import { buildShoppingListScopeKey } from '@/lib/shopping-list-drafts';
 
 const { hasDbMock, getDbMock, authMock, requireMutationAccessMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
@@ -17,16 +17,18 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/shopping-list-stock-allocations', () => ({
+vi.mock('@/lib/stock-allocations/legacy', () => ({
   initializeLegacyShoppingListAllocations: vi.fn(),
+}));
+vi.mock('@/lib/stock-allocations/credits', () => ({
   hydrateShoppingListStockCredits: vi.fn(async (_db, draft) => draft),
 }));
 

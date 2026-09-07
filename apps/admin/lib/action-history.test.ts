@@ -2,13 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { orders } from '@bric/db/schema';
 import { snapshotValues } from './action-history-state';
 
-import {
-  applyHistoryAction,
-  getActionHistoryChanges,
-  recordExplicitActionLog,
-  resolveActionHistoryRecovery,
-  toActionHistoryItem,
-} from './action-history';
+import { applyHistoryAction, recordExplicitActionLog, toActionHistoryItem } from './action-history';
+import { getActionHistoryChanges } from './action-history/snapshots';
+import { resolveActionHistoryRecovery } from './action-history/recovery';
 
 function createActionLogSelectBuilder(row: unknown) {
   return {

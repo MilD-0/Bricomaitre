@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { loadAssetsData } from '../../../lib/admin-assets-data';
-import { assetMutationRequestSchema } from '../../../lib/assets';
-import { createAdminAsset } from '../../../lib/asset-mutations';
-import { requireMutationAccess } from '../../../lib/rbac';
+import { loadAssetsData } from '@/lib/admin-assets-data';
+import { assetMutationRequestSchema } from '@/lib/assets';
+import { createAdminAsset } from '@/lib/asset-mutations';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function GET() {
   const { response: denied } = await requireMutationAccess('assets');

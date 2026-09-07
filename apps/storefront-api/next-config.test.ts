@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const withSentryConfig = vi.hoisted(() => vi.fn((config: unknown) => config));
 
-vi.mock('@sentry/nextjs', () => ({
+vi.mock('@sentry/nextjs/config', () => ({
   withSentryConfig,
 }));
 

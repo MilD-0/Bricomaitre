@@ -4,9 +4,9 @@ import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { brands, products } from '@bric/db/schema';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { requireMutationAccess } from '@/lib/rbac';
 
-import { MAX_SHOPPING_LIST_ENTRIES } from '../../../../lib/shopping-list-drafts';
+import { MAX_SHOPPING_LIST_ENTRIES } from '@/lib/shopping-list-drafts';
 
 const requestSchema = z
   .object({

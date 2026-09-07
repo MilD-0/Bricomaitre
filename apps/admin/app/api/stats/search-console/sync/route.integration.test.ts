@@ -6,11 +6,10 @@ const { syncMock, requireMutationMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
-vi.mock('../../../../../lib/rbac', () => ({ requireMutationAccess: requireMutationMock }));
-vi.mock('../../../../../lib/search-console', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/search-console')>(
-    '../../../../../lib/search-console',
-  );
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: requireMutationMock }));
+vi.mock('@/lib/search-console', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/search-console')>('@/lib/search-console');
   return { ...actual, syncSearchConsole: syncMock };
 });
 

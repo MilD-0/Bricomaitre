@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { AdminSession } from '../../../../lib/auth';
+import type { AdminSession } from '@/lib/auth';
 import { parsePositiveIntegerIds } from '@bric/runtime/http-input';
 
-import { auth } from '../../../../lib/auth';
+import { auth } from '@/lib/auth';
 import {
   ADMIN_ORDER_EXPORT_QUEUE,
   cancelExportJob,
   getLatestExportJob,
   startOrderExportJob,
-} from '../../../../lib/background-jobs';
-import { canMutateResource } from '../../../../lib/rbac';
-import { normalizePermissions } from '../../../../lib/permissions';
-import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../../lib/sentry';
+} from '@/lib/background-jobs';
+import { canMutateResource } from '@/lib/rbac';
+import { normalizePermissions } from '@/lib/permissions';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 function getRequesterKey(session: AdminSession | null) {
   return session?.user?.id ?? session?.user?.email ?? null;

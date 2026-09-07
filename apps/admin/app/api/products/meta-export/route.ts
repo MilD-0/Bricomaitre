@@ -9,8 +9,8 @@ import {
   buildMetaCatalogExportRows,
   buildMetaCatalogWorkbook,
   toXlsxBuffer,
-} from '../../../../lib/meta-catalog';
-import { requireMutationAccess } from '../../../../lib/rbac';
+} from '@/lib/meta-catalog';
+import { requireMutationAccess } from '@/lib/rbac';
 
 function parseRequestedIds(searchParams: URLSearchParams) {
   const raw = searchParams.getAll('ids');

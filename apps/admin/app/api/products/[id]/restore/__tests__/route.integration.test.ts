@@ -12,23 +12,23 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: mocks.getDb, hasDb: mocks.hasDb }));
-vi.mock('../../../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../../../lib/rbac', () => ({
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: mocks.requireMutationAccess,
 }));
-vi.mock('../../../../../../lib/product-update-workflow', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../../../lib/product-update-workflow')>()),
+vi.mock('@/lib/product-update-workflow', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/product-update-workflow')>()),
   restoreProductThroughCanonicalWorkflow: mocks.restore,
 }));
-vi.mock('../../../../../../lib/server-cache', () => ({
+vi.mock('@/lib/server-cache', () => ({
   CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
   revalidateServerTags: mocks.revalidateTags,
 }));
-vi.mock('../../../../../../lib/storefront-revalidate', () => ({
+vi.mock('@/lib/storefront-revalidate', () => ({
   revalidateStorefrontProducts: mocks.revalidateProducts,
 }));
 
-import { ProductMutationNotFoundError } from '../../../../../../lib/product-update-workflow';
+import { ProductMutationNotFoundError } from '@/lib/product-update-workflow';
 import { POST } from '../route';
 
 describe('POST /api/products/[id]/restore', () => {

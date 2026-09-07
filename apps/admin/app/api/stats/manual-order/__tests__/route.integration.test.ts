@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, POST } from '../route';
-import { ManualOrderConflictError } from '../../../../../lib/manual-orders';
+import { ManualOrderConflictError } from '@/lib/manual-orders';
 
 const {
   hasDbMock,
@@ -24,22 +24,20 @@ vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
 }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsAccessMock,
 }));
 
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
+vi.mock('@/lib/reporting-refresh-trigger', () => ({
   triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
 }));
 
-vi.mock('../../../../../lib/manual-orders', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/manual-orders')>(
-    '../../../../../lib/manual-orders',
-  );
+vi.mock('@/lib/manual-orders', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/manual-orders')>('@/lib/manual-orders');
 
   return {
     ...actual,

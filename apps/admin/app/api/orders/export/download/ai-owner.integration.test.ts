@@ -6,17 +6,17 @@ const state = vi.hoisted(() => ({
   email: 'operator@example.invalid',
   jobs: new Map<string, unknown>(),
 }));
-vi.mock('../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: async () => ({
     user: { id: state.userId, email: state.email, isAllowed: true, permissions: ['orders_write'] },
   }),
 }));
-vi.mock('../../../../../lib/admin-orders-data', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/admin-orders-data')>()),
+vi.mock('@/lib/admin-orders-data', async (original) => ({
+  ...(await original<typeof import('@/lib/admin-orders-data')>()),
   loadOrderRecordsByIds: async () => [{ id: 9 }],
 }));
-vi.mock('../../../../../lib/background-jobs', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/background-jobs')>()),
+vi.mock('@/lib/background-jobs', async (original) => ({
+  ...(await original<typeof import('@/lib/background-jobs')>()),
   startOrderExportJob: async (ownerKey: string) => {
     const job = {
       id: 'ai-export',
@@ -32,8 +32,8 @@ vi.mock('../../../../../lib/background-jobs', async (original) => ({
   },
   getLatestExportJob: async (_queue: string, ownerKey: string) => state.jobs.get(ownerKey),
 }));
-vi.mock('../../../../../lib/s3-upload', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/s3-upload')>()),
+vi.mock('@/lib/s3-upload', async (original) => ({
+  ...(await original<typeof import('@/lib/s3-upload')>()),
   readPrivateS3Object: async () => ({
     Body: {
       transformToWebStream: () =>
@@ -47,7 +47,7 @@ vi.mock('../../../../../lib/s3-upload', async (original) => ({
     ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   }),
 }));
-import { buildAdminAiTools } from '../../../../../lib/admin-ai-tools';
+import { buildAdminAiTools } from '@/lib/admin-ai-tools';
 import { GET } from './route';
 
 it('downloads an AI-created export for the same authenticated user even after their email changes, and denies another user', async () => {

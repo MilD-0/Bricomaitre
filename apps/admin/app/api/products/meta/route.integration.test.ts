@@ -16,11 +16,11 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAppAccess: requireAppAccessMock,
 }));
 
-vi.mock('../../../../lib/server-cache', () => ({
+vi.mock('@/lib/server-cache', () => ({
   CACHE_TAGS: { productsMeta: 'products-meta' },
 }));
 

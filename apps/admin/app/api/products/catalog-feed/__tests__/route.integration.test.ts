@@ -7,7 +7,7 @@ const { getStableArtifactUrlMock } = vi.hoisted(() => ({
   getStableArtifactUrlMock: vi.fn(),
 }));
 
-vi.mock('../../../../../lib/export-artifacts', () => ({
+vi.mock('@/lib/export-artifacts', () => ({
   getStableArtifactUrl: getStableArtifactUrlMock,
 }));
 

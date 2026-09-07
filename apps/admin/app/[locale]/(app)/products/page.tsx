@@ -1,6 +1,6 @@
-import { ProductsWorkspace } from '../../../../components/products/products-workspace';
-import { canExportAllProducts } from '../../../../lib/permissions';
-import { requirePageAccess } from '../../../../lib/page-access';
+import { ProductsWorkspace } from '@/components/products/products-workspace';
+import { canExportAllProducts } from '@/lib/permissions';
+import { requirePageAccess } from '@/lib/page-access';
 
 export default async function ProductsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

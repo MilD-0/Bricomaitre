@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
-import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list-drafts.server';
-import { ShoppingListAllocationReviewError } from '../../../../../lib/shopping-list-stock-allocations';
+import { AdminMutationIdempotencyConflictError } from '@/lib/admin-mutation-idempotency';
+import { ShoppingListDraftConflictError } from '@/lib/shopping-list-drafts.server';
+import { ShoppingListAllocationReviewError } from '@/lib/shopping-list-stock-allocations';
 import { GET, POST } from './route';
 import { POST as LOOKUP } from './lookup/route';
-import { buildShoppingListScopeKey } from '../../../../../lib/shopping-list-drafts';
+import { buildShoppingListScopeKey } from '@/lib/shopping-list-drafts';
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
@@ -17,13 +17,13 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
 }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb, getDb: () => mocks.db }));
-vi.mock('../../../../../lib/rbac', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/rbac')>()),
+vi.mock('@/lib/rbac', async (original) => ({
+  ...(await original<typeof import('@/lib/rbac')>()),
   requireMutationAccess: mocks.access,
 }));
-vi.mock('../../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../../lib/shopping-list-stock-allocations', async (original) => ({
-  ...(await original<typeof import('../../../../../lib/shopping-list-stock-allocations')>()),
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/shopping-list-stock-allocations', async (original) => ({
+  ...(await original<typeof import('@/lib/shopping-list-stock-allocations')>()),
   loadShoppingListAllocationReview: mocks.load,
   reconcileShoppingListAllocationReview: mocks.reconcile,
 }));

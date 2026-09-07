@@ -8,8 +8,8 @@ const { hasDbMock, requireAnalyticsAccessMock, getAnalyticsDataMock } = vi.hoist
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
-vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
-vi.mock('../../../../lib/analytics-snapshots', () => ({
+vi.mock('@/lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
+vi.mock('@/lib/analytics-snapshots', () => ({
   getAnalyticsSnapshot: getAnalyticsDataMock,
 }));
 

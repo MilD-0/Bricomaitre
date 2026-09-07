@@ -4,9 +4,9 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), getDb: vi.fn(), hasDb: vi.fn() }));
-vi.mock('../../../../lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('@bric/db/client', () => ({ getDb: mocks.getDb, hasDb: mocks.hasDb }));
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { requireMutationAccess } from '@/lib/rbac';
 import { GET } from './route';
 
 const request = (query = 'search=Drill&limit=8') =>

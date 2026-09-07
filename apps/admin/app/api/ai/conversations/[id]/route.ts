@@ -4,8 +4,8 @@ import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
-import { ADMIN_AI_CONTEXT_QUERY_LIMIT } from '../../../../../lib/admin-ai-conversation-context';
-import { requireAppAccess } from '../../../../../lib/rbac';
+import { ADMIN_AI_CONTEXT_QUERY_LIMIT } from '@/lib/admin-ai-conversation-context';
+import { requireAppAccess } from '@/lib/rbac';
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() });
 const renameSchema = z.object({ title: z.string().trim().min(1).max(80) }).strict();

@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
-import { requireMutationAccess, canMutateResource } from '../../../../../lib/rbac';
-import { shoppingListDraftQuerySchema } from '../../../../../lib/shopping-list-drafts';
-import { ShoppingListDraftConflictError } from '../../../../../lib/shopping-list-drafts.server';
+import { AdminMutationIdempotencyConflictError } from '@/lib/admin-mutation-idempotency';
+import { requireMutationAccess, canMutateResource } from '@/lib/rbac';
+import { shoppingListDraftQuerySchema } from '@/lib/shopping-list-drafts';
+import { ShoppingListDraftConflictError } from '@/lib/shopping-list-drafts.server';
 import {
   loadShoppingListAllocationReview,
   reconcileShoppingListAllocationReview,
   shoppingListAllocationReviewSchema,
   ShoppingListAllocationReviewError,
-} from '../../../../../lib/shopping-list-stock-allocations';
+} from '@/lib/shopping-list-stock-allocations';
 
 export async function GET(request: NextRequest) {
   const { response: denied } = await requireMutationAccess('orders');

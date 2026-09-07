@@ -8,13 +8,13 @@ const { access, load, parse } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => ({ kind: 'db' }), hasDb: () => true }));
-vi.mock('../../../../lib/page-access', () => ({ requirePageAccess: access }));
-vi.mock('../../../../lib/ai-proposal-inbox', () => ({
+vi.mock('@/lib/page-access', () => ({ requirePageAccess: access }));
+vi.mock('@/lib/ai-proposal-inbox', () => ({
   aiProposalInboxQuerySchema: { parse: (value: unknown) => value },
   loadAiProposalInbox: load,
   parseAiProposalInboxQuery: parse,
 }));
-vi.mock('../../../../components/products/ai-proposal-workspace', () => ({
+vi.mock('@/components/products/ai-proposal-workspace', () => ({
   AiProposalWorkspace: () => <div>Proposal review workspace</div>,
 }));
 

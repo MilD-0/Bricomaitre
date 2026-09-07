@@ -17,26 +17,26 @@ const {
   cancelExportJobMock: vi.fn(),
 }));
 
-vi.mock('../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/permissions', () => ({
+vi.mock('@/lib/permissions', () => ({
   normalizePermissions: (permissions: unknown) => permissions,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   canMutateResource: canMutateResourceMock,
 }));
 
-vi.mock('../../../../lib/background-jobs', () => ({
+vi.mock('@/lib/background-jobs', () => ({
   ADMIN_ORDER_EXPORT_QUEUE: 'admin-order-export',
   getLatestExportJob: getLatestExportJobMock,
   startOrderExportJob: startOrderExportJobMock,
   cancelExportJob: cancelExportJobMock,
 }));
 
-vi.mock('../../../../lib/sentry', () => ({
+vi.mock('@/lib/sentry', () => ({
   captureAdminException: vi.fn(),
   getRequestId: () => 'request-1',
   withRequestIdHeaders: (requestId: string) => ({ 'x-request-id': requestId }),

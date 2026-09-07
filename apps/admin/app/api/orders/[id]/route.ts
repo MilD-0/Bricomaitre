@@ -7,13 +7,13 @@ import {
   AdminOrderHasActiveEcotrackShipmentError,
   AdminOrderLifecycleNotFoundError,
   deleteAdminOrder,
-} from '../../../../lib/admin-order-lifecycle';
-import { ensureAdminOrderPublicToken } from '../../../../lib/admin-order-tracking';
-import { AdminOrderNotFoundError, updateAdminOrder } from '../../../../lib/admin-order-update';
-import { loadOrderDetail } from '../../../../lib/admin-orders-data';
-import { EcotrackMutationConflictError } from '../../../../lib/ecotrack-mutations';
-import { orderPatchSchema } from '../../../../lib/orders';
-import { requireMutationAccess } from '../../../../lib/rbac';
+} from '@/lib/admin-order-lifecycle';
+import { ensureAdminOrderPublicToken } from '@/lib/admin-order-tracking';
+import { AdminOrderNotFoundError, updateAdminOrder } from '@/lib/admin-order-update';
+import { loadOrderDetail } from '@/lib/admin-orders-data';
+import { EcotrackMutationConflictError } from '@/lib/ecotrack-mutations';
+import { orderPatchSchema } from '@/lib/orders';
+import { requireMutationAccess } from '@/lib/rbac';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { response: denied } = await requireMutationAccess('orders');

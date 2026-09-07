@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { PRODUCT_CATALOG_FEED_OBJECT_KEY } from '../../../../lib/background-jobs';
-import { getStableArtifactUrl } from '../../../../lib/export-artifacts';
+import { PRODUCT_CATALOG_FEED_OBJECT_KEY } from '@/lib/background-jobs';
+import { getStableArtifactUrl } from '@/lib/export-artifacts';
 
 function getConfiguredToken() {
   const token = process.env.PRODUCT_CATALOG_FEED_TOKEN?.trim();

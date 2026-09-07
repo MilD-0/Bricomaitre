@@ -8,18 +8,18 @@ const { loadOrders, readCatalog, requireAccess, workspaceProps } = vi.hoisted(()
   workspaceProps: vi.fn(),
 }));
 
-vi.mock('../../../../components/orders/orders-workspace', () => ({
+vi.mock('@/components/orders/orders-workspace', () => ({
   OrdersWorkspace: (props: unknown) => {
     workspaceProps(props);
     return <div>Orders workspace</div>;
   },
 }));
-vi.mock('../../../../lib/admin-orders-data', () => ({
+vi.mock('@/lib/admin-orders-data', () => ({
   loadOrdersPageData: loadOrders,
 }));
-vi.mock('../../../../lib/ecotrack', () => ({ readEcotrackCatalog: readCatalog }));
+vi.mock('@/lib/ecotrack', () => ({ readEcotrackCatalog: readCatalog }));
 vi.mock('@bric/db/client', () => ({ getDb: () => ({}), hasDb: () => true }));
-vi.mock('../../../../lib/page-access', () => ({ requirePageAccess: requireAccess }));
+vi.mock('@/lib/page-access', () => ({ requirePageAccess: requireAccess }));
 
 import OrdersPage from './page';
 

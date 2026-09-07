@@ -3,10 +3,10 @@ import { z } from 'zod';
 
 import { hasDb } from '@bric/db/client';
 
-import { requireMutationAccess } from '../../../../../lib/rbac';
-import { SearchConsoleSyncError, syncSearchConsole } from '../../../../../lib/search-console';
+import { requireMutationAccess } from '@/lib/rbac';
+import { SearchConsoleSyncError, syncSearchConsole } from '@/lib/search-console';
 
-import { reportingDateSchema as dateSchema } from '../../../../../lib/analytics/contract';
+import { reportingDateSchema as dateSchema } from '@/lib/analytics/contract';
 const inputSchema = z
   .object({ since: dateSchema.optional(), until: dateSchema.optional() })
   .strict()

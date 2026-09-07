@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { loadAssetsMetaData } from '../../../../lib/admin-assets-data';
-import { requireAppAccess } from '../../../../lib/rbac';
+import { loadAssetsMetaData } from '@/lib/admin-assets-data';
+import { requireAppAccess } from '@/lib/rbac';
 
 export async function GET() {
   const { response: denied } = await requireAppAccess();

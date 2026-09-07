@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import {
-  bulletinListQuerySchema,
-  bulletinPostSchema,
-  canModerateBulletin,
-} from '../../../lib/bulletin';
-import {
-  getBulletinViewer,
-  loadBulletinData,
-  requireBulletinSession,
-} from '../../../lib/bulletin-server';
-import { createBulletinPost } from '../../../lib/bulletin-mutations';
+import { bulletinListQuerySchema, bulletinPostSchema, canModerateBulletin } from '@/lib/bulletin';
+import { getBulletinViewer, loadBulletinData, requireBulletinSession } from '@/lib/bulletin-server';
+import { createBulletinPost } from '@/lib/bulletin-mutations';
 
 export async function GET(request?: NextRequest) {
   const { session, response } = await requireBulletinSession();

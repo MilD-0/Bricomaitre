@@ -7,10 +7,10 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   propose: vi.fn(),
 }));
-vi.mock('../../../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
+vi.mock('@/lib/rbac', () => ({ requireMutationAccess: mocks.access }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb }));
-vi.mock('../../../../../../../lib/auth', () => ({ auth: mocks.auth }));
-vi.mock('../../../../../../../lib/ai-product-content', () => ({
+vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/ai-product-content', () => ({
   AiContentNotFoundError: class AiContentNotFoundError extends Error {},
   AiProposalConflictError: class AiProposalConflictError extends Error {},
   proposeProductContent: mocks.propose,

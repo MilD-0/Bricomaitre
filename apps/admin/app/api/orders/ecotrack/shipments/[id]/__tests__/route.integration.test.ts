@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, PATCH } from '../route';
-import { EcotrackMutationConflictError } from '../../../../../../../lib/ecotrack-mutations';
+import { EcotrackMutationConflictError } from '@/lib/ecotrack-mutations';
 
 const {
   hasDbMock,
@@ -24,18 +24,18 @@ vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
 }));
 
-vi.mock('../../../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../../../lib/admin-ecotrack-orders-data', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../../../../../../lib/admin-ecotrack-orders-data')
-  >('../../../../../../../lib/admin-ecotrack-orders-data');
+vi.mock('@/lib/admin-ecotrack-orders-data', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/admin-ecotrack-orders-data')>(
+    '@/lib/admin-ecotrack-orders-data',
+  );
   return {
     ...actual,
     loadEcotrackOrderDetail: loadEcotrackOrderDetailMock,

@@ -8,12 +8,12 @@ const { loadOrders, readCatalog, requireAccess } = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => ({}), hasDb: () => true }));
-vi.mock('../../../../../lib/admin-ecotrack-orders-data', () => ({
+vi.mock('@/lib/admin-ecotrack-orders-data', () => ({
   loadEcotrackOrdersPageData: loadOrders,
 }));
-vi.mock('../../../../../lib/ecotrack', () => ({ readEcotrackCatalog: readCatalog }));
-vi.mock('../../../../../lib/page-access', () => ({ requirePageAccess: requireAccess }));
-vi.mock('../../../../../components/orders/orders-ecotrack-manager', () => ({
+vi.mock('@/lib/ecotrack', () => ({ readEcotrackCatalog: readCatalog }));
+vi.mock('@/lib/page-access', () => ({ requirePageAccess: requireAccess }));
+vi.mock('@/components/orders/orders-ecotrack-manager', () => ({
   OrdersEcotrackManager: () => <div>ECOTRACK manager</div>,
 }));
 

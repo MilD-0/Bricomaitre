@@ -15,16 +15,16 @@ vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
 }));
 
-vi.mock('../../../../../../lib/auth', () => ({
+vi.mock('@/lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../../lib/admin-ecotrack-orders-data', async (original) => ({
-  ...(await original<typeof import('../../../../../../lib/admin-ecotrack-orders-data')>()),
+vi.mock('@/lib/admin-ecotrack-orders-data', async (original) => ({
+  ...(await original<typeof import('@/lib/admin-ecotrack-orders-data')>()),
   fetchMergedEcotrackLabels: fetchMergedEcotrackLabelsMock,
 }));
 

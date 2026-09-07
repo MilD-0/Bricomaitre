@@ -18,10 +18,8 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../../../lib/sentry', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../../lib/sentry')>(
-    '../../../../../../lib/sentry',
-  );
+vi.mock('@/lib/sentry', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/sentry')>('@/lib/sentry');
   return {
     ...actual,
     captureAdminException: captureAdminExceptionMock,

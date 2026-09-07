@@ -15,19 +15,18 @@ const {
   requireMutationMock: vi.fn(),
 }));
 
-vi.mock('../../../../../lib/analytics-facts', () => ({
+vi.mock('@/lib/analytics-facts', () => ({
   refreshAnalyticsFactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsMock,
   requireMutationAccess: requireMutationMock,
 }));
-vi.mock('../../../../../lib/profit-tracker', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/profit-tracker')>(
-    '../../../../../lib/profit-tracker',
-  );
+vi.mock('@/lib/profit-tracker', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/profit-tracker')>('@/lib/profit-tracker');
   return {
     ...actual,
     getProfitTrackerSettings: getSettingsMock,

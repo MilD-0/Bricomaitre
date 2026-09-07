@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
-import { requireAppAccess } from '../../../../../../lib/rbac';
+import { requireAppAccess } from '@/lib/rbac';
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() });
 const feedbackSchema = z.object({ feedback: z.enum(['helpful', 'not_helpful']) }).strict();

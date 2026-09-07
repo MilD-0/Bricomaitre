@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { requireMutationAccess } from '../../../../../../lib/rbac';
-import { shoppingListDraftQuerySchema } from '../../../../../../lib/shopping-list-drafts';
-import { loadShoppingListAllocationReview } from '../../../../../../lib/shopping-list-stock-allocations';
+import { requireMutationAccess } from '@/lib/rbac';
+import { shoppingListDraftQuerySchema } from '@/lib/shopping-list-drafts';
+import { loadShoppingListAllocationReview } from '@/lib/shopping-list-stock-allocations';
 
 export async function POST(request: NextRequest) {
   const { response: denied } = await requireMutationAccess('orders');

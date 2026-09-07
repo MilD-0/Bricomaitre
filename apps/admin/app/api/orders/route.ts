@@ -1,14 +1,14 @@
 import { z } from 'zod';
-import { AdminMutationIdempotencyConflictError } from '../../../lib/admin-mutation-idempotency';
+import { AdminMutationIdempotencyConflictError } from '@/lib/admin-mutation-idempotency';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
-import { loadOrdersPageData } from '../../../lib/admin-orders-data';
-import { createAdminOrder } from '../../../lib/admin-order-lifecycle';
-import { orderListQuerySchema } from '../../../lib/orders';
-import { OrderSearchTimeoutError } from '../../../lib/order-search';
-import { getRequestSearchParams } from '../../../lib/request';
-import { canMutateResource, requireMutationAccess } from '../../../lib/rbac';
+import { loadOrdersPageData } from '@/lib/admin-orders-data';
+import { createAdminOrder } from '@/lib/admin-order-lifecycle';
+import { orderListQuerySchema } from '@/lib/orders';
+import { OrderSearchTimeoutError } from '@/lib/order-search';
+import { getRequestSearchParams } from '@/lib/request';
+import { canMutateResource, requireMutationAccess } from '@/lib/rbac';
 
 export async function GET(req: NextRequest) {
   const { response: denied, session } = await requireMutationAccess('orders');

@@ -4,10 +4,10 @@ import {
   ADMIN_AI_ASSISTANT_JOB_ORIGIN,
   allowedAdminBackgroundJobTypes,
   listAdminBackgroundJobs,
-} from '../../../../lib/ai-background-jobs';
-import { publishAiTaskTerminalMessage } from '../../../../lib/ai-task-followups';
-import { normalizePermissions } from '../../../../lib/permissions';
-import { requireAppAccess } from '../../../../lib/rbac';
+} from '@/lib/ai-background-jobs';
+import { publishAiTaskTerminalMessage } from '@/lib/ai-task-followups';
+import { normalizePermissions } from '@/lib/permissions';
+import { requireAppAccess } from '@/lib/rbac';
 
 export async function GET() {
   const { response: denied, session } = await requireAppAccess();

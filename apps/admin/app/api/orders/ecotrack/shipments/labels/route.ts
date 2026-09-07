@@ -4,13 +4,9 @@ import { hasDb } from '@bric/db/client';
 import {
   fetchMergedEcotrackLabels,
   parseEcotrackBulkAction,
-} from '../../../../../../lib/admin-ecotrack-orders-data';
-import { requireMutationAccess } from '../../../../../../lib/rbac';
-import {
-  captureAdminException,
-  getRequestId,
-  withRequestIdHeaders,
-} from '../../../../../../lib/sentry';
+} from '@/lib/admin-ecotrack-orders-data';
+import { requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);

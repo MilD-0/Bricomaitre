@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
-import type { AdminSession } from '../../../../lib/auth';
+import type { AdminSession } from '@/lib/auth';
 
-import { auth } from '../../../../lib/auth';
+import { auth } from '@/lib/auth';
 import {
   ADMIN_PRODUCT_EXPORT_QUEUE,
   cancelExportJob,
   getLatestExportJob,
   startProductExportJob,
-} from '../../../../lib/background-jobs';
-import { canExportAllProducts } from '../../../../lib/permissions';
-import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../../lib/sentry';
+} from '@/lib/background-jobs';
+import { canExportAllProducts } from '@/lib/permissions';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 function getRequesterKey(session: AdminSession | null) {
   return session?.user?.id ?? session?.user?.email ?? null;

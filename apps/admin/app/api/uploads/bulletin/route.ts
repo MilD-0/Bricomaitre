@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireBulletinSession } from '../../../../lib/bulletin-server';
+import { requireBulletinSession } from '@/lib/bulletin-server';
 import {
   buildDatedObjectKey,
   deletePrivateS3Object,
   ensurePrivateS3Config,
   getS3UploadClient,
   uploadPrivateBufferToS3,
-} from '../../../../lib/s3-upload';
-import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../../lib/sentry';
+} from '@/lib/s3-upload';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 import {
   validateAndBufferBulletinUploads,
   validateBulletinRequestLength,
-} from '../../../../lib/upload-validation';
+} from '@/lib/upload-validation';
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);

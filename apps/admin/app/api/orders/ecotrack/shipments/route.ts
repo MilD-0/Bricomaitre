@@ -4,15 +4,11 @@ import { hasDb } from '@bric/db/client';
 import {
   ecotrackShipmentListQuerySchema,
   loadEcotrackOrdersPageData,
-} from '../../../../../lib/admin-ecotrack-orders-data';
-import { OrderSearchTimeoutError } from '../../../../../lib/order-search';
-import { getRequestSearchParams } from '../../../../../lib/request';
-import { canMutateResource, requireMutationAccess } from '../../../../../lib/rbac';
-import {
-  captureAdminException,
-  getRequestId,
-  withRequestIdHeaders,
-} from '../../../../../lib/sentry';
+} from '@/lib/admin-ecotrack-orders-data';
+import { OrderSearchTimeoutError } from '@/lib/order-search';
+import { getRequestSearchParams } from '@/lib/request';
+import { canMutateResource, requireMutationAccess } from '@/lib/rbac';
+import { captureAdminException, getRequestId, withRequestIdHeaders } from '@/lib/sentry';
 
 export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);

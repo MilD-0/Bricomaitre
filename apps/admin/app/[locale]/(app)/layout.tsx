@@ -1,10 +1,10 @@
-import { StorefrontOriginProvider } from '../../../components/storefront-origin';
-import { getStorefrontPublicBaseUrl } from '../../../lib/storefront-public-url';
+import { StorefrontOriginProvider } from '@/components/storefront-origin';
+import { getStorefrontPublicBaseUrl } from '@/lib/storefront-public-url';
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
-import { AppShell } from '../../../components/layout/app-shell';
-import { auth } from '../../../lib/auth';
-import { getAdminAiModelOptions } from '../../../lib/admin-ai-models';
+import { AppShell } from '@/components/layout/app-shell';
+import { auth } from '@/lib/auth';
+import { getAdminAiModelOptions } from '@/lib/admin-ai-models';
 
 export default async function ProtectedLayout({
   children,

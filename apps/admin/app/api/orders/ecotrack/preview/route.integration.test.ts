@@ -16,11 +16,11 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../../lib/ecotrack', () => ({
+vi.mock('@/lib/ecotrack', () => ({
   buildEcotrackPostingPreview: buildEcotrackPostingPreviewMock,
 }));
 

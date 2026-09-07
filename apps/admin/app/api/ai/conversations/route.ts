@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
-import { requireAppAccess } from '../../../../lib/rbac';
+import { requireAppAccess } from '@/lib/rbac';
 
 export async function GET(request: NextRequest) {
   const { response: denied, session } = await requireAppAccess();

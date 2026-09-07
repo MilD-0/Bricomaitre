@@ -1,0 +1,137 @@
+import { readFileSync } from 'node:fs';
+import { catalogProducts, categories } from './fixture-catalog.mjs';
+import { fixtureApiOrigin } from './fixture-config.mjs';
+
+export const homepageFixtureAssets = new Map(
+  [
+    'accessories.svg',
+    'banner-power-portrait.svg',
+    'banner-power-wide.svg',
+    'banner-workshop-portrait.svg',
+    'banner-workshop-wide.svg',
+    'drill.svg',
+    'garden.svg',
+    'measure.svg',
+    'workshop.svg',
+    'wrench.svg',
+  ].map((name) => [
+    `/fixture/homepage/${name}`,
+    readFileSync(new URL(`./fixtures/homepage/assets/${name}`, import.meta.url)),
+  ]),
+);
+
+export function homepage() {
+  return {
+    banners: [
+      {
+        id: 1,
+        title: 'Puissance pour vos travaux',
+        titleAr: 'قوة لأعمالكم',
+        imageUrl: `${fixtureApiOrigin}/fixture/homepage/banner-power-wide.svg`,
+        imageUrlPortrait: `${fixtureApiOrigin}/fixture/homepage/banner-power-portrait.svg`,
+        imageUrlLandscape: `${fixtureApiOrigin}/fixture/homepage/banner-power-wide.svg`,
+        productId: 12,
+        sortOrder: 0,
+        active: true,
+        createdAt: '2026-07-01T10:00:00.000Z',
+        updatedAt: '2026-07-02T10:00:00.000Z',
+      },
+      {
+        id: 2,
+        title: 'Équipez votre atelier',
+        titleAr: 'جهزوا ورشتكم',
+        imageUrl: `${fixtureApiOrigin}/fixture/homepage/banner-workshop-wide.svg`,
+        imageUrlPortrait: `${fixtureApiOrigin}/fixture/homepage/banner-workshop-portrait.svg`,
+        imageUrlLandscape: `${fixtureApiOrigin}/fixture/homepage/banner-workshop-wide.svg`,
+        productId: 13,
+        sortOrder: 1,
+        active: true,
+        createdAt: '2026-07-01T10:00:00.000Z',
+        updatedAt: '2026-07-02T10:00:00.000Z',
+      },
+    ],
+    topProducts: catalogProducts.slice(0, 6),
+    categories,
+    productCards: [
+      {
+        id: 1,
+        productId: 12,
+        titleAr: 'إضاءة موثوقة لكل ورشة',
+        titleFr: 'Une lumière fiable pour chaque atelier',
+        descriptionAr: 'إضاءة قوية وثابتة للأعمال اليومية.',
+        descriptionFr: 'Une lumière stable et puissante pour les travaux du quotidien.',
+        characteristicsAr: ['إضاءة قوية', 'سهل النقل'],
+        characteristicsFr: ['Éclairage puissant', 'Facile à déplacer'],
+        sortOrder: 0,
+        active: true,
+        createdAt: '2026-07-01T10:00:00.000Z',
+        updatedAt: '2026-07-02T10:00:00.000Z',
+        product: catalogProducts[0],
+      },
+      {
+        id: 2,
+        productId: 13,
+        titleAr: 'قوة مدمجة للأعمال اليومية',
+        titleFr: 'La puissance compacte du quotidien',
+        descriptionAr: 'مثقاب عملي للأعمال المتكررة.',
+        descriptionFr: 'Une perceuse pratique pour les travaux courants.',
+        characteristicsAr: ['حجم مدمج', 'استخدام سهل'],
+        characteristicsFr: ['Format compact', 'Prise en main simple'],
+        sortOrder: 1,
+        active: true,
+        createdAt: '2026-07-01T10:00:00.000Z',
+        updatedAt: '2026-07-02T10:00:00.000Z',
+        product: catalogProducts[2],
+      },
+    ],
+    brands,
+    featuredGroups: [
+      {
+        id: 1,
+        name: 'Pour équiper votre atelier',
+        nameAr: 'لتجهيز ورشتكم',
+        cta: 'Voir la sélection',
+        ctaAr: 'عرض المجموعة',
+        link: '/products',
+        sortOrder: 0,
+        prioritizeRecommendations: true,
+        active: true,
+        productIds: catalogProducts.slice(0, 6).map((item) => item.id),
+        brandIds: [],
+        categoryIds: [],
+        createdAt: '2026-07-01T10:00:00.000Z',
+        updatedAt: '2026-07-02T10:00:00.000Z',
+        products: catalogProducts.slice(0, 6),
+      },
+      {
+        id: 2,
+        name: 'Les indispensables du chantier',
+        nameAr: 'أساسيات الورشة',
+        cta: 'Explorer la sélection',
+        ctaAr: 'استكشف المجموعة',
+        link: '/products?category=4',
+        sortOrder: 1,
+        prioritizeRecommendations: false,
+        active: true,
+        productIds: catalogProducts.slice(2, 8).map((item) => item.id),
+        brandIds: [],
+        categoryIds: [],
+        createdAt: '2026-07-01T10:00:00.000Z',
+        updatedAt: '2026-07-02T10:00:00.000Z',
+        products: catalogProducts.slice(2, 8),
+      },
+    ],
+  };
+}
+
+export const brands = [
+  {
+    id: 2,
+    name: 'Bric Pro',
+    slug: 'bric-pro',
+    image: '/brand-placeholder.svg',
+    featured: true,
+    createdAt: '2026-06-01T10:00:00.000Z',
+    updatedAt: '2026-07-01T10:00:00.000Z',
+  },
+];

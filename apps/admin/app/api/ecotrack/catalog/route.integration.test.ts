@@ -19,15 +19,15 @@ vi.mock('@bric/db/client', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../lib/rbac', () => ({
+vi.mock('@/lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
-vi.mock('../../../../lib/ecotrack', () => ({
+vi.mock('@/lib/ecotrack', () => ({
   readEcotrackCatalog: readEcotrackCatalogMock,
 }));
 
-vi.mock('../../../../lib/server-cache', () => ({
+vi.mock('@/lib/server-cache', () => ({
   CACHE_TAGS: { ecotrack: 'ecotrack' },
 }));
 
