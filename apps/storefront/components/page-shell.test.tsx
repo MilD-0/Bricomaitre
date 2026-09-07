@@ -135,10 +135,10 @@ describe('PageShell storefront AI setting', () => {
         }),
       );
       expect(
-        screen.getByRole('link', { name: locale === 'fr' ? 'العربية' : 'FR', exact: true }),
+        screen.getByRole('link', { name: locale === 'fr' ? 'العربية' : 'FR' }),
       ).toHaveAttribute('href', expected);
       expect(
-        screen.getByRole('link', { name: locale === 'fr' ? 'FR' : 'العربية', exact: true }),
+        screen.getByRole('link', { name: locale === 'fr' ? 'FR' : 'العربية' }),
       ).toHaveAttribute('href', path);
     },
   );
