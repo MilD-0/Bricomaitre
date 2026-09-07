@@ -11,6 +11,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
   && useradd --uid 10001 --gid demo --home-dir /app --shell /usr/sbin/nologin --no-create-home demo
 
 COPY --chown=demo:demo mock-services.mjs ./mock-services.mjs
+COPY --chown=demo:demo data/algeria-wilayas.json data/algeria-communes.json data/DZShip-LICENSE.txt ./data/
 
 USER demo
 EXPOSE 8080

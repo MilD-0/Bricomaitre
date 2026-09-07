@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
@@ -7,7 +8,7 @@ import { expect, it } from 'vitest';
 
 type OrderPage = { last_page: number; data: Array<{ status: string; tracking: string }> };
 
-it('preserves imported historical outcomes and bounds provider-filtered order pages', async () => {
+it('preserves the seeded catalog, historical outcomes, and provider-filtered order pages', async () => {
   const socket = createServer();
   socket.listen(0, '127.0.0.1');
   await once(socket, 'listening');
@@ -25,6 +26,67 @@ it('preserves imported historical outcomes and bounds provider-filtered order pa
   const origin = `http://127.0.0.1:${address.port}`;
   try {
     await once(child.stdout!, 'data');
+    // Compare every generated ID to the actual CSV consumed by Postgres. These
+    // pinned fixtures contain no quoted fields; fail explicitly if that changes.
+    const rows = (name: string) => {
+      const csv = readFileSync(resolve(import.meta.dirname, `../demo/data/${name}`), 'utf8');
+      expect(csv).not.toContain('"');
+      return csv
+        .trim()
+        .split('\n')
+        .slice(1)
+        .map((line) => line.split(','));
+    };
+    const wilayas = rows('algeria-wilayas.csv').map(([code, name]) => ({
+      wilaya_id: Number(code),
+      wilaya_name: name,
+    }));
+    const ordinal = new Map<number, number>();
+    const seededCommunes = Object.fromEntries(
+      rows('algeria-communes.csv').map(([id, code, name]) => {
+        const wilaya = Number(code);
+        const position = (ordinal.get(wilaya) ?? 0) + 1;
+        ordinal.set(wilaya, position);
+        return [
+          id,
+          {
+            nom: name,
+            wilaya_id: wilaya,
+            code_postal: code.padStart(2, '0') + String(position).padStart(3, '0'),
+            has_stop_desk: Number(position === 1 || Number(id) % 11 === 0),
+          },
+        ];
+      }),
+    );
+    expect(wilayas).toHaveLength(58);
+    expect(Object.keys(seededCommunes)).toHaveLength(1541);
+    for (const provider of ['delivro', 'emir']) {
+      const endpoint = `${origin}/ecotrack/${provider}/api/v1/get`;
+      expect(await (await fetch(`${endpoint}/wilayas`)).json()).toEqual(wilayas);
+      expect(await (await fetch(`${endpoint}/communes`)).json()).toEqual(seededCommunes);
+      const fees = (await (await fetch(`${endpoint}/fees`)).json()) as Record<string, unknown>;
+      const expectedFees = wilayas.map(({ wilaya_id }) => ({
+        wilaya_id,
+        tarif: String(450 + Math.ceil(wilaya_id / 8) * 75),
+        tarif_stopdesk: String(300 + Math.ceil(wilaya_id / 10) * 50),
+      }));
+      for (const service of ['livraison', 'pickup', 'echange', 'recouvrement', 'retours']) {
+        expect(fees[service]).toEqual(expectedFees);
+      }
+      expect(fees.poids).toEqual(
+        Object.fromEntries(
+          ['livraison', 'pickup', 'echange', 'recouvrement'].map((service) => [
+            service,
+            {
+              surfacturation_a_domicile_DA: '100',
+              surfacturation_stopdesk_DA: '75',
+              pour_chaque_KG: '50',
+              a_partir_de_KG: '5',
+            },
+          ]),
+        ),
+      );
+    }
     const shipments = Array.from({ length: 250 }, (_, id) => ({
       tracking: `HISTORICAL-${id}`,
       reference: String(id),
@@ -32,6 +94,8 @@ it('preserves imported historical outcomes and bounds provider-filtered order pa
       amount: 12000,
       provider: id < 205 ? 'delivro' : 'emir',
       createdAt: '2024-03-01T12:00:00Z',
+      input: { nom_client: 'Preserved customer', telephone: '0550123479', commune: 'Ain Benian' },
+      updates: [{ id: 1, remarque: 'Preserved remark', created_at: '2024-03-02T12:00:00Z' }],
     }));
     expect(
       (
@@ -53,6 +117,17 @@ it('preserves imported historical outcomes and bounds provider-filtered order pa
     ).json()) as OrderPage;
     expect(tracked.data).toHaveLength(1);
     expect(tracked.data[0].tracking).toBe('HISTORICAL-7');
+    expect(
+      await (
+        await fetch(`${origin}/ecotrack/delivro/api/v1/get/tracking/info?tracking=HISTORICAL-7`)
+      ).json(),
+    ).toMatchObject({
+      recipientName: 'Preserved customer',
+      OrderInfo: { telephone: '0550123479', commune: 'Ain Benian', montant: '12000' },
+    });
+    expect(
+      await (await fetch(`${origin}/ecotrack/delivro/api/v1/get/maj?tracking=HISTORICAL-7`)).json(),
+    ).toEqual(shipments[7].updates);
     const emir = (await (
       await fetch(`${origin}/ecotrack/emir/api/v1/get/orders`)
     ).json()) as OrderPage;

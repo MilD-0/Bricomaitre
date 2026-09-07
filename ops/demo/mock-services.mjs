@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 
 const port = Number.parseInt(process.env.PORT ?? '8080', 10);
 const requests = [];
@@ -8,30 +9,41 @@ const storefrontOrigin = (process.env.DEMO_STOREFRONT_ORIGIN ?? 'http://127.0.0.
   '',
 );
 
-const locations = [
-  { wilaya_id: 16, wilaya_name: 'Alger' },
-  { wilaya_id: 9, wilaya_name: 'Blida' },
-  { wilaya_id: 31, wilaya_name: 'Oran' },
-  { wilaya_id: 19, wilaya_name: 'Sétif' },
-  { wilaya_id: 25, wilaya_name: 'Constantine' },
-];
-
-const communes = {
-  1601: { nom: 'Alger Centre', wilaya_id: 16, code_postal: '16000', has_stop_desk: 1 },
-  1602: { nom: 'Bab Ezzouar', wilaya_id: 16, code_postal: '16042', has_stop_desk: 1 },
-  901: { nom: 'Blida', wilaya_id: 9, code_postal: '09000', has_stop_desk: 1 },
-  3101: { nom: 'Oran', wilaya_id: 31, code_postal: '31000', has_stop_desk: 1 },
-  1901: { nom: 'Sétif', wilaya_id: 19, code_postal: '19000', has_stop_desk: 1 },
-  2501: { nom: 'Constantine', wilaya_id: 25, code_postal: '25000', has_stop_desk: 1 },
-};
-
-const rates = new Map([
-  [16, [500, 350]],
-  [9, [550, 400]],
-  [31, [800, 550]],
-  [19, [750, 500]],
-  [25, [750, 500]],
-]);
+// Match the pinned seed catalog, including its stable commune IDs. Scheduled
+// carrier sync replaces these tables, so a smaller fixture erases valid cities.
+const locations = JSON.parse(
+  readFileSync(new URL('./data/algeria-wilayas.json', import.meta.url), 'utf8'),
+).map(({ code, name }) => ({ wilaya_id: code, wilaya_name: name }));
+const communeSource = JSON.parse(
+  readFileSync(new URL('./data/algeria-communes.json', import.meta.url), 'utf8'),
+).sort(
+  (left, right) =>
+    left.wilayaCode - right.wilayaCode ||
+    Buffer.compare(Buffer.from(left.name), Buffer.from(right.name)),
+);
+const ordinals = new Map();
+const communes = Object.fromEntries(
+  communeSource.map(({ wilayaCode, name }, index) => {
+    const id = index + 1;
+    const ordinal = (ordinals.get(wilayaCode) ?? 0) + 1;
+    ordinals.set(wilayaCode, ordinal);
+    return [
+      id,
+      {
+        nom: name,
+        wilaya_id: wilayaCode,
+        code_postal: String(wilayaCode).padStart(2, '0') + String(ordinal).padStart(3, '0'),
+        has_stop_desk: Number(ordinal === 1 || id % 11 === 0),
+      },
+    ];
+  }),
+);
+const rates = new Map(
+  locations.map(({ wilaya_id }) => [
+    wilaya_id,
+    [450 + Math.ceil(wilaya_id / 8) * 75, 300 + Math.ceil(wilaya_id / 10) * 50],
+  ]),
+);
 
 function json(response, status, body, headers = {}) {
   response.writeHead(status, {
@@ -178,7 +190,7 @@ function ecotrackFees() {
   }));
   const weight = {
     surfacturation_a_domicile_DA: '100',
-    surfacturation_stopdesk_DA: '100',
+    surfacturation_stopdesk_DA: '75',
     pour_chaque_KG: '50',
     a_partir_de_KG: '5',
   };
@@ -566,6 +578,11 @@ const server = createServer(async (request, response) => {
           amount: Number(input.amount ?? 0),
           provider: input.provider === 'emir' ? 'emir' : 'delivro',
           createdAt: String(input.createdAt ?? new Date().toISOString()),
+          input:
+            input.input && typeof input.input === 'object' && !Array.isArray(input.input)
+              ? input.input
+              : {},
+          updates: Array.isArray(input.updates) ? input.updates : [],
         });
       }
       return json(response, 200, { ok: true, imported: body.shipments.length });
