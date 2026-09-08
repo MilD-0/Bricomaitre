@@ -599,6 +599,8 @@ jobs:
             ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
               "source '$release_path/ops/scripts/blue-green.sh'; begin_runtime_env_transaction"
             env_transaction_started=true
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
+              "bash '$release_path/ops/scripts/apply-admin-ai-limits.sh' /srv/bric/env/admin.env"
 
             printf '%s\n%s\n' "$ECOTRACK_EMIR_BASE_URL" "$ECOTRACK_EMIR_TOKEN" | \
               ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '

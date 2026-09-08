@@ -4,6 +4,7 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/LICENSE /usr/local/share/licenses/node/LICENSE
 WORKDIR /bundle
 COPY demo ./demo
+COPY ops/env/admin-ai-limits.env ./ops/env/admin-ai-limits.env
 COPY apps/admin/drizzle ./apps/admin/drizzle
 COPY ops/demo/data ./ops/demo/data
 COPY ops/demo/postgres ./ops/demo/postgres

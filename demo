@@ -195,6 +195,7 @@ write_runtime_configuration() {
     printf '%s\n' 'MARKETING_GOOGLE_DESTINATION_ENABLED=true' 'MARKETING_TIKTOK_DESTINATION_ENABLED=true'
     printf '%s\n' 'GOOGLE_ANALYTICS_MEASUREMENT_ID=G-DEMO000001' 'GOOGLE_ANALYTICS_API_SECRET=demo-ga-secret' 'GOOGLE_ANALYTICS_API_ENDPOINT=http://mock-services:8080/google/mp/collect'
     printf '%s\n' 'TIKTOK_PIXEL_ID=demo-tiktok-pixel' 'TIKTOK_EVENTS_API_ACCESS_TOKEN=demo-tiktok-token' 'TIKTOK_EVENTS_API_ENDPOINT=http://mock-services:8080/tiktok/open_api/v1.3/event/track/'
+    cat "$repo_root/ops/env/admin-ai-limits.env"
     printf '%s\n' 'AI_ENABLED=false' 'SENTRY_ENVIRONMENT=demo' 'SENTRY_RELEASE=demo'
   } >"$runtime_dir/admin.env"
 

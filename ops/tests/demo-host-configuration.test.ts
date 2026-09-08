@@ -121,6 +121,10 @@ it('keeps host origins and secrets across preparation without affecting another 
         .map((line) => line.split('=')),
     );
     const admin = readFileSync(join(runtime, 'admin.env'), 'utf8');
+    expect(admin).toContain(readFileSync(join(root, 'ops/env/admin-ai-limits.env'), 'utf8'));
+    expect(readFileSync(join(runtime, 'storefront.env'), 'utf8')).not.toContain(
+      'AI_ADMIN_MAX_STEPS=',
+    );
     const reader = readFileSync(join(runtime, 'storefront-api.env'), 'utf8');
     expect(admin).toContain('NEXT_PUBLIC_STOREFRONT_BASE_URL=https://shop.example.invalid');
     expect(admin).toContain('STOREFRONT_BASE_URL=http://storefront:3002');

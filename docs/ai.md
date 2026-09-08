@@ -81,8 +81,11 @@ uses the same verification path.
 
 Admin conversations and messages persist intentionally so an Operator can
 resume an investigation and inspect what supported an earlier answer. By default,
-the latest 200 messages retain full tool evidence, and Admin adds no output-token
-cap or evidence truncation. Provider limits still apply. Optional limits and
+the latest 200 messages retain tool evidence. Production and demo installations
+use the [Admin limits profile](../ops/env/admin-ai-limits.env): 16 steps, 3,200 output
+tokens, a 60-second request timeout, and bounded context, evidence, and analytics
+payloads. Production applies this profile during deployment; demos apply it during
+configuration, before any local AI overrides. Provider limits still apply. Optional limits and
 provider settings live in the [Admin](../apps/admin/.env.example) and
 [Storefront](../apps/storefront/.env.example) environment examples.
 
