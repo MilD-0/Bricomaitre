@@ -101,6 +101,9 @@ for (const file of [
   await cp(resolve(root, 'ops/demo/object-storage', file), resolve(mediaRoot, file));
 }
 for (const file of ['LICENSE', 'NOTICE']) await cp(resolve(root, file), resolve(mediaRoot, file));
+await cp(resolve(root, 'third_party/licenses'), resolve(mediaRoot, 'third_party/licenses'), {
+  recursive: true,
+});
 await cp(resolve(root, 'ops/demo/data/sources.lock.json'), resolve(mediaRoot, 'sources.lock.json'));
 await cp(
   resolve(root, 'ops/demo/data/image-manifest.tsv'),
@@ -127,6 +130,7 @@ COPY public-read-policy.json /public-read-policy.json
 COPY admin-policy.json /admin-policy.json
 COPY reader-policy.json /reader-policy.json
 COPY LICENSE NOTICE sources.lock.json image-manifest.tsv SHA256SUMS /licenses/
+COPY third_party/licenses /licenses/third_party/licenses
 LABEL org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre" org.opencontainers.image.revision="${revision}"
 ENTRYPOINT ["/bin/sh", "/runtime/run.sh", "media"]
 `,

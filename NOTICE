@@ -54,6 +54,20 @@ The graph omits credentials, production records, generated exports, obsolete
 private policy material, historical business assets, and partial or immediately
 superseded fixups.
 
+DEMO DATA
+
+ops/demo/data/catalog-source.csv and derived demo catalog/media retain their
+upstream terms; source revisions and image URLs are in sources.lock.json and
+image-manifest.tsv under ops/demo/data, also included in demo bundles.
+- Amazon Shopping Queries Dataset (ESCI): Apache-2.0; license text at
+  third_party/licenses/Apache-2.0-Sharp.txt.
+  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+  Source: https://github.com/amazon-science/esci-data
+- Amazon Berkeley Objects metadata and images: credit Amazon.com; CC BY 4.0.
+  Source: https://amazon-berkeley-objects.s3.amazonaws.com/index.html
+  License: https://creativecommons.org/licenses/by/4.0/
+Bricomaitre selects and transforms catalog records and resizes/re-encodes images.
+
 THIRD-PARTY SOFTWARE AND FONTS
 
 Third-party software and fonts remain under their own licenses. The lockfile is
