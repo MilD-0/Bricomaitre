@@ -149,7 +149,6 @@ describe('carrier mutation ownership and recovery', () => {
         {
           operationId: claimed.id,
           action: 'confirm_not_applied',
-          evidence: 'Checked carrier dashboard.',
         },
         actor,
         db,
@@ -169,7 +168,6 @@ describe('carrier mutation ownership and recovery', () => {
           operationId: claimed.id,
           action: 'confirm_applied',
           trackingNumber: 'wrong',
-          evidence: 'Checked carrier dashboard.',
         },
         actor,
         db,
@@ -184,7 +182,6 @@ describe('carrier mutation ownership and recovery', () => {
         operationId: claimed.id,
         action: 'confirm_applied',
         trackingNumber: `FOUND-${row.id}`,
-        evidence: 'Verified reference and amount in carrier dashboard.',
       },
       actor,
       db,
@@ -194,6 +191,7 @@ describe('carrier mutation ownership and recovery', () => {
       .from(ecotrackMutations)
       .where(eq(ecotrackMutations.id, claimed.id));
     expect(saved).toMatchObject({ state: 'applied', response: { recovery: { actor } } });
+    expect((saved!.response!.recovery as Record<string, unknown>).evidence).toBeUndefined();
     expect(
       (await db.select().from(orders).where(eq(orders.id, row.id)))[0]!.ecotrackTrackingNumber,
     ).toBe(`FOUND-${row.id}`);

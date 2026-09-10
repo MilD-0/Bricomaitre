@@ -170,7 +170,6 @@ describe('carrier mutation ownership and recovery', () => {
       {
         operationId: saved!.id,
         action: 'confirm_not_applied',
-        evidence: 'Carrier confirms request was not applied.',
       },
       actor,
       db,

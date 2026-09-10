@@ -14,7 +14,6 @@ export const ecotrackRecoveryRequestSchema = z.discriminatedUnion('action', [
   z.object({
     operationId: z.uuid(),
     action: z.enum(['confirm_applied', 'confirm_not_applied']),
-    evidence: z.string().trim().min(8).max(2000),
     trackingNumber: z.string().trim().max(160).optional(),
   }),
 ]);
@@ -128,7 +127,10 @@ export async function recoverEcotrackMutation(
         state: input.action === 'confirm_applied' ? 'succeeded' : 'rejected',
         response: {
           ...response,
-          recovery: { evidence: input.evidence, actor, resolvedAt: new Date().toISOString() },
+          recovery: {
+            actor,
+            resolvedAt: new Date().toISOString(),
+          },
         },
         error: null,
         updatedAt: new Date(),

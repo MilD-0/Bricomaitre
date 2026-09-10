@@ -60,10 +60,8 @@ for (const [locale, messages] of Object.entries({ en, fr, ar })) {
     await expect(section.getByRole('button', { name: text.review, exact: true })).toHaveCount(1);
     await section.getByRole('button', { name: text.review, exact: true }).click();
     const confirm = section.getByRole('button', { name: text.confirmApplied, exact: true });
+    await expect(section.locator('textarea')).toHaveCount(0);
     await expect(confirm).toBeDisabled();
-    await section
-      .getByLabel(text.evidence, { exact: true })
-      .fill('Verified the order reference and amount in the carrier dashboard.');
     await section.getByLabel(text.tracking, { exact: true }).fill('RECOVERED-102');
     await expect(confirm).toBeEnabled();
     await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
@@ -86,5 +84,6 @@ for (const [locale, messages] of Object.entries({ en, fr, ar })) {
       'confirm_applied',
       'confirm_applied',
     ]);
+    expect(actions.every((action) => !('evidence' in action))).toBe(true);
   });
 }

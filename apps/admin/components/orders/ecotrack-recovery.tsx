@@ -7,19 +7,17 @@ import { requestJson } from '../../lib/admin-api';
 import type { EcotrackRecoveryItem } from '../../lib/ecotrack-recovery';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Textarea } from '../ui/textarea';
 
 function RecoveryOperation({ item }: { item: EcotrackRecoveryItem }) {
   const t = useTranslations('ordersEcotrackManager.recovery');
   const queryClient = useQueryClient();
-  const [evidence, setEvidence] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [expanded, setExpanded] = useState(false);
   const mutation = useMutation({
     mutationFn: (action: 'apply_saved' | 'confirm_applied' | 'confirm_not_applied') =>
       requestJson('/api/orders/ecotrack/recovery', {
         method: 'POST',
-        body: JSON.stringify({ operationId: item.id, action, evidence, trackingNumber }),
+        body: JSON.stringify({ operationId: item.id, action, trackingNumber }),
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries();
@@ -68,19 +66,7 @@ function RecoveryOperation({ item }: { item: EcotrackRecoveryItem }) {
             </>
           ) : (
             <>
-              <p className="text-sm text-muted-foreground">
-                {t(canResolve ? 'verify' : 'waiting')}
-              </p>
-              <label className="block space-y-1 text-sm">
-                <span>{t('evidence')}</span>
-                <Textarea
-                  dir="auto"
-                  value={evidence}
-                  onChange={(event) => setEvidence(event.target.value)}
-                  maxLength={2000}
-                  disabled={!canResolve || mutation.isPending}
-                />
-              </label>
+              {!canResolve ? <p className="text-sm text-muted-foreground">{t('waiting')}</p> : null}
               {needsTracking ? (
                 <label className="block space-y-1 text-sm">
                   <span>{t('tracking')}</span>
@@ -95,10 +81,7 @@ function RecoveryOperation({ item }: { item: EcotrackRecoveryItem }) {
               <div className="flex flex-wrap gap-2">
                 <Button
                   disabled={
-                    !canResolve ||
-                    evidence.trim().length < 8 ||
-                    (needsTracking && !trackingNumber.trim()) ||
-                    mutation.isPending
+                    !canResolve || (needsTracking && !trackingNumber.trim()) || mutation.isPending
                   }
                   className="h-auto min-h-10 max-w-full whitespace-normal"
                   onClick={() => mutation.mutate('confirm_applied')}
@@ -107,7 +90,7 @@ function RecoveryOperation({ item }: { item: EcotrackRecoveryItem }) {
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={!canResolve || evidence.trim().length < 8 || mutation.isPending}
+                  disabled={!canResolve || mutation.isPending}
                   className="h-auto min-h-10 max-w-full whitespace-normal"
                   onClick={() => mutation.mutate('confirm_not_applied')}
                 >
@@ -147,7 +130,6 @@ export function EcotrackRecovery() {
   return (
     <section aria-label={t('title')} className="px-4 py-4 sm:px-5">
       <h2 className="mb-2 font-medium">{t('title')}</h2>
-      <p className="mb-3 text-sm text-muted-foreground">{t('description')}</p>
       {query.data.items.map((item) => (
         <RecoveryOperation key={item.id} item={item} />
       ))}
