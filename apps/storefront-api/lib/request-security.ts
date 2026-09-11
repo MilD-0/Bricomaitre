@@ -5,6 +5,7 @@ import type { NextRequest } from 'next/server';
 import { getTrustedClientIp } from '@bric/runtime/client-ip';
 import { applyRateLimit, type RateLimitResult } from '@bric/runtime/rate-limit';
 import { getRedis } from '@bric/runtime/redis';
+import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 
 const ORDER_VELOCITY_LIMIT = 6;
 const ORDER_VELOCITY_WINDOW_SECONDS = 15 * 60;
@@ -73,16 +74,25 @@ export async function enforceOrderVelocityLimit(
     journeyId?: string | null;
     visitId?: string | null;
     sessionId?: string | null;
+    phoneNumber?: string | null;
   },
 ) {
   const redis = getRedis();
   const clientKey = getRequestClientKey(request);
-  const ipResult = await enforceOrderVelocityKey(redis, `ip:${clientKey}`);
-  if (!ipResult.ok) return ipResult;
-
-  const key = getOrderVelocityIdentity({ clientKey, ...identity });
-  if (key === `ip:${clientKey}`) return ipResult;
-  return enforceOrderVelocityKey(redis, key);
+  const analyticsKey = getOrderVelocityIdentity({ clientKey, ...identity });
+  const normalizedPhone = normalizeAlgeriaPhone(identity.phoneNumber);
+  const phoneKey = normalizedPhone
+    ? `phone:${createHash('sha256').update(normalizedPhone).digest('hex')}`
+    : null;
+  const keys = [
+    ...new Set([`ip:${clientKey}`, analyticsKey, phoneKey].filter(Boolean)),
+  ] as string[];
+  let result: RateLimitResult | null = null;
+  for (const key of keys) {
+    result = await enforceOrderVelocityKey(redis, key);
+    if (!result.ok) return result;
+  }
+  return result!;
 }
 
 async function enforceOrderVelocityKey(redis: ReturnType<typeof getRedis>, key: string) {

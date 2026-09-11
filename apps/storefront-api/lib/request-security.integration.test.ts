@@ -129,7 +129,7 @@ describe('request-security order velocity limit', () => {
     getRedisMock.mockReturnValue(redis);
   });
 
-  it('limits both the client address and selected analytics identity', async () => {
+  it('limits the client address, analytics identity, and normalized phone', async () => {
     redis.ttl.mockResolvedValue(-2);
     applyRateLimitMock.mockResolvedValue({
       ok: true,
@@ -143,7 +143,12 @@ describe('request-security order velocity limit', () => {
       new NextRequest('https://api.example.test/storefront/orders', {
         headers: { 'x-forwarded-for': '198.51.100.77' },
       }),
-      { journeyId: 'journey-1', visitId: 'visit-1', sessionId: 'session-1' },
+      {
+        journeyId: 'journey-1',
+        visitId: 'visit-1',
+        sessionId: 'session-1',
+        phoneNumber: '0550 12 34 56',
+      },
     );
 
     expect(result.ok).toBe(true);
@@ -159,6 +164,14 @@ describe('request-security order velocity limit', () => {
       limit: 6,
       windowSeconds: 900,
     });
+    expect(applyRateLimitMock).toHaveBeenNthCalledWith(3, {
+      scope: 'storefront-order-velocity',
+      key: expect.stringMatching(/^phone:[a-f0-9]{64}$/),
+      limit: 6,
+      windowSeconds: 900,
+    });
+    expect(JSON.stringify(applyRateLimitMock.mock.calls)).not.toContain('0550 12 34 56');
+    expect(JSON.stringify(applyRateLimitMock.mock.calls)).not.toContain('213550123456');
     expect(redis.incr).not.toHaveBeenCalled();
   });
 

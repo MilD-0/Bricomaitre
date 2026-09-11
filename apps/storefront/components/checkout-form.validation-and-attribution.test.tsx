@@ -127,6 +127,7 @@ const support = {
 const order = {
   id: 42,
   publicToken: 'public-order-token-1234567890',
+  purchaseEventId: 'server-purchase-42',
   createdAt: '2026-07-14T10:00:00.000Z',
   updatedAt: '2026-07-14T10:00:00.000Z',
   firstName: 'Ada',
@@ -421,7 +422,7 @@ describe('CheckoutForm', () => {
     expect(window.localStorage.getItem('bric:checkout:pending:v1')).toBeNull();
     expect(JSON.parse(window.localStorage.getItem('bric:cart:v1')!)).toEqual(basket);
     expect(JSON.parse(window.localStorage.getItem('bric:checkout:confirmation:v1')!)).toMatchObject(
-      { cartMode: 'direct', order: { id: 42 } },
+      { cartMode: 'direct', order: { id: 42 }, purchaseEventId: 'server-purchase-42' },
     );
     expect(mocks.push).toHaveBeenCalledWith('/fr/thank-you?token=public-order-token-1234567890');
     expect(JSON.stringify(mocks.track.mock.calls)).not.toContain('0550000000');

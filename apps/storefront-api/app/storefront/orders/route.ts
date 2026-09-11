@@ -220,6 +220,7 @@ export async function POST(req: NextRequest) {
         journeyId: parsed.data.journeyId,
         visitId: parsed.data.visitId,
         sessionId: parsed.data.sessionId,
+        phoneNumber: parsed.data.phoneNumber1,
       });
     } catch (error) {
       await clearClaim();
@@ -240,7 +241,7 @@ export async function POST(req: NextRequest) {
         },
       );
     }
-    const { item, meta } = await createStorefrontOrder(getDb(), parsed.data, {
+    const { item, meta, coalesced } = await createStorefrontOrder(getDb(), parsed.data, {
       reportTiming: (entry) => timings.push(entry),
       metaRequestContext: getMetaRequestContext(req, marketingSourceUrls[0]),
       idempotency,
@@ -269,7 +270,7 @@ export async function POST(req: NextRequest) {
       });
     }
     return NextResponse.json(
-      { ok: true, item, ...(meta ? { meta } : {}) },
+      { ok: true, item, ...(meta ? { meta } : {}), ...(coalesced ? { coalesced: true } : {}) },
       {
         status: 201,
         headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),

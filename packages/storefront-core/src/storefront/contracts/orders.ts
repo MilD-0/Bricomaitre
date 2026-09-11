@@ -130,6 +130,7 @@ export const storefrontCreateOrderResponseSchema = z.object({
   ok: z.literal(true),
   item: storefrontOrderResponseItemSchema,
   meta: storefrontOrderMetaResponseSchema.optional(),
+  coalesced: z.boolean().optional().default(false),
 });
 
 export const storefrontReadOrderResponseSchema = z.object({

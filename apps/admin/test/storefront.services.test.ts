@@ -19,6 +19,7 @@ import {
 } from '@bric/storefront-core/contracts';
 import { readPublishedStorefrontLandingPage } from '@bric/storefront-core/landing-page-records';
 import {
+  buildIdempotencyFingerprint,
   claimStorefrontOrderIdempotency,
   clearStorefrontOrderIdempotency,
   StorefrontOrderClaimLostError,
@@ -200,6 +201,91 @@ describe('storefront transaction boundaries', () => {
       }
     },
   );
+
+  it('coalesces concurrent exact submissions and preserves the first purchase event', async () => {
+    const db = getDb();
+    const phoneNumber1 = '0551119988';
+    const keys = [`duplicate-a-${runId}`, `duplicate-b-${runId}`];
+    const eventIds = [`purchase-a-${runId}`, `purchase-b-${runId}`];
+    const [product] = await db
+      .insert(products)
+      .values({ title: 'Duplicate guard product', slug: `duplicate-${runId}`, price: '100' })
+      .returning();
+    const payloads = eventIds.map((eventId, index) =>
+      storefrontOrderCreateRequestSchema.parse({
+        phoneNumber1,
+        cartProducts: [String(product!.id)],
+        delivery: 1,
+        visitId: `visit-${index}-${runId}`,
+        journeyId: `journey-${index}-${runId}`,
+        meta: {
+          semanticsVersion: 'confirmed_purchase_v1',
+          leadEventId: eventId,
+          eventSourceUrl: 'https://bricomaitre.com/fr/checkout',
+        },
+      }),
+    );
+    const claims = (
+      await Promise.all(
+        keys.map((keyHash, index) =>
+          claimStorefrontOrderIdempotency(db, {
+            keyHash,
+            fingerprint: buildIdempotencyFingerprint(payloads[index]),
+            processingTtlSeconds: 120,
+          }),
+        ),
+      )
+    ).map((claim) => {
+      if (claim.kind !== 'started') throw new Error('Expected a fresh duplicate-test claim');
+      return claim;
+    });
+
+    try {
+      const results = await Promise.all(
+        payloads.map((payload, index) =>
+          createStorefrontOrder(db, payload, {
+            idempotency: {
+              keyHash: keys[index]!,
+              fingerprint: buildIdempotencyFingerprint(payload),
+              createdAt: claims[index]!.createdAt,
+            },
+          }),
+        ),
+      );
+      expect(results.map((result) => result.coalesced).sort()).toEqual([false, true]);
+      expect(new Set(results.map((result) => result.item.id)).size).toBe(1);
+      expect(new Set(results.map((result) => result.item.purchaseEventId)).size).toBe(1);
+
+      const createdOrders = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.phoneNumber1, phoneNumber1));
+      expect(createdOrders).toHaveLength(1);
+      const outboxRows = await db
+        .select({ eventId: metaEventOutbox.eventId })
+        .from(metaEventOutbox)
+        .where(inArray(metaEventOutbox.eventId, eventIds));
+      expect(outboxRows).toHaveLength(1);
+      expect(results[0]!.item.purchaseEventId).toBe(outboxRows[0]!.eventId);
+      expect(results[1]!.item.purchaseEventId).toBe(outboxRows[0]!.eventId);
+
+      const attempts = await db
+        .select({ orderId: storefrontOrderIdempotency.orderId })
+        .from(storefrontOrderIdempotency)
+        .where(inArray(storefrontOrderIdempotency.keyHash, keys));
+      expect(attempts).toHaveLength(2);
+      expect(new Set(attempts.map((attempt) => attempt.orderId))).toEqual(
+        new Set([createdOrders[0]!.id]),
+      );
+    } finally {
+      await db.delete(metaEventOutbox).where(inArray(metaEventOutbox.eventId, eventIds));
+      await db.delete(orders).where(eq(orders.phoneNumber1, phoneNumber1));
+      await db.delete(products).where(eq(products.id, product!.id));
+      await db
+        .delete(storefrontOrderIdempotency)
+        .where(inArray(storefrontOrderIdempotency.keyHash, keys));
+    }
+  });
 
   it('keeps landing foreign keys and checkout IDs exact when a product slug looks like another ID', async () => {
     const db = getDb();

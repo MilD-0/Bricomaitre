@@ -205,7 +205,7 @@ export function useCheckoutForm({
         cartMode,
         stateName,
         createdAt: new Date().toISOString(),
-        purchaseEventId: attempt.payload.marketing?.eventId ?? null,
+        purchaseEventId: order.purchaseEventId ?? attempt.payload.marketing?.eventId ?? null,
       });
       clearPendingCheckout(window.localStorage);
       try {

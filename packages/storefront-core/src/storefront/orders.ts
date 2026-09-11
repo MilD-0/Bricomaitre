@@ -29,13 +29,22 @@ import type { StorefrontOrderCreateRequest } from './contracts';
 import { createOrderMarketingArtifacts } from './marketing';
 import { createOrderMetaArtifacts, readMetaOrderLocation, type MetaRequestContext } from './meta';
 import {
+  buildStorefrontOrderDuplicateFingerprint,
+  findRecentStorefrontDuplicate,
+} from './order-duplicates';
+import {
   createPublicOrderToken,
   createPublicOrderTokenExpiry,
   requireStorefrontOrderAccessByToken,
 } from './order-access';
 
 type Database = ReturnType<typeof getDb>;
-type TimingStep = 'readEcotrackDeliveryFee' | 'insertOrder' | 'loadProductLookup' | 'buildOrderDto';
+type TimingStep =
+  | 'readEcotrackDeliveryFee'
+  | 'findDuplicateOrder'
+  | 'insertOrder'
+  | 'loadProductLookup'
+  | 'buildOrderDto';
 
 type TimingEntry = {
   step: TimingStep;
@@ -162,9 +171,21 @@ export async function createStorefrontOrder(
   const metaLocation = payload.meta
     ? await readMetaOrderLocation(db, payload.state, payload.city).catch(() => null)
     : null;
+  const totalAmount = (commercial.productSubtotal + Math.max(0, deliveryFee)).toFixed(2);
+  const duplicateFingerprint = options?.idempotency
+    ? buildStorefrontOrderDuplicateFingerprint({
+        phoneNumber1: payload.phoneNumber1,
+        cartProducts: commercial.cartProducts,
+        delivery: coerceDeliveryType(payload.delivery),
+        state: payload.state,
+        city: payload.city,
+        homeAddress: payload.homeAddress,
+        totalAmount,
+      })
+    : null;
   let historyRows: (typeof orderStatusHistory.$inferSelect)[] = [];
   let metaResponse: Awaited<ReturnType<typeof createOrderMetaArtifacts>> | undefined;
-  const created = await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     if (options?.idempotency) {
       const [claim] = await tx
         .select({ keyHash: storefrontOrderIdempotency.keyHash })
@@ -179,6 +200,44 @@ export async function createStorefrontOrder(
         )
         .for('update');
       if (!claim) throw new StorefrontOrderClaimLostError();
+    }
+    if (options?.idempotency && duplicateFingerprint) {
+      const duplicate = await measureStep('findDuplicateOrder', reportTiming, () =>
+        findRecentStorefrontDuplicate(tx, {
+          fingerprint: duplicateFingerprint,
+          phoneNumber1: payload.phoneNumber1,
+          cartProducts: commercial.cartProducts,
+          delivery: coerceDeliveryType(payload.delivery),
+          state: payload.state,
+          city: payload.city,
+          homeAddress: payload.homeAddress,
+          totalAmount,
+          now,
+        }),
+      );
+      if (duplicate) {
+        const completedAt = new Date();
+        const completedRows = await tx
+          .update(storefrontOrderIdempotency)
+          .set({
+            orderId: duplicate.id,
+            metaResponse: null,
+            completedAt,
+            updatedAt: completedAt,
+            expiresAt: new Date(completedAt.getTime() + 24 * 60 * 60 * 1_000),
+          })
+          .where(
+            and(
+              eq(storefrontOrderIdempotency.keyHash, options.idempotency.keyHash),
+              eq(storefrontOrderIdempotency.fingerprint, options.idempotency.fingerprint),
+              eq(storefrontOrderIdempotency.createdAt, options.idempotency.createdAt),
+              isNull(storefrontOrderIdempotency.orderId),
+            ),
+          )
+          .returning({ keyHash: storefrontOrderIdempotency.keyHash });
+        if (completedRows.length !== 1) throw new StorefrontOrderClaimLostError();
+        return { kind: 'coalesced' as const, order: duplicate };
+      }
     }
     const canonical = await measureStep('insertOrder', reportTiming, () =>
       insertCanonicalOrder(tx, {
@@ -263,9 +322,16 @@ export async function createStorefrontOrder(
         throw new Error('Unable to complete the durable order idempotency record.');
       }
     }
-    return createdOrder;
+    return { kind: 'created' as const, order: createdOrder };
   });
-  const currentOrder = created;
+  if (outcome.kind === 'coalesced') {
+    return {
+      item: await hydrateStorefrontOrder(db, outcome.order),
+      meta: undefined,
+      coalesced: true,
+    };
+  }
+  const currentOrder = outcome.order;
   if (payload.journeyId) {
     const attach = async () => {
       try {
@@ -297,7 +363,7 @@ export async function createStorefrontOrder(
         fallbackPurchaseEventId(currentOrder.id),
     ),
   );
-  return { item, meta: metaResponse };
+  return { item, meta: metaResponse, coalesced: false };
 }
 
 export async function readCommittedStorefrontOrder(db: Database, id: number) {

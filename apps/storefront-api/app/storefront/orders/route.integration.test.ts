@@ -108,7 +108,24 @@ describe('public order creation', () => {
         scheduleAfterCommit: after,
       }),
     );
+    expect(mocks.velocity).toHaveBeenCalledWith(
+      expect.any(NextRequest),
+      expect.objectContaining({ phoneNumber: '0550111111' }),
+    );
     expect(mocks.clear).not.toHaveBeenCalled();
+  });
+
+  it('reports when a fresh exact submission resolves to an existing order', async () => {
+    mocks.create.mockResolvedValue({
+      item: { id: 11, publicToken: 'public-token' },
+      coalesced: true,
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      item: { id: 11 },
+      coalesced: true,
+    });
   });
 
   it('replays committed orders without creating or counting another order attempt', async () => {
