@@ -154,7 +154,7 @@
 .home-banner-picture {
   position: relative;
   display: block;
-  aspect-ratio: 50 / 21;
+  aspect-ratio: 125 / 63;
   overflow: hidden;
   background: var(--sf-surface-raised, #fff);
 }

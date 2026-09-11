@@ -55,7 +55,7 @@
   padding-top: calc(1rem * var(--sf-density));
 }
 .home-skeleton-banner {
-  min-height: clamp(15rem, 42vw, 31rem);
+  min-height: clamp(18rem, 50.4vw, 37.2rem);
   width: 100%;
   border-radius: var(--squircle-lg);
 }
