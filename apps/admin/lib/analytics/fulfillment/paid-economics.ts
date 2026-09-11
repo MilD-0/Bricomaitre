@@ -117,6 +117,7 @@ export async function loadAutomaticPaidEconomics(
       ) line_economics on true
       left join ${processedOrders}
         on ${processedOrders.tracking} = ${ecotrackOrderStates.trackingNumber}
+        and ${processedOrders.importBatchId} <> 'MANUAL'
       where ${ecotrackOrderStates.deletedAt} is null
         and ${ecotrackOrderStates.currentStatus} in (${paidShipmentStatusesSql})
     )

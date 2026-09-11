@@ -15,6 +15,7 @@ export * from './adCosts';
 export * from './importBatches';
 export * from './assets';
 export * from './processedOrders';
+export * from './offPipelineSales';
 export * from './profitTracker';
 export * from './migrationIdMap';
 export * from './auth';

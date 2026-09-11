@@ -154,6 +154,15 @@ export const operatorWorkflows: Scenario[] = [
     ],
   },
   {
+    id: 'workflow_off_pipeline_sale',
+    surface: 'stats',
+    expectedTools: ['query_off_pipeline_sales', 'manage_off_pipeline_sales'],
+    turns: [
+      'Check whether direct sale DS-2026-09-01 is already recorded outside the order pipeline.',
+      'If it is not, record it for September 1, 2026: 18000 DA collected, 11000 DA product cost, 500 DA fees, description "Direct counter sale", reference DS-2026-09-01. Do not create an order, shipment, customer, or inventory movement.',
+    ],
+  },
+  {
     id: 'workflow_announcement',
     surface: 'administration',
     expectedTools: ['inspect_storefront_configuration', 'update_storefront_announcement'],

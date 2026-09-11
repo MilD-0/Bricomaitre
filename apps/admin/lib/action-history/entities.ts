@@ -11,9 +11,8 @@ import {
   categories,
   featuredProductGroups,
   importBatches,
+  offPipelineSales,
   orders,
-  processedOrderProducts,
-  processedOrders,
   productCards,
   products,
   roleDefinitionPermissions,
@@ -245,67 +244,17 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
         row.campaignName ?? `${row.platform ?? 'ad'} ${row.date ?? `#${row.id ?? 'unknown'}`}`,
       ),
   },
+  offPipelineSales: {
+    resource: 'stats',
+    table: offPipelineSales,
+    label: (row) => String(row.reference ?? row.description ?? `#${row.id ?? 'unknown'}`),
+  },
+  // Retained only so historical entries still have a label. The retired shape
+  // cannot be restored into the settlement table.
   statsManualOrders: {
     resource: 'stats',
-    table: processedOrders,
+    reversible: false,
     label: (row) => String(row.tracking ?? row.orderId ?? `#${row.id ?? 'unknown'}`),
-    fetchState: async (tx, entityId) => {
-      const [order] = await tx
-        .select()
-        .from(processedOrders)
-        .where(eq(processedOrders.id, entityId))
-        .limit(1);
-
-      if (!order) {
-        return null;
-      }
-
-      const products = await tx
-        .select()
-        .from(processedOrderProducts)
-        .where(eq(processedOrderProducts.processedOrderId, entityId))
-        .orderBy(asc(processedOrderProducts.id));
-
-      return {
-        ...order,
-        products,
-      };
-    },
-    insertState: async (tx, snapshot) => {
-      const { products: productSnapshot, ...orderSnapshot } = snapshot;
-      await tx.insert(processedOrders).values(snapshotValues(processedOrders, orderSnapshot));
-
-      if (Array.isArray(productSnapshot) && productSnapshot.length > 0) {
-        await tx
-          .insert(processedOrderProducts)
-          .values(
-            productSnapshot.map((product) =>
-              snapshotValues(processedOrderProducts, product as SnapshotRecord),
-            ),
-          );
-      }
-    },
-    updateState: async (tx, entityId, snapshot) => {
-      const { products: productSnapshot, ...orderSnapshot } = snapshot;
-      await tx
-        .update(processedOrders)
-        .set(snapshotValues(processedOrders, orderSnapshot))
-        .where(eq(processedOrders.id, entityId));
-
-      await tx
-        .delete(processedOrderProducts)
-        .where(eq(processedOrderProducts.processedOrderId, entityId));
-
-      if (Array.isArray(productSnapshot) && productSnapshot.length > 0) {
-        await tx
-          .insert(processedOrderProducts)
-          .values(
-            productSnapshot.map((product) =>
-              snapshotValues(processedOrderProducts, product as SnapshotRecord),
-            ),
-          );
-      }
-    },
   },
   roleDefinitions: {
     resource: 'settings',

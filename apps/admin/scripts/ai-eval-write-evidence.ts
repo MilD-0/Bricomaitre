@@ -43,6 +43,7 @@ export const writeTables: Record<string, string[]> = {
   update_analytics_settings: ['admin.profit_tracker_settings'],
   manage_analytics_costs: ['admin.profit_tracker_operating_costs'],
   manage_analytics_day_overrides: ['admin.profit_tracker_days'],
+  manage_off_pipeline_sales: ['admin.off_pipeline_sales'],
   sync_analytics_source: [
     'meta_ads_daily_insights',
     'meta_ads_sync_runs',
@@ -286,6 +287,28 @@ export function inputChecks(name: string, raw: unknown, before: Snapshot, after:
         operation.action === 'reset'
           ? !saved
           : matches(saved, operation.changes as Row, { planningReturnRate: 'return_rate_pct' }),
+      );
+    }
+  }
+  if (name === 'manage_off_pipeline_sales') {
+    for (const operation of request.operations as Row[]) {
+      const rows = after['admin.off_pipeline_sales'];
+      const saved = operation.id
+        ? rows.find((row) => Number(row.id) === operation.id)
+        : rows.find((row) => row.reference === operation.reference);
+      const values = Object.fromEntries(
+        Object.entries(operation).filter(([key]) => !['action', 'id', 'requestId'].includes(key)),
+      );
+      add(
+        `off-pipeline sale ${operation.id ?? operation.reference} saved`,
+        operation.action === 'delete'
+          ? !saved
+          : matches(saved, (operation.changes ?? values) as Row, {
+              recognizedOn: 'recognized_on',
+              amountCollectedDzd: 'amount_collected',
+              feesDzd: 'fees',
+              productCostDzd: 'product_cost',
+            }),
       );
     }
   }

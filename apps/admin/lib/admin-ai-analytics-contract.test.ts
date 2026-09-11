@@ -37,6 +37,23 @@ function moneyPayload(costCoveragePct: number): AnalyticsPayload {
       ],
       series: [],
       performanceSeries: [],
+      realized: {
+        summary: {
+          settledOrders: 0,
+          offPipelineSales: 0,
+          amountCollectedDzd: 0,
+          netRevenueDzd: 0,
+          feesDzd: 0,
+          realizedProfitDzd: 0,
+          knownMetaAdCostDzd: 0,
+          realizedProfitAfterAdsDzd: 0,
+          metaCoveredDays: 0,
+          postedOrders: 0,
+          settlementCoveragePct: null,
+        },
+        days: [],
+        reportThroughDate: null,
+      },
       coverage: {
         projectedOrders: 0,
         costCompleteOrders: 0,

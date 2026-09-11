@@ -11,10 +11,13 @@ import {
 const { migrateMock } = vi.hoisted(() => ({
   migrateMock: vi.fn(),
 }));
-const { commercialBackfillMock, phoneBackfillMock } = vi.hoisted(() => ({
-  commercialBackfillMock: vi.fn(),
-  phoneBackfillMock: vi.fn(),
-}));
+const { commercialBackfillMock, phoneBackfillMock, offPipelineSalesBackfillMock } = vi.hoisted(
+  () => ({
+    commercialBackfillMock: vi.fn(),
+    phoneBackfillMock: vi.fn(),
+    offPipelineSalesBackfillMock: vi.fn(),
+  }),
+);
 
 vi.mock('./independent-db-migrator', () => ({
   migrateInIndependentTransactions: migrateMock,
@@ -22,6 +25,9 @@ vi.mock('./independent-db-migrator', () => ({
 vi.mock('./order-commercial-backfill', () => ({
   backfillOrderCommercialSnapshots: commercialBackfillMock,
   backfillOrderNormalizedPhones: phoneBackfillMock,
+}));
+vi.mock('./off-pipeline-sales-backfill', () => ({
+  backfillLegacyManualOrders: offPipelineSalesBackfillMock,
 }));
 
 describe('lib/db-migrate', () => {
@@ -34,6 +40,12 @@ describe('lib/db-migrate', () => {
     });
     phoneBackfillMock.mockReset();
     phoneBackfillMock.mockResolvedValue({ scanned: 0, backfilled: 0, invalidOrderIds: [] });
+    offPipelineSalesBackfillMock.mockReset();
+    offPipelineSalesBackfillMock.mockResolvedValue({
+      scanned: 0,
+      migrated: 0,
+      disabledActions: 0,
+    });
   });
   it('resolves the drizzle migrations folder from cwd', () => {
     expect(resolveMigrationFolder('/workspace/app')).toBe('/workspace/app/drizzle/migrations');
@@ -61,6 +73,7 @@ describe('lib/db-migrate', () => {
     expect((db as { execute: ReturnType<typeof vi.fn> }).execute).toHaveBeenCalledTimes(2);
     expect(commercialBackfillMock).toHaveBeenCalledWith(db);
     expect(phoneBackfillMock).toHaveBeenCalledWith(db);
+    expect(offPipelineSalesBackfillMock).toHaveBeenCalledWith(db);
   });
 
   it('preserves the production forward-migration path when application tables exist', async () => {
@@ -80,6 +93,7 @@ describe('lib/db-migrate', () => {
     expect(migrateMock).toHaveBeenCalledOnce();
     expect(commercialBackfillMock).toHaveBeenCalledWith(db);
     expect(phoneBackfillMock).toHaveBeenCalledWith(db);
+    expect(offPipelineSalesBackfillMock).toHaveBeenCalledWith(db);
   });
 
   it('preserves unresolved historical carts and continues independent legacy backfills', async () => {
@@ -102,6 +116,7 @@ describe('lib/db-migrate', () => {
         unresolvedOrderIds: [44],
       },
       phoneBackfill: { scanned: 0, backfilled: 0, invalidOrderIds: [] },
+      offPipelineSalesBackfill: { scanned: 0, migrated: 0, disabledActions: 0 },
     });
     expect(phoneBackfillMock).toHaveBeenCalledWith(db);
   });

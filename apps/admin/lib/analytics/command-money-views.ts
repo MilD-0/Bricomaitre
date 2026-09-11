@@ -303,6 +303,7 @@ export async function loadMoneyView(
       series: performanceSeries.filter((point) => !point.isForecast),
       performanceSeries,
       automaticPaid,
+      realized: current.realized,
       coverage: current.coverage,
       paidSeries: aggregateAutomaticPaidSeries(
         automaticPaid,

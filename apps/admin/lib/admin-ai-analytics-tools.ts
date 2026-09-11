@@ -20,6 +20,13 @@ import {
   type AdminAiToolBuildContext,
 } from './admin-ai-tool-runtime';
 import { adminAiAnalyticsQuerySchema, queryAdminAnalytics } from './ai-analytics';
+import {
+  ADMIN_AI_OFF_PIPELINE_SALES_TOOL_DESCRIPTION,
+  adminAiOffPipelineSalesMutationSchema,
+  adminAiOffPipelineSalesQuerySchema,
+  manageAdminAiOffPipelineSales,
+  queryAdminAiOffPipelineSales,
+} from './admin-ai-off-pipeline-sales';
 
 const ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION = [
   'Read canonical live Analytics evidence.',
@@ -42,6 +49,19 @@ export function buildAdminAiAnalyticsTools({
       description: ADMIN_AI_STATS_TOOL_DESCRIPTION,
       inputSchema: adminAiStatsQuerySchema,
       execute: queryAdminAiStats,
+    }),
+    query_off_pipeline_sales: tool({
+      description: `Read ${ADMIN_AI_OFF_PIPELINE_SALES_TOOL_DESCRIPTION}`,
+      inputSchema: adminAiOffPipelineSalesQuerySchema,
+      execute: (input) => queryAdminAiOffPipelineSales(input),
+    }),
+    manage_off_pipeline_sales: tool({
+      description: `Create, correct, or delete exact entries. Before creating one, query by its supplied reference or description and date to avoid duplicates. ${ADMIN_AI_OFF_PIPELINE_SALES_TOOL_DESCRIPTION}`,
+      inputSchema: adminAiOffPipelineSalesMutationSchema,
+      execute: (input) =>
+        executeAdminAiToolForRuntime(runtime, input, ({ actor }) =>
+          manageAdminAiOffPipelineSales(input, actor),
+        ),
     }),
     update_analytics_settings: tool({
       description:

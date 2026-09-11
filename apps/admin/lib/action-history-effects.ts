@@ -1,4 +1,5 @@
 import { startProductCatalogFeedRefreshJob } from './background-jobs-commerce';
+import { refreshAnalyticsFactsAfterMutation } from './analytics-facts';
 import { CACHE_TAGS, revalidateServerTags } from './server-cache';
 import {
   revalidateStorefrontAssets,
@@ -23,6 +24,7 @@ export async function refreshActionHistoryConsumers(resource: string) {
     if (resource === 'brandsCategories') work.push(revalidateStorefrontProductMeta());
   }
   if (resource === 'assets') work.push(revalidateStorefrontAssets());
+  if (resource === 'stats') work.push(refreshAnalyticsFactsAfterMutation());
   const results = await Promise.allSettled(work);
   for (const result of results) {
     if (result.status === 'rejected')

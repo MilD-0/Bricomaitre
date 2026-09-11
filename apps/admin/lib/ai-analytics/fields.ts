@@ -83,6 +83,8 @@ const fieldDefinitions: Record<string, string> = {
     'Paid contribution divided by comparable attributed Meta ad cost; not planning Profit ×.',
   profitXBeforeReturns: 'Gross profit divided by comparable Meta ad cost before planning returns.',
   settledOrders: 'Orders included in the recognized provider settlement contribution.',
+  offPipelineSales:
+    'Completed sales recorded only as financial contribution outside the order and fulfilment pipeline.',
   costCoveragePct: 'Share backed by exact immutable order-line purchase-cost snapshots.',
   profitCoveragePct: 'Share of contribution rows backed by sufficient exact cost inputs.',
   projectedCoveragePct:

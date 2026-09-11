@@ -1,7 +1,6 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { manualOrderListQuerySchema } from './manual-orders';
 import {
   buildCartProductLookup,
   collectCartProductReferenceBuckets,
@@ -157,15 +156,6 @@ describe('live order reporting', () => {
         errors: 0,
       },
     ]);
-  });
-});
-
-describe('manualOrderListQuerySchema', () => {
-  it('parses paginated manual-order queries', () => {
-    expect(manualOrderListQuerySchema.parse({ page: '2', limit: '10' })).toEqual({
-      page: 2,
-      limit: 10,
-    });
   });
 });
 

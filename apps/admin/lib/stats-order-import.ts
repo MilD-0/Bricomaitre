@@ -1,4 +1,4 @@
-import { count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -130,7 +130,10 @@ export async function importStatsSpreadsheet(
       : Promise.resolve([]),
     trackings.length > 0
       ? db
-          .select({ tracking: processedOrders.tracking })
+          .select({
+            tracking: processedOrders.tracking,
+            importBatchId: processedOrders.importBatchId,
+          })
           .from(processedOrders)
           .where(inArray(processedOrders.tracking, trackings))
       : Promise.resolve([]),
@@ -195,7 +198,9 @@ export async function importStatsSpreadsheet(
   const orderById = new Map(candidateOrders.map((order) => [String(order.id), order]));
   const productLookup = buildCartProductLookup(productRows);
   const productById = new Map(productRows.map((product) => [product.id, product]));
-  const existingTrackings = new Set(existingRows.map((row) => row.tracking));
+  const existingTrackings = new Set(
+    existingRows.filter((row) => row.importBatchId !== 'MANUAL').map((row) => row.tracking),
+  );
 
   let duplicateOrders = 0;
   const unmatchedReferences: string[] = [];
@@ -352,6 +357,18 @@ export async function importStatsSpreadsheet(
     if (processedOrderValues.length === 0) {
       return;
     }
+
+    // A real carrier settlement supersedes the legacy synthetic row that the
+    // removed manual-order endpoint may have created for the same shipment.
+    const importedTrackings = processedOrderValues.map((row) => row.tracking);
+    await tx
+      .delete(processedOrders)
+      .where(
+        and(
+          eq(processedOrders.importBatchId, 'MANUAL'),
+          inArray(processedOrders.tracking, importedTrackings),
+        ),
+      );
 
     const insertedOrders = await tx
       .insert(processedOrders)

@@ -35,7 +35,7 @@ export async function recoverActionHistory(id: string, direction: 'undo' | 'redo
   if (!canMutateResource(session.user.permissions, config.resource)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  if (!entry.isReversible) {
+  if (!entry.isReversible || config.reversible === false) {
     return NextResponse.json(
       { error: `This action cannot be ${direction === 'undo' ? 'undone' : 'redone'}.` },
       { status: 409 },

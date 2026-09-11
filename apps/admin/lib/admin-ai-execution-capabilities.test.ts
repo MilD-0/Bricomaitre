@@ -78,6 +78,7 @@ it('preserves evidence of committed batch effects despite sibling failures', () 
     ['delete_orders', 'deletedCount'],
     ['manage_analytics_costs', 'changedCount'],
     ['manage_analytics_day_overrides', 'changedCount'],
+    ['manage_off_pipeline_sales', 'changedCount'],
     ['manage_ecotrack_shipments', 'successCount'],
     ['change_ecotrack_shipments', 'successCount'],
   ]) {

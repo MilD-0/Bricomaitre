@@ -69,6 +69,16 @@ it('imports captured unit economics and retains incomplete settlements for corre
         lineTotal: index === 0 ? '800' : '400',
       })),
     );
+    await db.insert(processedOrders).values({
+      orderId: `MANUAL-${key}`,
+      tracking: trackings[0]!,
+      amountCollected: '1500',
+      totalFees: '200',
+      netRevenue: '1300',
+      productCost: '200',
+      profit: '1100',
+      importBatchId: 'MANUAL',
+    });
     const first = await importStatsSpreadsheet(buffer, `${key}.xlsx`);
     batches.push(first.batchId);
     expect(first).toMatchObject({
@@ -145,6 +155,7 @@ it('imports captured unit economics and retains incomplete settlements for corre
     });
   } finally {
     for (const batch of batches) await deleteImportBatch(batch);
+    await db.delete(processedOrders).where(inArray(processedOrders.tracking, trackings));
     await db.delete(orders).where(inArray(orders.id, ids));
     await db.delete(products).where(eq(products.id, product!.id));
   }

@@ -11,8 +11,8 @@ import {
   categories,
   featuredProductGroups,
   importBatches,
+  offPipelineSales,
   orders,
-  processedOrders,
   productCards,
   products,
   roleDefinitions,
@@ -59,6 +59,7 @@ export type MutableEntityConfig = {
     | typeof products
     | typeof orders
     | typeof importBatches
+    | typeof offPipelineSales
     | typeof brands
     | typeof categories
     | typeof assetBanners
@@ -68,7 +69,6 @@ export type MutableEntityConfig = {
     | typeof bulletinReplies
     | typeof bulletinPostReactions
     | typeof bulletinReplyReactions
-    | typeof processedOrders
     | typeof roleDefinitions
     | typeof userAccessGrants;
   label: (row: SnapshotRecord) => string;

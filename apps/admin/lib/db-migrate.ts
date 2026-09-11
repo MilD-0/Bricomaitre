@@ -7,6 +7,7 @@ import {
   backfillOrderNormalizedPhones,
 } from './order-commercial-backfill';
 import { migrateInIndependentTransactions } from './independent-db-migrator';
+import { backfillLegacyManualOrders } from './off-pipeline-sales-backfill';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -119,6 +120,7 @@ export async function runDbMigrations(
 
   const commercialBackfill = await backfillOrderCommercialSnapshots(db);
   const phoneBackfill = await backfillOrderNormalizedPhones(db);
+  const offPipelineSalesBackfill = await backfillLegacyManualOrders(db);
 
   return {
     migrationsFolder,
@@ -126,5 +128,6 @@ export async function runDbMigrations(
     usedBootstrap: useBootstrap,
     commercialBackfill,
     phoneBackfill,
+    offPipelineSalesBackfill,
   };
 }

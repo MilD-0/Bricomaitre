@@ -80,6 +80,10 @@ The time supplied for a carrier event, falling back to synchronization time only
 
 An Order preceded by a bounded Customer Storefront assistant interaction. It records an observable relationship, not causal lift.
 
+**Off-Pipeline Sale**
+
+A completed sale recorded only for its realized financial contribution because it occurred outside the Order, Posting, and Shipment lifecycle. It does not contribute to operational order, fulfilment, inventory, customer, or marketing metrics.
+
 ## Storefront content
 
 **Landing Page**

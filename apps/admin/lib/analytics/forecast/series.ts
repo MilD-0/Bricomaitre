@@ -127,6 +127,7 @@ export function appendEconomicsForecastSeries(
       realizedProfitAfterAdsDzd: null,
       postedOrders,
       settledOrders: 0,
+      offPipelineSales: 0,
       profitX: null,
       profitXBeforeReturns: null,
       projectedCoveragePct: null,

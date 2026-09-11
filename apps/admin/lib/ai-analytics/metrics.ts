@@ -29,6 +29,8 @@ export const ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE = {
     'EcoTrack COD minus estimated tariff and product cost for payed/paye_et_archive outcomes.',
   paidTrueProfit:
     'Paid contribution minus comparable Meta and operating costs; do not call raw paid contribution whole-business profit.',
+  offPipelineSales:
+    'Completed sales outside Bricomaitre Orders, Posting, and Shipments. They add only their exact collected cash, fees, product cost, net revenue, and realized profit; they never add operational, inventory, customer, fulfilment, return, acquisition, or conversion activity.',
   profitX: 'Adjusted profit divided by Meta ad cost; unavailable when ad cost is zero.',
   formulas: [
     'ad cost DZD = Meta spend EUR × snapshotted manual FX rate',

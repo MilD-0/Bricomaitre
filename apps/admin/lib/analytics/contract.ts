@@ -126,6 +126,7 @@ export type AnalyticsEconomicsPoint = {
   realizedProfitAfterAdsDzd: number | null;
   postedOrders: number;
   settledOrders: number;
+  offPipelineSales: number;
   profitX: number | null;
   profitXBeforeReturns: number | null;
   projectedCoveragePct: number | null;

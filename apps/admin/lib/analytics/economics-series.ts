@@ -60,6 +60,7 @@ export function aggregateEconomicsSeries(
     realizedSamples: number;
     postedOrders: number;
     settledOrders: number;
+    offPipelineSales: number;
     costCompleteOrders: number;
     days: string[];
   };
@@ -84,6 +85,7 @@ export function aggregateEconomicsSeries(
       realizedSamples: 0,
       postedOrders: 0,
       settledOrders: 0,
+      offPipelineSales: 0,
       costCompleteOrders: 0,
       days: [],
     };
@@ -92,6 +94,7 @@ export function aggregateEconomicsSeries(
     current.postedOrders += day.postedOrders ?? 0;
     current.costCompleteOrders += day.costCompleteOrders ?? 0;
     current.settledOrders += realized?.settledOrders ?? 0;
+    current.offPipelineSales += realized?.offPipelineSales ?? 0;
     current.operatingCostDzd += day.operatingCostDzd ?? 0;
     if (!profitsSuppressed && !dayProfitsSuppressed(day)) {
       current.unsuppressedDays += 1;
@@ -161,6 +164,7 @@ export function aggregateEconomicsSeries(
             : null,
         postedOrders: group.postedOrders,
         settledOrders: group.settledOrders,
+        offPipelineSales: group.offPipelineSales,
         profitX: suppressed
           ? 0
           : adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0

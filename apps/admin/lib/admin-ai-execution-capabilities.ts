@@ -31,6 +31,7 @@ export const ADMIN_AI_MUTATING_TOOL_NAMES = Object.freeze([
   'update_analytics_settings',
   'manage_analytics_costs',
   'manage_analytics_day_overrides',
+  'manage_off_pipeline_sales',
   'sync_analytics_source',
   'update_storefront_settings',
   'update_storefront_announcement',
@@ -87,6 +88,7 @@ export function adminAiToolConfirmsCompletedMutation(toolName: string, output: u
       delete_orders: 'deletedCount',
       manage_analytics_costs: 'changedCount',
       manage_analytics_day_overrides: 'changedCount',
+      manage_off_pipeline_sales: 'changedCount',
       manage_ecotrack_shipments: 'successCount',
       change_ecotrack_shipments: 'successCount',
     } as Record<string, string>

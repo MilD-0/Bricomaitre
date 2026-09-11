@@ -104,6 +104,7 @@ export async function loadProfitTrackerReportForRange(
   const realizedSummary = realizedSelected.reduce(
     (total, day) => {
       total.settledOrders += day.settledOrders;
+      total.offPipelineSales += day.offPipelineSales;
       total.amountCollectedDzd += day.amountCollectedDzd;
       total.netRevenueDzd += day.netRevenueDzd;
       total.feesDzd += day.feesDzd;
@@ -117,6 +118,7 @@ export async function loadProfitTrackerReportForRange(
     },
     {
       settledOrders: 0,
+      offPipelineSales: 0,
       amountCollectedDzd: 0,
       netRevenueDzd: 0,
       feesDzd: 0,

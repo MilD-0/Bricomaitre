@@ -106,6 +106,22 @@ describe('Admin AI live tool construction', () => {
         'update_storefront_announcement',
         { messageFr: 'Bienvenue', messageAr: 'مرحبا', active: true },
       ],
+      [
+        'manage_off_pipeline_sales',
+        {
+          operations: [
+            {
+              action: 'create',
+              requestId: '680ff81f-a911-4d9c-b07c-1459e560b56a',
+              description: 'Evaluation sale',
+              recognizedOn: '2026-09-01',
+              amountCollectedDzd: 18_000,
+              feesDzd: 500,
+              productCostDzd: 11_000,
+            },
+          ],
+        },
+      ],
     ] as const) {
       await expect(tools[toolName]!.execute(input)).resolves.toMatchObject({
         kind: 'evaluation_noop',

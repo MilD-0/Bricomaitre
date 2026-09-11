@@ -22,6 +22,7 @@ export const drizzleSchemaFiles = [
   '../../packages/db/src/schema/namespaces.ts',
   '../../packages/db/src/schema/orders.ts',
   '../../packages/db/src/schema/orderIdempotency.ts',
+  '../../packages/db/src/schema/offPipelineSales.ts',
   '../../packages/db/src/schema/processedOrders.ts',
   '../../packages/db/src/schema/profitTracker.ts',
   '../../packages/db/src/schema/products.ts',

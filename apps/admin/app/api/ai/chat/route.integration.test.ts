@@ -254,7 +254,7 @@ describe('POST /api/ai/chat model-led runtime', () => {
     );
     expect(mocks.insertedValues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ task: 'admin_chat', promptVersion: 'admin-chat-model-led-v6' }),
+        expect.objectContaining({ task: 'admin_chat', promptVersion: 'admin-chat-model-led-v7' }),
         expect.objectContaining({
           role: 'assistant',
           content: { text: 'A useful answer.', toolResults: [] },

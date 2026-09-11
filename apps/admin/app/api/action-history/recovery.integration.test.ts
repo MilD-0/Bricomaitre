@@ -81,6 +81,14 @@ describe.each([
     expect((await invoke()).status).toBe(409);
     expect(mocks.apply).not.toHaveBeenCalled();
   });
+  it('does not restore a retired entity shape from older reversible history', async () => {
+    mocks.auth.mockResolvedValue({
+      user: { ...actor, isAllowed: true, permissions: ['analytics_manage'] },
+    });
+    mocks.entries.mockResolvedValueOnce([{ entityType: 'statsManualOrders', isReversible: true }]);
+    expect((await invoke()).status).toBe(409);
+    expect(mocks.apply).not.toHaveBeenCalled();
+  });
   it.each([
     [new ActionHistoryConflictError('Changed since this action'), 409],
     [new Error('Persistence unavailable'), 500],

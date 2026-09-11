@@ -17,7 +17,8 @@ async function main() {
 
   try {
     const db = drizzle(pool, { schema });
-    const { migrationsFolder, commercialBackfill, phoneBackfill } = await runDbMigrations(db);
+    const { migrationsFolder, commercialBackfill, phoneBackfill, offPipelineSalesBackfill } =
+      await runDbMigrations(db);
     console.log(`Applied migrations from ${migrationsFolder}`);
     console.log(
       `Order commercial snapshots: scanned=${commercialBackfill.scanned} backfilled=${commercialBackfill.backfilled} unresolved=${commercialBackfill.unresolvedOrderIds.length}`,
@@ -37,6 +38,9 @@ async function main() {
         `Preserved ${phoneBackfill.invalidOrderIds.length} historical phone values that cannot be normalized. Sample order IDs: ${sample}`,
       );
     }
+    console.log(
+      `Legacy manual financial records: scanned=${offPipelineSalesBackfill.scanned} migrated=${offPipelineSalesBackfill.migrated} recovery-actions-disabled=${offPipelineSalesBackfill.disabledActions}`,
+    );
   } finally {
     await pool.end();
   }

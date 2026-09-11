@@ -158,6 +158,7 @@ export type MetaDayEconomics = {
 export type RealizedDayEconomics = {
   date: string;
   settledOrders: number;
+  offPipelineSales: number;
   amountCollectedDzd: number;
   netRevenueDzd: number;
   feesDzd: number;

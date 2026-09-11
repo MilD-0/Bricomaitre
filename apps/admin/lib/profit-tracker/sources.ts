@@ -2,6 +2,7 @@ import {
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
   metaAdsDailyInsights,
+  offPipelineSales,
   orderLineItems,
   orders,
   orderStatusHistory,
@@ -206,17 +207,17 @@ export async function loadRealizedDayDates(
   // Settlement-only dates consume Friday carry too, even when projection callers
   // do not need settlement amounts or operating-cost/adset reports.
   const result = await db.execute(sql`
-    select distinct (coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
-      at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)})::date::text as date
-    from ${processedOrders}
-    where (coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
-      at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)})::date <= ${endDate}::date
-      and ${
-        startDate
-          ? sql`(coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
-        at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)})::date >= ${startDate}::date`
-          : sql`true`
-      }
+    select distinct dates.date::text as date
+    from (
+      select (coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
+        at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)})::date as date
+      from ${processedOrders}
+      union all
+      select ${offPipelineSales.recognizedOn} as date
+      from ${offPipelineSales}
+    ) dates
+    where dates.date <= ${endDate}::date
+      and ${startDate ? sql`dates.date >= ${startDate}::date` : sql`true`}
   `);
   return (result.rows as Array<{ date: string }>).map((row) => row.date);
 }
@@ -232,14 +233,26 @@ export async function loadRealizedDayEconomics(
           coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
           at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)}
         )::date as day,
+        case when ${processedOrders.importBatchId} = 'MANUAL' then 0 else 1 end as settled_orders,
+        case when ${processedOrders.importBatchId} = 'MANUAL' then 1 else 0 end as off_pipeline_sales,
         ${processedOrders.amountCollected} as amount_collected,
         ${processedOrders.netRevenue} as net_revenue,
         ${processedOrders.totalFees} as total_fees,
         ${processedOrders.profit} as profit
       from ${processedOrders}
+      union all
+      select ${offPipelineSales.recognizedOn} as day,
+        0 as settled_orders,
+        1 as off_pipeline_sales,
+        ${offPipelineSales.amountCollected} as amount_collected,
+        (${offPipelineSales.amountCollected} - ${offPipelineSales.fees}) as net_revenue,
+        ${offPipelineSales.fees} as total_fees,
+        (${offPipelineSales.amountCollected} - ${offPipelineSales.fees} - ${offPipelineSales.productCost}) as profit
+      from ${offPipelineSales}
     )
     select day::text as date,
-      count(*)::int as settled_orders,
+      coalesce(sum(settled_orders), 0)::int as settled_orders,
+      coalesce(sum(off_pipeline_sales), 0)::int as off_pipeline_sales,
       coalesce(sum(amount_collected), 0)::double precision as amount_collected_dzd,
       coalesce(sum(net_revenue), 0)::double precision as net_revenue_dzd,
       coalesce(sum(total_fees), 0)::double precision as fees_dzd,
@@ -255,6 +268,7 @@ export async function loadRealizedDayEconomics(
   return (result.rows as Array<Record<string, unknown>>).map((row): RealizedDayEconomics => ({
     date: String(row.date),
     settledOrders: numeric(row.settled_orders),
+    offPipelineSales: numeric(row.off_pipeline_sales),
     amountCollectedDzd: numeric(row.amount_collected_dzd),
     netRevenueDzd: numeric(row.net_revenue_dzd),
     feesDzd: numeric(row.fees_dzd),

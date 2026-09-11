@@ -5,6 +5,7 @@ import {
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
   metaAdsDailyInsights,
+  offPipelineSales,
   orderLineItems,
   orders,
   orderStatusHistory,
@@ -136,7 +137,10 @@ export async function loadMaterializedEconomicsReport(
       exists (
         select 1 from ${processedOrders}
         where ${timestampPredicate(sql`coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})`, filters.startDate, filters.endDate)}
-      ) as has_imported_settlements
+        union all
+        select 1 from ${offPipelineSales}
+        where ${datePredicate(offPipelineSales.recognizedOn, filters.startDate, filters.endDate)}
+      ) as has_realized_financials
     `),
     getProfitTrackerSettings(db),
     listProfitTrackerCosts(db),
@@ -144,8 +148,8 @@ export async function loadMaterializedEconomicsReport(
   const rows = factResult.rows as Array<Record<string, unknown>>;
   if (
     !rows.length ||
-    (dependencyResult.rows[0] as { has_imported_settlements?: boolean } | undefined)
-      ?.has_imported_settlements
+    (dependencyResult.rows[0] as { has_realized_financials?: boolean } | undefined)
+      ?.has_realized_financials
   )
     return null;
   const dependencyUpdatedAt = isoValue(
@@ -237,6 +241,7 @@ export async function loadMaterializedEconomicsReport(
     realized: {
       summary: {
         settledOrders: 0,
+        offPipelineSales: 0,
         amountCollectedDzd: 0,
         netRevenueDzd: 0,
         feesDzd: 0,

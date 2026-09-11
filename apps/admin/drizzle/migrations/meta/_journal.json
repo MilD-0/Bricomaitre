@@ -750,6 +750,13 @@
       "when": 1788769754311,
       "tag": "0106_align_analytics_reporting_contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1789118198538,
+      "tag": "0107_smart_celestials",
+      "breakpoints": true
     }
   ]
 }

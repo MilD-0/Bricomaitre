@@ -19,7 +19,7 @@ import {
 import { adminAiSurfaceContextSchema } from './admin-ai-context';
 import { dayInTimezone } from './analytics/date-range';
 
-export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-model-led-v6';
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-model-led-v7';
 
 export const adminAiChatRequestSchema = z
   .object({
