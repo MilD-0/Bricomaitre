@@ -1,7 +1,18 @@
-import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, jsonb, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const storefrontSettings = pgTable('storefront_settings', {
   id: integer('id').primaryKey().default(1),
+  checkoutFields: jsonb('checkout_fields')
+    .notNull()
+    .default({
+      phoneNumber1: { active: true, required: true },
+      lastName: { active: true, required: false },
+      firstName: { active: true, required: false },
+      state: { active: true, required: true },
+      city: { active: true, required: true },
+      homeAddress: { active: true, required: false },
+      email: { active: true, required: false },
+    }),
   contactPhone: text('contact_phone').notNull().default('0795342826'),
   phoneEnabled: boolean('phone_enabled').notNull().default(true),
   contactEmail: text('contact_email'),

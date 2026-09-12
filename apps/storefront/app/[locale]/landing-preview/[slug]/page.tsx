@@ -54,10 +54,10 @@ export default async function LandingPagePreview({
       <LandingOrderProvider key={page.id} productId={page.product.id}>
         <LandingPageRenderer
           page={page}
+          checkout={<LandingOrderForm page={page} locale={locale} />}
           locale={locale}
           nonce={requestHeaders.get('x-nonce') ?? undefined}
         />
-        <LandingOrderForm page={page} locale={locale} />
       </LandingOrderProvider>
     </PageShell>
   );

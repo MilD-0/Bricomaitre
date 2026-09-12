@@ -14,6 +14,24 @@ vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('../../lib/toast', () => ({ toast: mocks }));
 
 describe('StorefrontSettingsForm', () => {
+  it('shows locked phone controls and updates dependent field switches', async () => {
+    const user = userEvent.setup();
+    render(
+      <StorefrontSettingsForm
+        initialSettings={{ contactPhone: '0795342826', phoneEnabled: true }}
+        modelOptions={['openai/gpt-5.6-luna']}
+      />,
+    );
+    expect(screen.getByRole('switch', { name: 'phoneNumber1 · active' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'phoneNumber1 · required' })).toBeChecked();
+    await user.click(screen.getByRole('switch', { name: 'state · active' }));
+    expect(screen.getByRole('switch', { name: 'city · active' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'city · required' })).not.toBeChecked();
+    await user.click(screen.getByRole('switch', { name: 'city · required' }));
+    expect(screen.getByRole('switch', { name: 'state · active' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'state · required' })).toBeChecked();
+  });
+
   afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
@@ -93,10 +111,9 @@ describe('StorefrontSettingsForm', () => {
 
     expect(container.querySelector('form')).toHaveClass('pt-6', 'sm:pt-9');
 
-    expect(screen.getAllByRole('heading')).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'title' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'contactTitle' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'assistantTitle' })).toBeVisible();
-    expect(screen.queryByText('description')).not.toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'callsLabel' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'saveAction' })).toHaveLength(1);
     expect(screen.getByRole('combobox', { name: 'modelLabel' })).toBeVisible();

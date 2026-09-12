@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { orders } from '@bric/db/schema';
-import { OrderProductLookup, toOrderRecord } from './order-records';
+import { OrderProductLookup, toOrderRecord, toStorefrontOrderRecord } from './order-records';
 
 function orderRow(overrides: Partial<typeof orders.$inferSelect> = {}): typeof orders.$inferSelect {
   const now = new Date('2026-08-18T10:00:00.000Z');
@@ -125,4 +125,12 @@ describe('immutable order presentation', () => {
     expect(result.productSubtotal).toBe(1500);
     expect(result.totalAmount).toBe(2000);
   });
+});
+
+it('distinguishes unquoted delivery from a zero delivery fee in public orders', () => {
+  expect(toStorefrontOrderRecord(orderRow({ deliveryFee: null })).deliveryFeePending).toBe(true);
+  expect(toStorefrontOrderRecord(orderRow({ deliveryFee: '0.00' })).deliveryFeePending).toBe(false);
+  expect(
+    toStorefrontOrderRecord(orderRow({ state: null, deliveryFee: '0.00' })).deliveryFeePending,
+  ).toBe(true);
 });

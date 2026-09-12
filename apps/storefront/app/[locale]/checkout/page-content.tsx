@@ -1,3 +1,4 @@
+import { DEFAULT_CHECKOUT_FIELDS } from '@bric/storefront-core/settings';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
@@ -21,11 +22,22 @@ export type CheckoutPageProps = {
 export async function CheckoutPageContent({ params, searchParams }: CheckoutPageProps) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
   if (!isLocale(locale)) notFound();
-  const [t, catalog, contact] = await Promise.all([
+  const [t, catalogResult, contact] = await Promise.all([
     getTranslations({ locale, namespace: 'Checkout' }),
-    getStorefrontEcotrackCatalog(),
+    getStorefrontEcotrackCatalog().then(
+      (catalog) => ({ catalog, error: null }),
+      (error: unknown) => ({ catalog: null, error }),
+    ),
     getStorefrontSettings(),
   ]);
+  const { catalog, error: catalogError } = catalogResult;
+  const checkoutFields = contact.checkoutFields ?? DEFAULT_CHECKOUT_FIELDS;
+  if (
+    (checkoutFields.state.required && !catalog?.wilayas.length) ||
+    (checkoutFields.city.required && !catalog?.communes.length)
+  ) {
+    throw catalogError ?? new Error('Delivery locations are unavailable.');
+  }
   const rawProduct = Array.isArray(query.product) ? query.product[0] : query.product;
   const rawQuantity = Array.isArray(query.quantity) ? query.quantity[0] : query.quantity;
   const quantity = Math.max(1, Math.min(20, Number.parseInt(rawQuantity ?? '1', 10) || 1));
@@ -60,7 +72,10 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
     <PageShell locale={locale} contactSettings={contact}>
       <CheckoutForm
         locale={locale}
-        catalog={catalog}
+        catalog={
+          catalog ?? { wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null }
+        }
+        checkoutFields={checkoutFields}
         directItem={directItem}
         initialNotice={rawPromo && !promo ? t('promoUnavailable') : undefined}
         landingAttribution={

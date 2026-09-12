@@ -14,6 +14,7 @@ const loadSettings = unstable_cache(
   async () => {
     const [stored] = await getDb()
       .select({
+        checkoutFields: storefrontSettings.checkoutFields,
         contactPhone: storefrontSettings.contactPhone,
         phoneEnabled: storefrontSettings.phoneEnabled,
         contactEmail: storefrontSettings.contactEmail,

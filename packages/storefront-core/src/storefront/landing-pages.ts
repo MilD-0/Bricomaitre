@@ -1,3 +1,4 @@
+export { landingPageOutline, moveLandingPageRow, preserveCheckoutPosition } from './landing-layout';
 import { z } from 'zod';
 
 import { storefrontProductDetailResponseItemSchema } from './contracts';
@@ -260,7 +261,7 @@ export const landingPageBlockSchema = z.discriminatedUnion('type', [
 
 export const landingPageDocumentSchema = z
   .object({
-    schemaVersion: z.union([z.literal(1), z.literal(2)]).default(2),
+    schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(3),
     theme: z
       .object({
         accent: z.enum(['orange', 'teal', 'graphite']).default('orange'),
@@ -273,9 +274,19 @@ export const landingPageDocumentSchema = z
       description: z.string().trim().min(1).max(170),
       indexable: z.boolean().default(false),
     }),
+    checkoutPosition: z.number().int().nonnegative().optional(),
     blocks: z.array(landingPageBlockSchema).min(1).max(20),
   })
   .superRefine((document, context) => {
+    if (
+      document.checkoutPosition !== undefined &&
+      document.checkoutPosition > document.blocks.length
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['checkoutPosition'],
+        message: 'Checkout position must be within the page.',
+      });
     const ids = new Set<string>();
     for (const [index, block] of document.blocks.entries()) {
       if (ids.has(block.id))

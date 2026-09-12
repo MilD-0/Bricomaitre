@@ -1,3 +1,4 @@
+import { DEFAULT_CHECKOUT_FIELDS } from '@bric/storefront-core/settings';
 import { describe, expect, it } from 'vitest';
 import {
   shoppingAssistantRequestSchema,
@@ -131,6 +132,7 @@ describe('storefront shopping assistant', () => {
         lastSync: null,
       },
       {
+        checkoutFields: DEFAULT_CHECKOUT_FIELDS,
         phoneDisplay: '0795 34 28 26',
         phoneHref: 'tel:+213795342826',
         phoneEnabled: true,
@@ -192,6 +194,7 @@ describe('storefront shopping assistant', () => {
         lastSync: null,
       },
       {
+        checkoutFields: DEFAULT_CHECKOUT_FIELDS,
         phoneDisplay: '0795 34 28 26',
         phoneHref: 'tel:+213795342826',
         phoneEnabled: true,

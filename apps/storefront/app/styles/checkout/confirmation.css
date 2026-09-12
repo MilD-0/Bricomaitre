@@ -319,13 +319,13 @@
   font-size: var(--sf-type-small, 0.85rem);
   white-space: nowrap;
 }
-.thank-you-summary dl div:last-child {
+.thank-you-summary dl .thank-you-total {
   margin-block-start: calc(0.3rem * var(--sf-density));
   color: var(--foreground);
   font-size: var(--sf-type-body, 1rem);
   font-weight: var(--sf-weight-bold, 680);
 }
-.thank-you-summary dl div:last-child dd {
+.thank-you-summary dl .thank-you-total dd {
   color: var(--primary);
   font-size: var(--sf-type-subheading, 1.2rem);
 }
