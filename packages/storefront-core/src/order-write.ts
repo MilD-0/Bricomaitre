@@ -59,7 +59,7 @@ export async function insertCanonicalOrder(
   input: {
     values: CanonicalOrderValues;
     commercial: ResolvedOrderCommercialState;
-    deliveryFee: number;
+    deliveryFee: number | null;
     now?: Date;
     actor?: { email?: string | null; name?: string | null };
   },
@@ -75,9 +75,9 @@ export async function insertCanonicalOrder(
     .insert(orders)
     .values({
       ...input.values,
-      ...buildOrderCommercialValues(input.commercial, input.deliveryFee),
+      ...buildOrderCommercialValues(input.commercial, input.deliveryFee ?? 0),
       normalizedPhone: normalizeAlgeriaPhone(input.values.phoneNumber1),
-      deliveryFee: input.deliveryFee.toFixed(2),
+      deliveryFee: input.deliveryFee?.toFixed(2) ?? null,
       inHouseStatus: status,
       noAnswerCount,
       createdAt: input.values.createdAt ?? now,

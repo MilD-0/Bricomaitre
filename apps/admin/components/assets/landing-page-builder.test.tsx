@@ -56,6 +56,28 @@ function renderBuilder(initialPage = page) {
 }
 
 describe('LandingPageBuilder', () => {
+  it('saves checkout placement after moving checkout and duplicating preceding content', async () => {
+    const user = userEvent.setup();
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.patch('/api/landing-pages/7', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 7, active: false, currentRevision: 4 });
+      }),
+    );
+    renderBuilder();
+    await user.click(screen.getByRole('button', { name: 'Checkout position' }));
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Move up' }));
+    await user.click(screen.getByRole('button', { name: /Benefits.*More/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(body).toMatchObject({ document: { schemaVersion: 3, checkoutPosition: 3 } }),
+    );
+    expect((body.document as { blocks: unknown[] }).blocks).toHaveLength(4);
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();

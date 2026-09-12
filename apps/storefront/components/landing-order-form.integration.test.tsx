@@ -1,3 +1,4 @@
+import { DEFAULT_CHECKOUT_FIELDS } from '@bric/storefront-core/settings';
 import {
   landingPageDocumentSchema,
   type StorefrontLandingPageResponse,
@@ -104,6 +105,7 @@ describe('LandingOrderForm', () => {
       lastSync: null,
     });
     mocks.settings.mockReset().mockResolvedValue({
+      checkoutFields: DEFAULT_CHECKOUT_FIELDS,
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
       phoneEnabled: true,

@@ -1,4 +1,5 @@
 'use client';
+import { sanitizeCheckoutFields, type CheckoutFields } from '@bric/storefront-core/settings';
 import { useLandingOrder } from '@/components/landing-order-context';
 import {
   type StorefrontSupportContact,
@@ -31,7 +32,9 @@ export function useCheckoutState({
   embedded = false,
   initialNotice,
   labels,
+  checkoutFields,
 }: {
+  checkoutFields: CheckoutFields;
   locale: Locale;
   catalog: StorefrontEcotrackCatalogResponse;
   directItem: CartItem | null;
@@ -138,7 +141,9 @@ export function useCheckoutState({
           email: savedAttempt.payload.email ?? '',
           delivery: savedAttempt.payload.delivery === 1 ? ('office' as const) : ('home' as const),
         }
-      : savedDraft;
+      : savedDraft
+        ? sanitizeCheckoutFields(savedDraft, checkoutFields)
+        : null;
     if (restored) {
       const validCity =
         restored.state != null &&
@@ -170,7 +175,7 @@ export function useCheckoutState({
           window.localStorage.getItem('bric:cart:delivery-estimate:v1') ?? 'null',
         ) as { wilayaId?: unknown; delivery?: unknown } | null;
         const estimatedState = Number(estimate?.wilayaId);
-        if (Number.isInteger(estimatedState) && estimatedState > 0) {
+        if (checkoutFields.state.active && Number.isInteger(estimatedState) && estimatedState > 0) {
           setState(estimatedState);
           setDelivery(
             estimate?.delivery === 'office' && hasCheckoutStopDesk(catalog, estimatedState)
@@ -198,7 +203,15 @@ export function useCheckoutState({
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     void prepareHaptics();
-  }, [catalog, directItem, labels.cartUpdated, labels.submitError, labels.rateLimit, locale]);
+  }, [
+    catalog,
+    directItem,
+    labels.cartUpdated,
+    labels.submitError,
+    labels.rateLimit,
+    locale,
+    checkoutFields,
+  ]);
 
   useEffect(() => {
     if (!retryAt) return;

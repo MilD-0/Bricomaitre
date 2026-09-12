@@ -9,7 +9,7 @@ import {
   orders,
   storefrontOrderIdempotency,
 } from '@bric/db/schema';
-import { readEcotrackDeliveryFee } from '../ecotrack-support';
+import { readEcotrackDeliveryQuote } from '../ecotrack-support';
 import { assertReviewedOrderPrices, resolveOrderCommercialState } from '../order-commercial';
 import {
   OrderProductLookup,
@@ -158,16 +158,18 @@ export async function createStorefrontOrder(
   });
   const orderLines = commercial.lines;
   assertReviewedOrderPrices(commercial, payload);
-  let deliveryFee = 0;
+  let deliveryQuote: number | null = null;
   if (payload.state != null) {
     try {
-      deliveryFee = await measureStep('readEcotrackDeliveryFee', reportTiming, () =>
-        readEcotrackDeliveryFee(db, payload.state, coerceDeliveryType(payload.delivery)),
+      deliveryQuote = await measureStep('readEcotrackDeliveryFee', reportTiming, () =>
+        readEcotrackDeliveryQuote(db, payload.state, coerceDeliveryType(payload.delivery)),
       );
     } catch {
       degradedCapture = true;
     }
   }
+  const deliveryFee = deliveryQuote ?? 0;
+  if (deliveryQuote === null) degradedCapture = true;
   const metaLocation = payload.meta
     ? await readMetaOrderLocation(db, payload.state, payload.city).catch(() => null)
     : null;
@@ -242,7 +244,7 @@ export async function createStorefrontOrder(
     const canonical = await measureStep('insertOrder', reportTiming, () =>
       insertCanonicalOrder(tx, {
         commercial,
-        deliveryFee,
+        deliveryFee: deliveryQuote,
         now,
         values: {
           firstName: payload.firstName,

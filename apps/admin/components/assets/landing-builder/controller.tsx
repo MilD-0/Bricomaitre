@@ -1,6 +1,7 @@
 'use client';
 import {
   landingPageDocumentSchema,
+  moveLandingPageRow,
   type LandingPageBlock,
 } from '@bric/storefront-core/landing-pages';
 import { useLocale } from 'next-intl';
@@ -141,17 +142,11 @@ export function useLandingPageBuilder({
   const patchBlock = (index: number, block: LandingPageBlock) =>
     setDocument((current) => ({
       ...current,
-      schemaVersion: 2,
+      schemaVersion: 3,
       blocks: current.blocks.map((item, itemIndex) => (itemIndex === index ? block : item)),
     }));
   const move = (index: number, offset: number) =>
-    setDocument((current) => {
-      const target = index + offset;
-      if (target < 0 || target >= current.blocks.length) return current;
-      const blocks = [...current.blocks];
-      [blocks[index], blocks[target]] = [blocks[target]!, blocks[index]!];
-      return { ...current, blocks };
-    });
+    setDocument((current) => moveLandingPageRow(current, index, offset));
   const duplicate = (index: number) =>
     setDocument((current) => {
       const source = current.blocks[index];
@@ -163,17 +158,42 @@ export function useLandingPageBuilder({
       const blocks = [...current.blocks];
       blocks.splice(index + 1, 0, clone);
       setSelectedId(clone.id);
-      return { ...current, blocks };
+      return {
+        ...current,
+        blocks,
+        checkoutPosition:
+          current.checkoutPosition === undefined
+            ? undefined
+            : current.checkoutPosition > index
+              ? current.checkoutPosition + 1
+              : current.checkoutPosition,
+      };
     });
   const remove = (index: number) =>
     setDocument((current) => {
       const next = current.blocks.filter((_, itemIndex) => itemIndex !== index);
       setSelectedId(next[Math.max(0, index - 1)]?.id ?? '');
-      return { ...current, blocks: next };
+      return {
+        ...current,
+        blocks: next,
+        checkoutPosition:
+          current.checkoutPosition === undefined
+            ? undefined
+            : current.checkoutPosition > index
+              ? current.checkoutPosition - 1
+              : current.checkoutPosition,
+      };
     });
   const add = (type: LandingPageBlock['type']) => {
     const block = createBlock(type, page.locale);
-    setDocument((current) => ({ ...current, blocks: [...current.blocks, block] }));
+    setDocument((current) => ({
+      ...current,
+      blocks: [...current.blocks, block],
+      checkoutPosition:
+        current.checkoutPosition === current.blocks.length
+          ? current.checkoutPosition + 1
+          : current.checkoutPosition,
+    }));
     setSelectedId(block.id);
     setShowEditor(true);
   };

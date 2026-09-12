@@ -383,4 +383,23 @@ describe('ThankYouConfirmation', () => {
       'tel:+213795342826',
     );
   });
+
+  it('shows an unquoted delivery fee without a final total', async () => {
+    mocks.verify.mockResolvedValueOnce({
+      ...order,
+      state: null,
+      deliveryFee: 0,
+      deliveryFeePending: true,
+    });
+    render(
+      <ThankYouConfirmation
+        locale="fr"
+        orderId={42}
+        token="public-order-token-1234567890"
+        labels={labels}
+      />,
+    );
+    expect(await screen.findByText('Livraison confirmée par téléphone')).toBeVisible();
+    expect(screen.queryByText('total')).not.toBeInTheDocument();
+  });
 });

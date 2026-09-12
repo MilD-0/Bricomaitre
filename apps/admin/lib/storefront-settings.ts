@@ -11,6 +11,7 @@ export async function loadStorefrontSettings(): Promise<StorefrontSettingsInput>
 
   const [stored] = await getDb()
     .select({
+      checkoutFields: storefrontSettings.checkoutFields,
       contactPhone: storefrontSettings.contactPhone,
       phoneEnabled: storefrontSettings.phoneEnabled,
       contactEmail: storefrontSettings.contactEmail,
@@ -78,6 +79,7 @@ export async function saveStorefrontSettings(input: Partial<StorefrontSettingsIn
       set: { ...changes, phoneEnabled: true, updatedAt: new Date() },
     })
     .returning({
+      checkoutFields: storefrontSettings.checkoutFields,
       contactPhone: storefrontSettings.contactPhone,
       phoneEnabled: storefrontSettings.phoneEnabled,
       contactEmail: storefrontSettings.contactEmail,

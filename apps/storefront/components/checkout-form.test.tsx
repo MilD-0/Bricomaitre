@@ -1,3 +1,4 @@
+import { DEFAULT_CHECKOUT_FIELDS, setCheckoutField } from '@bric/storefront-core/settings';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -167,6 +168,82 @@ const order = {
 };
 
 describe('CheckoutForm', () => {
+  it('submits a phone-first checkout without leaking hidden draft fields', async () => {
+    let fields = setCheckoutField(DEFAULT_CHECKOUT_FIELDS, 'state', 'active', false);
+    fields = setCheckoutField(fields, 'email', 'active', false);
+    window.localStorage.setItem(
+      'bric:checkout:draft:v1',
+      JSON.stringify({
+        phoneNumber1: '0550000000',
+        lastName: '',
+        firstName: '',
+        state: 16,
+        city: 'Alger Centre',
+        homeAddress: '',
+        email: 'bad-email',
+        delivery: 'office',
+      }),
+    );
+    render(
+      <CheckoutForm
+        locale="fr"
+        catalog={catalog}
+        directItem={directItem}
+        labels={labels}
+        checkoutFields={fields}
+      />,
+    );
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(document.querySelector('[name="email"]')).toBeNull();
+    expect(screen.getByText('Livraison confirmée par téléphone')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create.mock.calls[0]![0]).toMatchObject({
+      state: null,
+      city: null,
+      email: null,
+      delivery: 0,
+    });
+  });
+
+  it('adopts current requirements after a server rejection and lets the customer correct them', async () => {
+    const fields = setCheckoutField(DEFAULT_CHECKOUT_FIELDS, 'state', 'active', false);
+    const changed = setCheckoutField(fields, 'firstName', 'required', true);
+    const error = new CheckoutOrderError('checkout_fields', {
+      code: 'checkout_fields',
+      status: 400,
+    });
+    error.checkoutFields = changed;
+    error.fields = ['firstName'];
+    mocks.create.mockRejectedValueOnce(error).mockResolvedValue(order);
+    render(
+      <CheckoutForm
+        locale="ar"
+        catalog={catalog}
+        directItem={directItem}
+        labels={labels}
+        checkoutFields={fields}
+      />,
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /firstName/ })).toHaveAttribute(
+        'aria-required',
+        'true',
+      ),
+    );
+    expect(window.localStorage.getItem('bric:checkout:pending:v1')).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: /firstName/ }), {
+      target: { value: 'Lina' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+    expect(mocks.create.mock.calls[1]![0]).toMatchObject({ firstName: 'Lina' });
+  });
+
   it('replays a legacy pending request without displaying an unrelated direct-product quote', async () => {
     const basket = [{ ...directItem, productId: 99, token: 'different-product' }];
     window.localStorage.setItem('bric:cart:v1', JSON.stringify(basket));

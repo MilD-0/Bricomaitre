@@ -303,6 +303,7 @@ export function toStorefrontOrderRecord(
     subtotalOverride: record.subtotalOverride,
     productSubtotal: record.productSubtotal,
     deliveryFee: record.deliveryFee,
+    deliveryFeePending: row.deliveryFee == null || row.state == null,
     totalAmount: record.totalAmount,
     promoCode: record.promoCode,
     productPromos: record.productPromos ?? [],

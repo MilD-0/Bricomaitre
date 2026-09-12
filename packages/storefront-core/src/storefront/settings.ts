@@ -1,3 +1,14 @@
+import { checkoutFieldsSchema, DEFAULT_CHECKOUT_FIELDS } from './checkout-fields';
+export {
+  checkoutFieldsSchema,
+  DEFAULT_CHECKOUT_FIELDS,
+  checkoutFieldNames,
+  setCheckoutField,
+  sanitizeCheckoutFields,
+  missingCheckoutFields,
+  type CheckoutFields,
+  type CheckoutFieldName,
+} from './checkout-fields';
 import { z } from 'zod';
 
 export const DEFAULT_STOREFRONT_CONTACT_PHONE = '0795342826';
@@ -39,6 +50,7 @@ const nullableUrl = z
   .transform((value) => value || null);
 
 export const storefrontSettingsInputSchema = z.object({
+  checkoutFields: checkoutFieldsSchema.default(DEFAULT_CHECKOUT_FIELDS),
   contactPhone: algerianPhoneNumberSchema,
   phoneEnabled: z.boolean(),
   contactEmail: z
@@ -57,6 +69,7 @@ export type StorefrontSettingsInput = z.infer<typeof storefrontSettingsInputSche
 export type StorefrontSettingsInputValue = z.input<typeof storefrontSettingsInputSchema>;
 
 export const DEFAULT_STOREFRONT_SETTINGS: StorefrontSettingsInput = {
+  checkoutFields: DEFAULT_CHECKOUT_FIELDS,
   contactPhone: DEFAULT_STOREFRONT_CONTACT_PHONE,
   phoneEnabled: true,
   contactEmail: 'bricomaitre@gmail.com',
@@ -78,6 +91,7 @@ export function toStorefrontContactSettings(input: StorefrontSettingsInputValue)
   const internationalDigits = `213${settings.contactPhone.slice(1)}`;
 
   return {
+    checkoutFields: settings.checkoutFields,
     phoneDisplay: formatAlgerianPhoneNumber(settings.contactPhone),
     phoneHref: `tel:+${internationalDigits}`,
     // Phone support is always available. Preserve the legacy response field

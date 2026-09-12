@@ -1,9 +1,11 @@
+import { DEFAULT_CHECKOUT_FIELDS } from '@bric/storefront-core/settings';
 import { shoppingAssistantRequestSchema } from '@bric/storefront-core/shopping-assistant-contracts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildShoppingAssistantTools } from './shopping-assistant-tools';
 
 const settings = {
+  checkoutFields: DEFAULT_CHECKOUT_FIELDS,
   phoneDisplay: '0795 34 28 26',
   phoneHref: 'tel:+213795342826',
   phoneEnabled: true,

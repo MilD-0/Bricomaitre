@@ -1,5 +1,6 @@
 'use client';
 
+import { CheckoutFieldsSettings } from './checkout-fields-settings';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
@@ -97,6 +98,11 @@ export function StorefrontSettingsForm({
             />
           ))}
         </section>
+
+        <CheckoutFieldsSettings
+          value={settings.checkoutFields}
+          onChange={(checkoutFields) => setSettings((current) => ({ ...current, checkoutFields }))}
+        />
 
         <section className="flex items-center justify-between gap-4 border-t border-border/70 pt-6">
           <h2 className="text-lg font-semibold text-foreground">{t('assistantTitle')}</h2>

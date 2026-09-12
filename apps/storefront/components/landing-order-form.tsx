@@ -44,7 +44,10 @@ export async function LandingOrderForm({
     );
   }
 
-  if (!catalog?.wilayas.length || !catalog.communes.length) {
+  if (
+    (contact.checkoutFields.state.required && !catalog?.wilayas.length) ||
+    (contact.checkoutFields.city.required && !catalog?.communes.length)
+  ) {
     return (
       <section id="landing-order" className="landing-order-unavailable" role="alert">
         <h2>{translate('title')}</h2>
@@ -68,7 +71,10 @@ export async function LandingOrderForm({
   return (
     <CheckoutForm
       locale={locale}
-      catalog={catalog}
+      catalog={
+        catalog ?? { wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null }
+      }
+      checkoutFields={contact.checkoutFields}
       directItem={directItem}
       landingAttribution={{ landingPageId: page.id, landingRevision: page.revision }}
       embedded

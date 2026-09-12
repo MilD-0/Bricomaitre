@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { toStorefrontContactSettings } from '../settings';
+import {
+  checkoutFieldsSchema,
+  DEFAULT_CHECKOUT_FIELDS,
+  toStorefrontContactSettings,
+} from '../settings';
 import {
   storefrontBrandResponseItemSchema,
   storefrontCategoryResponseItemSchema,
@@ -60,6 +64,7 @@ export const storefrontAssetsResponseSchema = z.object({
 });
 
 export const storefrontSettingsResponseSchema = z.object({
+  checkoutFields: checkoutFieldsSchema.default(DEFAULT_CHECKOUT_FIELDS),
   phoneDisplay: z.string().min(1),
   phoneHref: z.string().startsWith('tel:+'),
   phoneEnabled: z.boolean(),

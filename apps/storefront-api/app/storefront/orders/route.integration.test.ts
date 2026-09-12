@@ -1,3 +1,4 @@
+import { DEFAULT_CHECKOUT_FIELDS, setCheckoutField } from '@bric/storefront-core/settings';
 import { UnorderableCartError } from '@bric/storefront-core/order-commercial';
 import { StorefrontOrderClaimLostError } from '@bric/storefront-core/order-idempotency';
 import { after, NextRequest } from 'next/server';
@@ -5,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
+  fields: vi.fn(),
   hasDb: vi.fn(),
   create: vi.fn(),
   read: vi.fn(),
@@ -14,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   velocity: vi.fn(),
   capture: vi.fn(),
 }));
+vi.mock('../../../lib/checkout-settings', () => ({ readCheckoutFields: mocks.fields }));
 vi.mock('next/server', async (original) => ({
   ...(await original<typeof import('next/server')>()),
   after: vi.fn(),
@@ -49,8 +52,42 @@ function request(body: unknown = { phoneNumber1: '0550111111' }, key = 'submissi
 }
 
 describe('public order creation', () => {
+  it('rejects missing requirements and releases the new claim', async () => {
+    mocks.fields.mockResolvedValue(DEFAULT_CHECKOUT_FIELDS);
+    const response = await POST(request());
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: 'checkout_fields',
+      fields: ['state', 'city'],
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.clear).toHaveBeenCalledOnce();
+  });
+
+  it('replays committed requests even when the current policy would reject them', async () => {
+    mocks.fields.mockResolvedValue(DEFAULT_CHECKOUT_FIELDS);
+    mocks.claim.mockResolvedValue({ kind: 'completed', orderId: 11 });
+    mocks.read.mockResolvedValue({ id: 11 });
+    expect((await POST(request())).status).toBe(201);
+    expect(mocks.fields).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('strips hidden values without changing the fingerprint of a retry', async () => {
+    const body = { phoneNumber1: '0550111111', state: 16, city: 'Alger' };
+    expect((await POST(request(body))).status).toBe(201);
+    expect(mocks.create.mock.calls[0]![1]).toMatchObject({ state: null, city: null });
+    const fingerprint = mocks.claim.mock.calls[0]![1].fingerprint;
+    mocks.fields.mockResolvedValue(DEFAULT_CHECKOUT_FIELDS);
+    expect((await POST(request(body))).status).toBe(201);
+    expect(mocks.claim.mock.calls[1]![1].fingerprint).toBe(fingerprint);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fields.mockResolvedValue(
+      setCheckoutField(DEFAULT_CHECKOUT_FIELDS, 'state', 'active', false),
+    );
     mocks.hasDb.mockReturnValue(true);
     mocks.rateLimit.mockResolvedValue({ ok: true });
     mocks.velocity.mockResolvedValue({ ok: true });

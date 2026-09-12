@@ -330,8 +330,9 @@ export function buildShoppingAssistantTools(input: {
           deliveryMode: order.delivery === 1 ? 'stop_desk' : 'home',
           currency: 'DZD' as const,
           productSubtotal: order.productSubtotal,
-          deliveryFee: order.deliveryFee,
-          total: order.totalAmount,
+          deliveryFeePending: Boolean(order.deliveryFeePending || order.state == null),
+          deliveryFee: order.deliveryFeePending || order.state == null ? null : order.deliveryFee,
+          total: order.deliveryFeePending || order.state == null ? null : order.totalAmount,
           promotion: order.promoCode
             ? { code: order.promoCode, discountAmount: order.promoDiscountAmount }
             : null,

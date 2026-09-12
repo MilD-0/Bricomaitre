@@ -18,6 +18,7 @@ import {
 import { type useCheckoutForm } from './use-checkout';
 
 export function CheckoutFormView({
+  checkoutFields,
   Root,
   embedded,
   Heading,
@@ -98,7 +99,23 @@ export function CheckoutFormView({
         </section>
       ) : null}
 
-      <form ref={formRef} className="checkout-layout" onSubmit={submit} aria-busy={busy} noValidate>
+      <form
+        ref={formRef}
+        className="checkout-layout"
+        onSubmit={submit}
+        aria-busy={busy}
+        onChange={(event) => {
+          const name = event.target.getAttribute('name');
+          if (name)
+            setErrors((current) => {
+              if (!current[name]) return current;
+              const next = { ...current };
+              delete next[name];
+              return next;
+            });
+        }}
+        noValidate
+      >
         <fieldset
           className="checkout-form-panel"
           aria-label={labels.title}
@@ -112,6 +129,7 @@ export function CheckoutFormView({
               </span>
               <input
                 name="phoneNumber1"
+                aria-required="true"
                 type="tel"
                 dir="ltr"
                 inputMode="tel"
@@ -132,104 +150,136 @@ export function CheckoutFormView({
               />
               {errors.phoneNumber1 ? <small id="phone-error">{errors.phoneNumber1}</small> : null}
             </label>
-            <label className="checkout-field">
-              <span>
-                {labels.lastName} <em>{labels.optional}</em>
-              </span>
-              <input
-                name="lastName"
-                autoComplete="family-name"
-                value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
-              />
-            </label>
-            <label className="checkout-field">
-              <span>
-                {labels.firstName} <em>{labels.optional}</em>
-              </span>
-              <input
-                name="firstName"
-                autoComplete="given-name"
-                value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
-              />
-            </label>
-            <label className="checkout-field">
-              <span>
-                {labels.wilaya} <b>*</b>
-              </span>
-              <select
-                name="state"
-                value={state ?? ''}
-                aria-invalid={Boolean(errors.state)}
-                onChange={(event) => {
-                  setState(event.target.value ? Number(event.target.value) : null);
-                  setCity('');
-                  if (delivery === 'office') setDelivery('home');
-                }}
-              >
-                <option value="">{labels.wilaya}</option>
-                {catalog.wilayas.map((wilaya) => (
-                  <option key={wilaya.wilayaId} value={wilaya.wilayaId}>
-                    {wilaya.wilayaId}. {wilaya.name}
-                  </option>
-                ))}
-              </select>
-              {errors.state ? <small>{errors.state}</small> : null}
-            </label>
-            <label className="checkout-field">
-              <span>
-                {labels.commune} <b>*</b>
-              </span>
-              <select
-                name="city"
-                value={city}
-                aria-disabled={state == null}
-                aria-invalid={Boolean(errors.city)}
-                onChange={(event) => setCity(event.target.value)}
-              >
-                <option value="">{labels.commune}</option>
-                {pending && city && !communes.some((commune) => commune.name === city) ? (
-                  <option value={city}>{city}</option>
-                ) : null}
-                {communes.map((commune) => (
-                  <option key={commune.communeId} value={commune.name}>
-                    {commune.name}
-                    {commune.hasStopDesk ? ' •' : ''}
-                  </option>
-                ))}
-              </select>
-              {errors.city ? <small>{errors.city}</small> : null}
-            </label>
-            <label className="checkout-field checkout-field-wide">
-              <span>
-                {labels.address} <em>{labels.optional}</em>
-              </span>
-              <input
-                name="homeAddress"
-                autoComplete="street-address"
-                value={homeAddress}
-                aria-invalid={Boolean(errors.homeAddress)}
-                aria-describedby={errors.homeAddress ? 'address-error' : undefined}
-                onChange={(event) => setHomeAddress(event.target.value)}
-              />
-              {errors.homeAddress ? <small id="address-error">{errors.homeAddress}</small> : null}
-            </label>
-            <label className="checkout-field checkout-field-wide">
-              <span>
-                {labels.email} <em>{labels.optional}</em>
-              </span>
-              <input
-                name="email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                value={email}
-                aria-invalid={Boolean(errors.email)}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              {errors.email ? <small>{errors.email}</small> : null}
-            </label>
+            {checkoutFields.lastName.active ? (
+              <label className="checkout-field">
+                <span>
+                  {labels.lastName}{' '}
+                  {checkoutFields.lastName.required ? <b>*</b> : <em>{labels.optional}</em>}
+                </span>
+                <input
+                  name="lastName"
+                  aria-required={checkoutFields.lastName.required}
+                  autoComplete="family-name"
+                  value={lastName}
+                  aria-invalid={Boolean(errors.lastName)}
+                  onChange={(event) => setLastName(event.target.value)}
+                />
+                {errors.lastName ? <small>{errors.lastName}</small> : null}
+              </label>
+            ) : null}
+            {checkoutFields.firstName.active ? (
+              <label className="checkout-field">
+                <span>
+                  {labels.firstName}{' '}
+                  {checkoutFields.firstName.required ? <b>*</b> : <em>{labels.optional}</em>}
+                </span>
+                <input
+                  name="firstName"
+                  aria-required={checkoutFields.firstName.required}
+                  autoComplete="given-name"
+                  value={firstName}
+                  aria-invalid={Boolean(errors.firstName)}
+                  onChange={(event) => setFirstName(event.target.value)}
+                />
+                {errors.firstName ? <small>{errors.firstName}</small> : null}
+              </label>
+            ) : null}
+            {checkoutFields.state.active ? (
+              <label className="checkout-field">
+                <span>
+                  {labels.wilaya}{' '}
+                  {checkoutFields.state.required ? <b>*</b> : <em>{labels.optional}</em>}
+                </span>
+                <select
+                  name="state"
+                  aria-required={checkoutFields.state.required}
+                  value={state ?? ''}
+                  aria-invalid={Boolean(errors.state)}
+                  onChange={(event) => {
+                    setState(event.target.value ? Number(event.target.value) : null);
+                    setCity('');
+                    if (delivery === 'office') setDelivery('home');
+                  }}
+                >
+                  <option value="">{labels.wilaya}</option>
+                  {catalog.wilayas.map((wilaya) => (
+                    <option key={wilaya.wilayaId} value={wilaya.wilayaId}>
+                      {wilaya.wilayaId}. {wilaya.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.state ? <small>{errors.state}</small> : null}
+              </label>
+            ) : null}
+            {checkoutFields.city.active ? (
+              <label className="checkout-field">
+                <span>
+                  {labels.commune}{' '}
+                  {checkoutFields.city.required ? <b>*</b> : <em>{labels.optional}</em>}
+                </span>
+                <select
+                  name="city"
+                  aria-required={checkoutFields.city.required}
+                  value={city}
+                  aria-disabled={state == null}
+                  aria-invalid={Boolean(errors.city)}
+                  onChange={(event) => setCity(event.target.value)}
+                >
+                  <option value="">{labels.commune}</option>
+                  {pending && city && !communes.some((commune) => commune.name === city) ? (
+                    <option value={city}>{city}</option>
+                  ) : null}
+                  {communes.map((commune) => (
+                    <option key={commune.communeId} value={commune.name}>
+                      {commune.name}
+                      {commune.hasStopDesk ? ' •' : ''}
+                    </option>
+                  ))}
+                </select>
+                {errors.city ? <small>{errors.city}</small> : null}
+              </label>
+            ) : null}
+            {checkoutFields.homeAddress.active ? (
+              <label className="checkout-field checkout-field-wide">
+                <span>
+                  {labels.address}{' '}
+                  {checkoutFields.homeAddress.required && delivery === 'home' ? (
+                    <b>*</b>
+                  ) : (
+                    <em>{labels.optional}</em>
+                  )}
+                </span>
+                <input
+                  name="homeAddress"
+                  aria-required={checkoutFields.homeAddress.required && delivery === 'home'}
+                  autoComplete="street-address"
+                  value={homeAddress}
+                  aria-invalid={Boolean(errors.homeAddress)}
+                  aria-describedby={errors.homeAddress ? 'address-error' : undefined}
+                  onChange={(event) => setHomeAddress(event.target.value)}
+                />
+                {errors.homeAddress ? <small id="address-error">{errors.homeAddress}</small> : null}
+              </label>
+            ) : null}
+            {checkoutFields.email.active ? (
+              <label className="checkout-field checkout-field-wide">
+                <span>
+                  {labels.email}{' '}
+                  {checkoutFields.email.required ? <b>*</b> : <em>{labels.optional}</em>}
+                </span>
+                <input
+                  name="email"
+                  aria-required={checkoutFields.email.required}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={email}
+                  aria-invalid={Boolean(errors.email)}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+                {errors.email ? <small>{errors.email}</small> : null}
+              </label>
+            ) : null}
           </div>
 
           <fieldset className="checkout-delivery">
@@ -303,12 +353,20 @@ export function CheckoutFormView({
                 </div>
                 <div>
                   <dt>{labels.delivery}</dt>
-                  <dd>{formatProductPrice(String(deliveryFee), locale)}</dd>
+                  <dd>
+                    {deliveryFee == null
+                      ? locale === 'ar'
+                        ? 'تُؤكّد تكلفة التوصيل هاتفياً'
+                        : 'Livraison confirmée par téléphone'
+                      : formatProductPrice(String(deliveryFee), locale)}
+                  </dd>
                 </div>
-                <div>
-                  <dt>{labels.total}</dt>
-                  <dd>{formatProductPrice(String(total), locale)}</dd>
-                </div>
+                {deliveryFee !== null ? (
+                  <div className="checkout-total">
+                    <dt>{labels.total}</dt>
+                    <dd>{formatProductPrice(String(total), locale)}</dd>
+                  </div>
+                ) : null}
               </dl>
             </>
           )}

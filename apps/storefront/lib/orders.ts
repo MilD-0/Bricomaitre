@@ -1,4 +1,5 @@
 'use client';
+import { checkoutFieldsSchema, type CheckoutFields } from '@bric/storefront-core/settings';
 
 import {
   storefrontCreateOrderResponseSchema,
@@ -9,10 +10,13 @@ import {
 import { withCheckoutRequestTimeout } from './checkout-request';
 
 export class CheckoutOrderError extends Error {
+  checkoutFields?: CheckoutFields;
+  fields?: string[];
   status: number | null;
   retryAfterSeconds: number | null;
   code:
     | 'network'
+    | 'checkout_fields'
     | 'validation'
     | 'conflict'
     | 'cart_changed'
@@ -47,6 +51,28 @@ async function readJson(response: Response) {
 
 async function responseError(response: Response) {
   const body = await readJson(response);
+  if (
+    response.status === 400 &&
+    body &&
+    typeof body === 'object' &&
+    'code' in body &&
+    body.code === 'checkout_fields' &&
+    'checkoutFields' in body
+  ) {
+    const settings = checkoutFieldsSchema.safeParse(body.checkoutFields);
+    if (settings.success) {
+      const error = new CheckoutOrderError('checkout_fields', {
+        status: 400,
+        code: 'checkout_fields',
+      });
+      error.checkoutFields = settings.data;
+      error.fields =
+        'fields' in body && Array.isArray(body.fields)
+          ? body.fields.filter((field): field is string => typeof field === 'string')
+          : [];
+      return error;
+    }
+  }
   const code =
     response.status === 409 &&
     typeof body === 'object' &&
