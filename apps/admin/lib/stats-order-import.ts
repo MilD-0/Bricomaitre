@@ -21,6 +21,7 @@ import {
   parseStatsSpreadsheet,
   type StatsSpreadsheetRow as SpreadsheetRow,
 } from './stats-spreadsheet';
+import { reconcileLegacySales } from './off-pipeline-sales-reconciliation';
 import { numberOrZero, toDateInput } from './stats-values';
 
 function isNumericOrderReference(value: string) {
@@ -374,6 +375,8 @@ export async function importStatsSpreadsheet(
       .insert(processedOrders)
       .values(processedOrderValues)
       .returning({ id: processedOrders.id, tracking: processedOrders.tracking });
+
+    await reconcileLegacySales(tx, importedTrackings);
 
     const childRows = insertedOrders.flatMap((insertedOrder) =>
       (processedProductValuesByTracking.get(insertedOrder.tracking) ?? []).map((row) => ({

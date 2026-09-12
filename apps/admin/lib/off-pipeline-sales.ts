@@ -203,7 +203,8 @@ export async function updateOffPipelineSale(
         .select()
         .from(offPipelineSales)
         .where(eq(offPipelineSales.id, input.id))
-        .limit(1);
+        .limit(1)
+        .for('update');
       if (!stored) return { status: 'not_found' as const, id: input.id };
       const previous = mapSale(stored);
       const next = offPipelineSaleFieldsSchema.parse({
@@ -251,7 +252,8 @@ export async function deleteOffPipelineSale(
         .select()
         .from(offPipelineSales)
         .where(eq(offPipelineSales.id, input.id))
-        .limit(1);
+        .limit(1)
+        .for('update');
       if (!stored) return { status: 'not_found' as const, id: input.id };
       const previous = mapSale(stored);
       await mutateEntityWithHistoryTransaction(tx, {
