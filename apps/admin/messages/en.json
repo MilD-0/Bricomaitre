@@ -578,6 +578,7 @@
     "conversationLoadError": "Could not load this conversation. Retry to restore its messages.",
     "historyLoadError": "Could not refresh saved chats or background jobs.",
     "autoAccept": "Auto-apply generated proposals",
+    "autoAcceptShort": "Auto",
     "open": "AI assistant",
     "close": "Close AI assistant",
     "fullScreen": "Open assistant full screen",

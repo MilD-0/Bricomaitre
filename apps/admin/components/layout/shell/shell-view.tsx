@@ -1,8 +1,9 @@
 'use client';
-import { ChevronLeft, ChevronRight, LogOut, Menu, X } from 'lucide-react';
+import { Bot, ChevronLeft, ChevronRight, LogOut, Menu, Sparkles, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { authClient } from '../../../lib/auth-client';
 import { rootMotionTransition } from '../../../lib/design-tokens';
+import { openAdminAiAssistant } from '../../../lib/admin-ai-events';
 import { localeLabels, locales } from '../../../lib/i18n';
 import { cn } from '../../../lib/utils';
 import { AdminAiChat } from '../../admin-ai-chat';
@@ -162,6 +163,35 @@ export function AppShellView({
           </nav>
 
           <div className="flex flex-col gap-3 border-t border-border/60 bg-background p-3 lg:bg-transparent">
+            {initialIsAllowed ? (
+              <button
+                type="button"
+                data-admin-ai-entry="workspace"
+                className={cn(
+                  'flex min-h-11 items-center gap-3 rounded-lg border border-primary/15 bg-primary/5 px-2.5 py-2 text-start text-foreground transition-colors hover:border-primary/30 hover:bg-primary/10',
+                  sidebarCollapsed && 'lg:justify-center',
+                )}
+                onClick={() => {
+                  setSidebarOpen(false);
+                  openAdminAiAssistant();
+                }}
+                aria-label={t('aiChat.open')}
+                title={sidebarCollapsed ? t('aiChat.open') : undefined}
+              >
+                <span className="relative grid size-7 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
+                  <Bot className="size-4" />
+                  <Sparkles className="absolute -end-1 -top-1 size-2 text-amber-200" />
+                </span>
+                <span className={cn('min-w-0', sidebarCollapsed && 'lg:hidden')}>
+                  <strong className="block truncate text-xs font-semibold">
+                    {t('aiChat.open')}
+                  </strong>
+                  <small className="block truncate text-[0.6875rem] text-muted-foreground">
+                    {activeNavigation.title}
+                  </small>
+                </span>
+              </button>
+            ) : null}
             <button
               type="button"
               className={cn(
@@ -264,6 +294,19 @@ export function AppShellView({
             </div>
             <div className="flex items-center gap-2">
               <PendingInline active={isNavigating} label={t('labels.loading')} />
+              {initialIsAllowed ? (
+                <Button
+                  type="button"
+                  data-admin-ai-entry="mobile-header"
+                  variant="ghost"
+                  className="relative size-9 rounded-full p-0"
+                  onClick={openAdminAiAssistant}
+                  aria-label={t('aiChat.open')}
+                >
+                  <Bot className="size-4" />
+                  <Sparkles className="absolute end-1 top-1 size-2 text-amber-500" />
+                </Button>
+              ) : null}
               <button
                 type="button"
                 className="rounded-full focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AdminAiChat } from './admin-ai-chat';
+import { openAdminAiChat } from './admin-ai-chat.test-helpers';
 
 function chatResponse(body: string | object, init?: ResponseInit) {
   const {
@@ -98,7 +99,7 @@ describe('AdminAiChat', () => {
     });
     const user = userEvent.setup();
     render(<AdminAiChat />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await screen.findByText('aiChat.conversationLoadError');
     const composer = screen.getByRole('textbox', { name: 'aiChat.placeholder' });
     await user.type(composer, 'Unsent follow-up');
@@ -124,7 +125,7 @@ describe('AdminAiChat', () => {
     });
     const user = userEvent.setup();
     render(<AdminAiChat />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await screen.findByText('aiChat.historyLoadError');
     await user.click(screen.getByRole('button', { name: 'aiChat.retryLoad' }));
     await screen.findByRole('button', { name: 'Recovered chat' });
@@ -140,10 +141,9 @@ describe('AdminAiChat', () => {
       if (String(input) === '/api/ai/conversations') return chatsResponse;
       return new Response('{}', { status: 200 });
     });
-    const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     expect(await screen.findByText('aiChat.loadingChats')).toBeInTheDocument();
     resolveChats?.(new Response(JSON.stringify({ conversations: [] }), { status: 200 }));
     expect(await screen.findByText('aiChat.noChats')).toBeInTheDocument();
@@ -185,7 +185,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     expect(await screen.findByText('aiChat.jobLabels.ai_categorization')).toBeInTheDocument();
     expect(screen.getByText('40/100 · classifying products')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'aiChat.cancel' }));
@@ -247,7 +247,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     expect(await screen.findByText('aiChat.jobLabels.ai_categorization')).toBeInTheDocument();
     expect(screen.queryByText('aiChat.jobLabels.ai_content')).not.toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();
@@ -298,7 +298,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.click(await screen.findByRole('button', { name: 'aiChat.cancel' }));
 
     const cancelCall = vi
@@ -330,7 +330,7 @@ it('preserves an unsent draft when searching saved conversations', async () => {
   );
   const user = userEvent.setup();
   render(<AdminAiChat />);
-  await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+  openAdminAiChat();
   await screen.findByText('Saved answer');
   const composer = screen.getByRole('textbox', { name: 'aiChat.placeholder' });
   await user.type(composer, 'Unsent draft');
@@ -405,7 +405,7 @@ it.each([0, 5])(
     );
     const user = userEvent.setup();
     render(<AdminAiChat />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await screen.findByText('Saved answer');
     await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'A new turn');
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));

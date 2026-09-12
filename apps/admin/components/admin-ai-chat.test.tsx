@@ -2,8 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ADMIN_AI_OPEN_EVENT } from '../lib/admin-ai-events';
 import { AdminAiChat } from './admin-ai-chat';
+import { openAdminAiChat } from './admin-ai-chat.test-helpers';
 import { ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY } from './ai-chat/use-ai-chat';
 import { ADMIN_AI_MODEL_STORAGE_KEY } from './ai-chat/use-ai-chat';
 import { ADMIN_AI_REASONING_EFFORT_STORAGE_KEY } from './ai-chat/use-ai-chat';
@@ -83,14 +83,12 @@ describe('AdminAiChat', () => {
     );
   });
 
-  it('uses an icon-only mobile launcher and an integrated responsive workspace', async () => {
+  it('opens as an integrated responsive workspace', async () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    const launcher = screen.getByRole('button', { name: 'aiChat.open' });
-    expect(within(launcher).getByText('aiChat.open')).toHaveClass('hidden', 'sm:inline');
-    expect(launcher).toHaveClass('size-12', 'sm:w-auto');
-    await user.click(launcher);
+    expect(screen.queryByRole('button', { name: 'aiChat.open' })).not.toBeInTheDocument();
+    openAdminAiChat();
 
     const dialog = await screen.findByRole('dialog', { name: 'aiChat.title' });
     expect(dialog).toHaveClass('max-w-[76rem]', 'overflow-hidden');
@@ -109,10 +107,32 @@ describe('AdminAiChat', () => {
     expect(within(dialog).getByRole('switch', { name: 'aiChat.autoAccept' })).toBeInTheDocument();
   });
 
+  it('uses a full-screen workspace automatically when the viewport is narrow', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    );
+    render(<AdminAiChat />);
+
+    openAdminAiChat();
+
+    const dialog = await screen.findByRole('dialog', { name: 'aiChat.title' });
+    expect(dialog).toHaveAttribute('data-automatic-full-screen', 'true');
+    expect(dialog).toHaveAttribute('data-full-screen', 'true');
+    expect(dialog.parentElement).toHaveClass('h-full');
+    expect(
+      within(dialog).queryByRole('button', { name: 'aiChat.fullScreen' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('opens from a contextual workspace event', async () => {
     render(<AdminAiChat />);
 
-    act(() => window.dispatchEvent(new CustomEvent(ADMIN_AI_OPEN_EVENT)));
+    openAdminAiChat();
 
     expect(await screen.findByRole('dialog', { name: 'aiChat.title' })).toBeInTheDocument();
     await waitFor(() =>
@@ -154,7 +174,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat permissions={['products_write']} />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.click(await screen.findByRole('button', { name: 'aiChat.downloadArtifact' }));
 
     expect(open).toHaveBeenCalledWith(
@@ -171,7 +191,7 @@ describe('AdminAiChat', () => {
         <AdminAiChat permissions={['analytics_manage']} />
       </AdminAiSurfaceProvider>,
     );
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     const suggestion = await screen.findByRole('button', {
       name: 'aiChat.surfaceSuggestions.summarizeCurrentAnalytics',
     });
@@ -200,7 +220,7 @@ describe('AdminAiChat', () => {
   it('sends from the keyboard and renders the response as a conversation', async () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     const composer = await screen.findByRole('textbox', { name: 'aiChat.placeholder' });
     await user.type(composer, 'Find missing Arabic titles');
     fireEvent.keyDown(composer, { key: 'Enter' });
@@ -222,7 +242,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'Audit orders');
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
     const helpful = await screen.findByRole('button', { name: 'aiChat.helpful' });
@@ -236,11 +256,10 @@ describe('AdminAiChat', () => {
     });
   });
 
-  it('resets an unavailable saved provider route to a supported model', async () => {
+  it('resets an unavailable saved provider route to a supported model', () => {
     window.localStorage.setItem(ADMIN_AI_MODEL_STORAGE_KEY, 'deepseek-v4-flash-fast');
-    const user = userEvent.setup();
     render(<AdminAiChat modelIds={['deepseek-v4-flash', 'gpt-5.6-luna']} />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     const model = screen.getByRole('combobox', { name: 'aiChat.model' });
     expect(model).toHaveValue('gpt-5.6-luna');
     expect(within(model).getAllByRole('option')).toHaveLength(2);
@@ -250,7 +269,7 @@ describe('AdminAiChat', () => {
   it('persists model and reasoning choices and sends them with the next request', async () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
 
     const model = await screen.findByRole('combobox', { name: 'aiChat.model' });
     const effort = screen.getByRole('combobox', { name: 'aiChat.reasoningEffort' });
@@ -316,7 +335,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Suggest a discount',
@@ -360,7 +379,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Verify this proposal',
@@ -398,7 +417,7 @@ describe('AdminAiChat', () => {
     });
     const user = userEvent.setup();
     render(<AdminAiChat />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Summarize performance',
