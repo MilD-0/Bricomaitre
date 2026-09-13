@@ -97,6 +97,7 @@ export function useCheckoutState({
   const viewedRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const focusInvalidRef = useRef(false);
+  const initialCheckoutFieldsRef = useRef(checkoutFields);
   useEffect(() => {
     if (!focusInvalidRef.current || busy) return;
     const field = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
@@ -108,6 +109,7 @@ export function useCheckoutState({
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- Checkout persistence must hydrate before the customer can submit the form. */
+    const initialCheckoutFields = initialCheckoutFieldsRef.current;
     const savedAttempt = readPendingCheckout(window.localStorage);
     setCartMode(savedAttempt?.cartMode ?? (directItem ? 'direct' : 'cart'));
     if (savedAttempt) setItems(savedAttempt.items ?? []);
@@ -142,7 +144,7 @@ export function useCheckoutState({
           delivery: savedAttempt.payload.delivery === 1 ? ('office' as const) : ('home' as const),
         }
       : savedDraft
-        ? sanitizeCheckoutFields(savedDraft, checkoutFields)
+        ? sanitizeCheckoutFields(savedDraft, initialCheckoutFields)
         : null;
     if (restored) {
       const validCity =
@@ -175,7 +177,11 @@ export function useCheckoutState({
           window.localStorage.getItem('bric:cart:delivery-estimate:v1') ?? 'null',
         ) as { wilayaId?: unknown; delivery?: unknown } | null;
         const estimatedState = Number(estimate?.wilayaId);
-        if (checkoutFields.state.active && Number.isInteger(estimatedState) && estimatedState > 0) {
+        if (
+          initialCheckoutFields.state.active &&
+          Number.isInteger(estimatedState) &&
+          estimatedState > 0
+        ) {
           setState(estimatedState);
           setDelivery(
             estimate?.delivery === 'office' && hasCheckoutStopDesk(catalog, estimatedState)
@@ -203,15 +209,7 @@ export function useCheckoutState({
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     void prepareHaptics();
-  }, [
-    catalog,
-    directItem,
-    labels.cartUpdated,
-    labels.submitError,
-    labels.rateLimit,
-    locale,
-    checkoutFields,
-  ]);
+  }, [catalog, directItem, labels.cartUpdated, labels.submitError, labels.rateLimit, locale]);
 
   useEffect(() => {
     if (!retryAt) return;

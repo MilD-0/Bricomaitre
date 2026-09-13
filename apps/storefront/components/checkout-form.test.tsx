@@ -206,28 +206,29 @@ describe('CheckoutForm', () => {
     });
   });
 
-  it('adopts current requirements after a server rejection and lets the customer correct them', async () => {
-    const fields = setCheckoutField(DEFAULT_CHECKOUT_FIELDS, 'state', 'active', false);
-    const changed = setCheckoutField(fields, 'firstName', 'required', true);
+  it('keeps a resumed direct purchase while adopting changed checkout requirements', async () => {
+    const basket = [{ ...directItem, productId: 99, token: 'different-product' }];
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify(basket));
+    window.localStorage.setItem(
+      'bric:checkout:pending:v1',
+      JSON.stringify({
+        idempotencyKey: 'direct-attempt',
+        payload: { ...order, firstName: null },
+        items: [directItem],
+        cartMode: 'direct',
+        deliveryFee: 500,
+        createdAt: order.createdAt,
+      }),
+    );
     const error = new CheckoutOrderError('checkout_fields', {
       code: 'checkout_fields',
       status: 400,
     });
-    error.checkoutFields = changed;
+    error.checkoutFields = setCheckoutField(DEFAULT_CHECKOUT_FIELDS, 'firstName', 'required', true);
     error.fields = ['firstName'];
     mocks.create.mockRejectedValueOnce(error).mockResolvedValue(order);
-    render(
-      <CheckoutForm
-        locale="ar"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels}
-        checkoutFields={fields}
-      />,
-    );
-    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
-      target: { value: '0550000000' },
-    });
+
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={null} labels={labels} />);
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: /firstName/ })).toHaveAttribute(
@@ -242,6 +243,10 @@ describe('CheckoutForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
     expect(mocks.create.mock.calls[1]![0]).toMatchObject({ firstName: 'Lina' });
+    expect(mocks.create.mock.calls[1]![0].cartProducts).toEqual(['12', '12']);
+    expect(JSON.parse(window.localStorage.getItem('bric:checkout:confirmation:v1')!).cartMode).toBe(
+      'direct',
+    );
   });
 
   it('replays a legacy pending request without displaying an unrelated direct-product quote', async () => {
