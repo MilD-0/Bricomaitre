@@ -84,6 +84,8 @@ for (const [locale, messages] of [
     await page.getByRole('menuitem', { name: messages.actions.edit, exact: true }).click();
     const title = page.getByLabel(messages.labels.productName, { exact: true });
     await title.fill('Mon brouillon · مسودتي');
+    const weight = page.getByLabel(messages.labels.weightKg, { exact: true });
+    await weight.fill('5.2');
     latest = { ...product, title: 'Modification distante', updatedAt: '2026-09-06T12:00:00.000Z' };
     const detailResponse = page.waitForResponse(
       (response) => response.url().endsWith(`/api/products/${product.id}`),
@@ -98,6 +100,7 @@ for (const [locale, messages] of [
     });
     await detailResponse;
     await expect(title).toHaveValue('Mon brouillon · مسودتي');
+    await expect(weight).toHaveValue('5.2');
     await expect(page.getByText(messages.adminWorkspace.products.changedElsewhere)).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`${locale}-product-draft-conflict.png`) });
     await page.getByRole('button', { name: messages.adminWorkspace.products.loadLatest }).click();

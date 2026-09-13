@@ -38,6 +38,7 @@ export const orderLineItems = pgTable(
       precision: 12,
       scale: 2,
     }),
+    weightKgSnapshot: numeric('weight_kg_snapshot', { precision: 12, scale: 3 }),
     purchaseCostSource: text('purchase_cost_source').notNull().default('legacy_not_recorded'),
     quantity: integer('quantity').notNull(),
     discountAmount: numeric('discount_amount', { precision: 12, scale: 2 }).notNull().default('0'),
@@ -50,6 +51,10 @@ export const orderLineItems = pgTable(
     uniqueIndex('order_line_items_order_content_unique').on(t.orderId, t.contentId),
     index('idx_order_line_items_order').on(t.orderId),
     index('idx_order_line_items_product').on(t.productId),
+    check(
+      'order_line_items_weight_nonnegative_check',
+      sql`${t.weightKgSnapshot} is null or ${t.weightKgSnapshot} >= 0`,
+    ),
     check('order_line_items_quantity_positive_check', sql`${t.quantity} > 0`),
     check(
       'order_line_items_amounts_nonnegative_check',

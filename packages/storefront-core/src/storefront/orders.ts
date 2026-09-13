@@ -9,6 +9,7 @@ import {
   orders,
   storefrontOrderIdempotency,
 } from '@bric/db/schema';
+import { getTotalWeightKg } from '../delivery-weight';
 import { readEcotrackDeliveryQuote } from '../ecotrack-support';
 import { assertReviewedOrderPrices, resolveOrderCommercialState } from '../order-commercial';
 import {
@@ -162,7 +163,13 @@ export async function createStorefrontOrder(
   if (payload.state != null) {
     try {
       deliveryQuote = await measureStep('readEcotrackDeliveryFee', reportTiming, () =>
-        readEcotrackDeliveryQuote(db, payload.state, coerceDeliveryType(payload.delivery)),
+        readEcotrackDeliveryQuote(
+          db,
+          payload.state,
+          coerceDeliveryType(payload.delivery),
+          'livraison',
+          getTotalWeightKg(commercial.lines),
+        ),
       );
     } catch {
       degradedCapture = true;

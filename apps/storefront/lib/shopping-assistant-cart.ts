@@ -52,6 +52,7 @@ export function applyShoppingAssistantCartMutations(
         imageUrl: product.imageUrl,
         unitPrice,
         quantity: mutation.quantity,
+        weightKg: product.weightKg == null ? null : Number(product.weightKg),
         availabilityStatus: product.availabilityStatus,
       });
     } else if (mutation.action === 'set_quantity') {

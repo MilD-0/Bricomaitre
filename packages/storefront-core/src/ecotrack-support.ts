@@ -1,3 +1,4 @@
+import { getWeightSurcharge } from './delivery-weight';
 import { and, asc, desc, eq } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
@@ -65,6 +66,7 @@ export async function readEcotrackDeliveryQuote(
   wilayaId: number | null | undefined,
   deliveryType: DeliveryType,
   serviceType: EcotrackServiceType = 'livraison',
+  weightKg = 0,
 ) {
   if (!wilayaId) {
     return null;
@@ -88,7 +90,9 @@ export async function readEcotrackDeliveryQuote(
     return null;
   }
 
-  return deliveryType === 0
-    ? parseNumericAmount(serviceFee.homeFee)
-    : parseNumericAmount(serviceFee.stopDeskFee);
+  const base =
+    deliveryType === 0
+      ? parseNumericAmount(serviceFee.homeFee)
+      : parseNumericAmount(serviceFee.stopDeskFee);
+  return base + getWeightSurcharge(weightKg);
 }

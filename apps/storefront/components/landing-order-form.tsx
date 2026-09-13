@@ -28,6 +28,7 @@ export async function LandingOrderForm({
     imageUrl: product.media[0]?.url ?? null,
     unitPrice: parseProductPrice(product.price),
     quantity: 1,
+    weightKg: product.weightKg == null ? null : Number(product.weightKg),
     availabilityStatus: product.availability.status,
   };
 

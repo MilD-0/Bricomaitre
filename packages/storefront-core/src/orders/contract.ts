@@ -97,6 +97,7 @@ export type OrderProductSummary = {
   title: string;
   titleAr?: string | null;
   unitPrice: number;
+  weightKg?: number | null;
   quantity: number;
   lineTotal: number;
   thumbnailUrl: string | null;

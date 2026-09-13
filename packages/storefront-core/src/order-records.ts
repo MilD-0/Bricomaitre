@@ -35,6 +35,7 @@ export type OrderLineSnapshot = {
   rawValue: string;
   title: string;
   effectiveUnitPrice: number;
+  weightKg?: number | null;
   quantity: number;
   lineTotal: number;
   thumbnailUrl: string | null;
@@ -104,6 +105,7 @@ export async function getOrderProductLookup(
             rawValue: orderLineItems.rawValue,
             title: orderLineItems.titleSnapshot,
             effectiveUnitPrice: orderLineItems.effectiveUnitPrice,
+            weightKg: orderLineItems.weightKgSnapshot,
             quantity: orderLineItems.quantity,
             lineTotal: orderLineItems.lineTotal,
             thumbnailUrl: orderLineItems.thumbnailUrl,
@@ -142,6 +144,7 @@ export async function getOrderProductLookup(
       rawValue: line.rawValue,
       title: line.title,
       effectiveUnitPrice: parseNumericAmount(line.effectiveUnitPrice),
+      weightKg: line.weightKg == null ? null : Number(line.weightKg),
       quantity: line.quantity,
       lineTotal: parseNumericAmount(line.lineTotal),
       thumbnailUrl: line.thumbnailUrl,
@@ -177,6 +180,7 @@ export function toOrderRecord(
             title: line.title,
             titleAr: catalog?.titleAr ?? null,
             unitPrice: line.effectiveUnitPrice,
+            weightKg: line.weightKg == null ? null : Number(line.weightKg),
             quantity: line.quantity,
             lineTotal: line.lineTotal,
             thumbnailUrl: line.thumbnailUrl,

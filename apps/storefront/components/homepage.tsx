@@ -178,6 +178,8 @@ function EditorialCards({
                           : card.product.title,
                       imageUrl: card.product.images[0] ?? null,
                       unitPrice: card.product.price ? parseProductPrice(card.product.price) : 0,
+                      weightKg:
+                        card.product.weightKg == null ? null : Number(card.product.weightKg),
                       availabilityStatus: card.product.availabilityStatus,
                     }}
                   />

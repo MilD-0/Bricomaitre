@@ -4,6 +4,22 @@ import { toProductMutationValues } from './product-mutations';
 import { productPayloadSchema } from './products';
 
 describe('product mutation values', () => {
+  it('distinguishes an omitted weight from explicitly clearing it', async () => {
+    const db = {
+      query: {
+        products: { findFirst: vi.fn().mockResolvedValue(undefined) },
+        productSlugHistory: { findFirst: vi.fn().mockResolvedValue(undefined) },
+      },
+    } as never;
+    const payload = { title: 'Tool', price: 100 };
+    const omitted = await toProductMutationValues(db, productPayloadSchema.parse(payload));
+    expect(omitted).not.toHaveProperty('weightKg');
+    const cleared = await toProductMutationValues(
+      db,
+      productPayloadSchema.parse({ ...payload, weightKg: null }),
+    );
+    expect(cleared.weightKg).toBeNull();
+  });
   it('resolves a slug and formats every commercial amount for persistence', async () => {
     const productQuery = vi.fn().mockResolvedValueOnce({ id: 1 }).mockResolvedValue(undefined);
     const historicalQuery = vi
@@ -24,6 +40,7 @@ describe('product mutation values', () => {
         price: 12.3,
         oldPrice: 14,
         purchasePrice: 9.5,
+        weightKg: 5.2,
         inventoryQuantity: 8,
       }),
     );
@@ -34,6 +51,7 @@ describe('product mutation values', () => {
       price: '12.30',
       oldPrice: '14.00',
       purchasePrice: '9.50',
+      weightKg: '5.200',
       inventoryQuantity: 8,
     });
   });

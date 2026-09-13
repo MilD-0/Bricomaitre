@@ -9,6 +9,7 @@ export const cartItemSchema = z.object({
   promoCode: z.string().trim().min(1).max(120).nullable().optional(),
   imageUrl: z.string().nullable(),
   unitPrice: z.number().min(0),
+  weightKg: z.number().nonnegative().nullable().optional(),
   quantity: z.number().int().min(1).max(20),
   availabilityStatus: z.string(),
 });
@@ -152,6 +153,7 @@ export async function reconcileCartWithCatalog(
         title: string;
         titleAr?: string | null;
         price: string | null;
+        weightKg?: string | null;
         inStock: boolean;
         availabilityStatus: string;
         images: string[];
@@ -161,6 +163,7 @@ export async function reconcileCartWithCatalog(
   const products = new Map((payload.items ?? []).map((product) => [product.id, product]));
   const removedProductIds: number[] = [];
   const priceChangedProductIds: number[] = [];
+  let weightChanged = false;
   const items = current.flatMap((item) => {
     const product = products.get(item.productId);
     const promo =
@@ -176,6 +179,8 @@ export async function reconcileCartWithCatalog(
       removedProductIds.push(item.productId);
       return [];
     }
+    const weightKg = product.weightKg == null ? null : Number(product.weightKg);
+    if ((weightKg ?? 0) !== (item.weightKg ?? 0)) weightChanged = true;
     if (unitPrice !== item.unitPrice) priceChangedProductIds.push(item.productId);
     return [
       {
@@ -184,6 +189,7 @@ export async function reconcileCartWithCatalog(
         title: locale === 'ar' && product.titleAr?.trim() ? product.titleAr : product.title,
         ...(item.promoCode || promo ? { promoCode: promo?.code ?? null } : {}),
         unitPrice,
+        weightKg,
         imageUrl: product.images[0] ?? null,
         availabilityStatus: product.availabilityStatus,
       },
@@ -195,6 +201,7 @@ export async function reconcileCartWithCatalog(
     removedProductIds,
     priceChangedProductIds,
     changed: JSON.stringify(items) !== JSON.stringify(current),
-    requiresReview: removedProductIds.length > 0 || priceChangedProductIds.length > 0,
+    requiresReview:
+      weightChanged || removedProductIds.length > 0 || priceChangedProductIds.length > 0,
   };
 }

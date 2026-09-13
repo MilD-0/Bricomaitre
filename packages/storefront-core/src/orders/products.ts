@@ -72,6 +72,7 @@ export function buildOrderProductSummaries(
         title: resolved?.title ?? rawValue,
         ...(resolved?.titleAr !== undefined ? { titleAr: resolved.titleAr } : {}),
         unitPrice: resolved?.unitPrice ?? 0,
+        ...(resolved?.weightKg !== undefined ? { weightKg: resolved.weightKg } : {}),
         quantity: 0,
         lineTotal: 0,
         thumbnailUrl: resolved?.thumbnailUrl ?? null,

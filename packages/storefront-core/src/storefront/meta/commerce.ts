@@ -39,6 +39,7 @@ export async function resolveMetaCommerceLines(
       title: products.title,
       price: products.price,
       purchasePrice: products.purchasePrice,
+      weightKg: products.weightKg,
       images: products.images,
     })
     .from(products)
@@ -69,6 +70,7 @@ export async function resolveMetaCommerceLines(
         effectiveUnitPrice: roundCurrency(lineTotal / quantity),
         unitPurchasePrice:
           row.purchasePrice == null ? null : roundCurrency(parseNumericAmount(row.purchasePrice)),
+        weightKg: row.weightKg == null ? null : Number(row.weightKg),
         quantity,
         discountAmount: roundCurrency(discountAmount),
         lineTotal,
@@ -126,6 +128,7 @@ export async function resolveOrderLineSnapshots(
       title: products.title,
       price: products.price,
       purchasePrice: products.purchasePrice,
+      weightKg: products.weightKg,
       images: products.images,
     })
     .from(products)
@@ -189,6 +192,7 @@ export async function resolveOrderLineSnapshots(
         effectiveUnitPrice: roundCurrency(lineTotal / quantity),
         unitPurchasePrice:
           row.purchasePrice == null ? null : roundCurrency(parseNumericAmount(row.purchasePrice)),
+        weightKg: row.weightKg == null ? null : Number(row.weightKg),
         quantity,
         discountAmount: roundCurrency(discountAmount),
         lineTotal,
@@ -219,6 +223,7 @@ export async function replaceOrderLineSnapshots(
         line.unitPurchasePrice == null ? null : line.unitPurchasePrice.toFixed(2),
       purchaseCostSource:
         line.unitPurchasePrice == null ? 'missing_at_snapshot' : 'product_catalog_snapshot',
+      weightKgSnapshot: line.weightKg == null ? null : line.weightKg.toFixed(3),
       quantity: line.quantity,
       discountAmount: line.discountAmount.toFixed(2),
       lineTotal: line.lineTotal.toFixed(2),
@@ -258,6 +263,7 @@ export function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): 
       row.unitPurchasePriceSnapshot == null
         ? null
         : parseNumericAmount(row.unitPurchasePriceSnapshot),
+    weightKg: row.weightKgSnapshot == null ? null : Number(row.weightKgSnapshot),
     quantity: row.quantity,
     discountAmount: parseNumericAmount(row.discountAmount),
     lineTotal: parseNumericAmount(row.lineTotal),

@@ -64,6 +64,7 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
         unitPrice: promo?.promoPrice ?? parseProductPrice(product.price),
         ...(promo ? { promoCode: promo.code } : {}),
         quantity,
+        weightKg: product.weightKg == null ? null : Number(product.weightKg),
         availabilityStatus: product.availability.status,
       }
     : null;

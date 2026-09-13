@@ -9,6 +9,17 @@ import {
 } from './products';
 
 describe('productPayloadSchema', () => {
+  it('accepts optional weights in kilos with gram precision', () => {
+    const payload = { title: 'Tool', price: 1200 };
+    expect(productPayloadSchema.parse(payload).weightKg).toBeUndefined();
+    for (const weightKg of [null, 0, 5.2, 0.001]) {
+      expect(productPayloadSchema.parse({ ...payload, weightKg }).weightKg).toBe(weightKg);
+    }
+    expect(productPayloadSchema.parse({ ...payload, weightKg: '5.200' }).weightKg).toBe(5.2);
+    for (const weightKg of [-1, Infinity, NaN, 0.0001, 1e12, '', 'heavy', true, []]) {
+      expect(productPayloadSchema.safeParse({ ...payload, weightKg }).success).toBe(false);
+    }
+  });
   it('accepts a valid minimal payload and applies defaults', () => {
     const parsed = productPayloadSchema.parse({
       title: 'Test product',

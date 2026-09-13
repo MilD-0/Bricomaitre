@@ -251,6 +251,7 @@ export async function ProductPageContent({ params, searchParams }: ProductPagePr
               imageUrl,
               unitPrice: price,
               ...(promo ? { promoCode: promo.code } : {}),
+              weightKg: product.weightKg == null ? null : Number(product.weightKg),
               availabilityStatus: product.availability.status,
             }}
             analytics={analytics}

@@ -57,6 +57,7 @@ describe('storefront product detail contract', () => {
       barcode: null,
       price: '1500.00',
       oldPrice: '1750.00',
+      weightKg: null,
       inStock: true,
       availabilityStatus: 'in_stock',
       brandId: 2,

@@ -25,6 +25,13 @@ const catalog = {
 };
 
 describe('checkout domain', () => {
+  it('adds rounded-up excess weight to home and office delivery, retaining pending quotes', () => {
+    expect(getCheckoutDeliveryFee(catalog, 16, 'home', 5)).toBe(600);
+    expect(getCheckoutDeliveryFee(catalog, 16, 'home', 5.2)).toBe(650);
+    expect(getCheckoutDeliveryFee(catalog, 16, 'office', 6.2)).toBe(550);
+    expect(getCheckoutDeliveryFee(catalog, null, 'home', 8)).toBeNull();
+    expect(getCheckoutDeliveryFee({ ...catalog, serviceFees: [] }, 16, 'home', 8)).toBeNull();
+  });
   it('keeps the address optional for home and office delivery while validating other fields', () => {
     const form = {
       phoneNumber1: ' 0550 12 34 56 ',
