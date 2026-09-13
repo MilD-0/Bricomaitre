@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       title: products.title,
       slug: products.slug,
       price: products.price,
+      weightKg: products.weightKg,
       images: products.images,
       sku: products.sku,
       barcode: products.barcode,

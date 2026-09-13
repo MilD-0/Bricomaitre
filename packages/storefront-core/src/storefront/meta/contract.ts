@@ -46,6 +46,7 @@ export type MetaCommerceLine = {
   originalUnitPrice: number;
   effectiveUnitPrice: number;
   unitPurchasePrice: number | null;
+  weightKg?: number | null;
   quantity: number;
   discountAmount: number;
   lineTotal: number;

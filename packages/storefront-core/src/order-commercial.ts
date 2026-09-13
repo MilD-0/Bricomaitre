@@ -2,6 +2,7 @@ import { eq, type InferInsertModel } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import { orderLineItems, orders } from '@bric/db/schema';
+import { getTotalWeightKg } from './delivery-weight';
 import { parseNumericAmount } from './orders-support';
 
 import { resolveOrderLineSnapshots, type MetaCommerceLine } from './storefront/meta';
@@ -34,11 +35,14 @@ export class UnorderableCartError extends Error {
 }
 
 export function assertReviewedOrderPrices(
-  commercial: Pick<ResolvedOrderCommercialState, 'promo' | 'productSubtotal' | 'productPromos'>,
+  commercial: Pick<ResolvedOrderCommercialState, 'promo' | 'productSubtotal' | 'productPromos'> & {
+    lines?: ResolvedOrderCommercialState['lines'];
+  },
   review: {
     promoCode?: string | null;
     productPromos?: Array<{ productId: number; code: string }>;
     expectedProductSubtotal?: number;
+    expectedWeightKg?: number;
   },
 ) {
   if (
@@ -52,6 +56,8 @@ export function assertReviewedOrderPrices(
             ),
         )
       : review.promoCode && !commercial.promo) ||
+    (review.expectedWeightKg !== undefined &&
+      Math.abs(review.expectedWeightKg - getTotalWeightKg(commercial.lines ?? [])) > 0.0005) ||
     (review.expectedProductSubtotal !== undefined &&
       Math.abs(review.expectedProductSubtotal - commercial.productSubtotal) > 0.005)
   ) {
@@ -158,4 +164,15 @@ export async function readOrderProductSubtotal(
     .from(orderLineItems)
     .where(eq(orderLineItems.orderId, order.id));
   return roundCurrency(rows.reduce((sum, row) => sum + parseNumericAmount(row.lineTotal), 0));
+}
+
+export async function readOrderWeightKg(db: Executor, orderId: number) {
+  const lines = await db
+    .select({
+      weightKg: orderLineItems.weightKgSnapshot,
+      quantity: orderLineItems.quantity,
+    })
+    .from(orderLineItems)
+    .where(eq(orderLineItems.orderId, orderId));
+  return getTotalWeightKg(lines);
 }

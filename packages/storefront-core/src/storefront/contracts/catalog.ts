@@ -62,6 +62,7 @@ export const storefrontProductResponseItemSchema = z.object({
   barcode: z.string().nullable(),
   price: z.string().nullable(),
   oldPrice: z.string().nullable(),
+  weightKg: z.string().nullable().optional(),
   inStock: z.boolean(),
   availabilityStatus: z.string(),
   brandId: z.number().int().nullable(),
@@ -138,6 +139,7 @@ export const storefrontProductDetailResponseItemSchema = z.object({
   barcode: z.string().nullable(),
   price: z.string(),
   oldPrice: z.string().nullable(),
+  weightKg: z.string().nullable().optional(),
   availability: z.object({
     status: z.string(),
     inStock: z.boolean(),

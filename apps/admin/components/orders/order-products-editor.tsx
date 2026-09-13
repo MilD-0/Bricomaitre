@@ -19,6 +19,7 @@ export type ProductSearchItem = {
   title: string;
   slug?: string | null;
   price: number | string;
+  weightKg?: number | string | null;
   brandId?: number | null;
   images: string[];
   sku?: string | null;
@@ -36,6 +37,7 @@ export type EditableOrderProduct = {
   slug?: string | null;
   title: string;
   unitPrice: number;
+  weightKg?: number | null;
   thumbnailUrl: string | null;
   missing: boolean;
 };
@@ -64,6 +66,7 @@ export function buildEditableProducts(
       ...(product?.slug !== undefined ? { slug: product.slug } : {}),
       title: product?.title ?? rawValue,
       unitPrice: product?.unitPrice ?? 0,
+      weightKg: product?.weightKg ?? null,
       thumbnailUrl: product?.thumbnailUrl ?? null,
       missing: product?.missing ?? true,
     };
@@ -85,6 +88,7 @@ export function summarizeEditableProducts(items: EditableOrderProduct[]) {
         ...(product.slug !== undefined ? { slug: product.slug } : {}),
         title: product.title,
         unitPrice: product.unitPrice,
+        weightKg: product.weightKg ?? null,
         thumbnailUrl: product.thumbnailUrl,
         missing: product.missing,
       };

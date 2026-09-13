@@ -39,6 +39,7 @@ it('allows Orders-only staff to find bounded product identity without catalog ac
     'title',
     'slug',
     'price',
+    'weightKg',
     'images',
     'sku',
     'barcode',

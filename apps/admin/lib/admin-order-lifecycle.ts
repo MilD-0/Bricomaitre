@@ -7,6 +7,7 @@ import {
   createPublicOrderToken,
   createPublicOrderTokenExpiry,
 } from '@bric/storefront-core/order-access';
+import { getTotalWeightKg } from '@bric/storefront-core/delivery-weight';
 import { resolveOrderCommercialState } from '@bric/storefront-core/order-commercial';
 import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
 import { insertCanonicalOrder } from '@bric/storefront-core/order-write';
@@ -59,7 +60,13 @@ export async function createAdminOrder(
       data.state == null ? Promise.resolve(null) : readEcotrackCatalog(tx),
     ]);
     const deliveryFee = catalog
-      ? resolveEcotrackDeliveryFee(catalog, data.state, data.delivery)
+      ? resolveEcotrackDeliveryFee(
+          catalog,
+          data.state,
+          data.delivery,
+          'livraison',
+          getTotalWeightKg(commercial.lines),
+        )
       : 0;
     const degraded =
       commercial.lines.length === 0 ||

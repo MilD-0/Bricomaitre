@@ -11,9 +11,11 @@ import {
   normalizeAlgeriaPhone,
 } from '@bric/storefront-core/meta';
 import {
+  readOrderWeightKg,
   readOrderProductSubtotal,
   resolveOrderCommercialState,
 } from '@bric/storefront-core/order-commercial';
+import { getTotalWeightKg, getWeightSurcharge } from '@bric/storefront-core/delivery-weight';
 import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
 
 import { mutateEntityWithHistoryTransaction, type ActionActor } from './action-history';
@@ -206,9 +208,6 @@ export async function updateAdminOrder(
         : null;
     const nextDelivery = coerceDeliveryType(changes.delivery ?? existing.delivery);
     const nextState = changes.state !== undefined ? changes.state : existing.state;
-    const nextDeliveryFee = catalog
-      ? resolveEcotrackDeliveryFee(catalog, nextState, nextDelivery)
-      : Number(existing.deliveryFee ?? 0);
     const commercial =
       changes.cartProducts === undefined
         ? null
@@ -217,6 +216,22 @@ export async function updateAdminOrder(
             promoCode: existing.promoCode,
             productPromos: existing.productPromos,
           });
+    const nextDeliveryFee = catalog
+      ? resolveEcotrackDeliveryFee(
+          catalog,
+          nextState,
+          nextDelivery,
+          'livraison',
+          commercial ? getTotalWeightKg(commercial.lines) : await readOrderWeightKg(tx, orderId),
+        )
+      : commercial
+        ? Math.max(
+            0,
+            Number(existing.deliveryFee ?? 0) +
+              getWeightSurcharge(getTotalWeightKg(commercial.lines)) -
+              getWeightSurcharge(await readOrderWeightKg(tx, orderId)),
+          )
+        : Number(existing.deliveryFee ?? 0);
     const persistedSubtotal =
       commercial === null
         ? await readOrderProductSubtotal(tx, existing)
@@ -264,12 +279,7 @@ export async function updateAdminOrder(
         if (changes.state !== undefined) update.state = changes.state;
         if (changes.city !== undefined) update.city = changes.city;
         if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
-        if (
-          catalog &&
-          (changes.delivery !== undefined ||
-            changes.state !== undefined ||
-            changes.city !== undefined)
-        ) {
+        if (catalog || commercial) {
           update.deliveryFee = nextDeliveryFee.toFixed(2);
           update.productSubtotal = persistedSubtotal.toFixed(2);
           update.totalAmount = (

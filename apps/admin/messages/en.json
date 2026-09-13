@@ -265,6 +265,8 @@
     "developer": "Developer"
   },
   "labels": {
+    "weightKg": "Weight in kg, optional",
+    "weightKgHint": "Delivery adds 50 DA per started kilo above 5 kg for the whole order.",
     "currentRole": "Current role: {role}",
     "opsAccess": "Ops controls and logs are available.",
     "roles": "Roles",

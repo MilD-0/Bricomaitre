@@ -1,3 +1,4 @@
+import { getWeightSurcharge } from '@bric/storefront-core/delivery-weight';
 import { type EcotrackCatalogRecord } from '@bric/storefront-core/ecotrack-support';
 import { parseNumericAmount, type DeliveryType } from '../orders';
 import { type EcotrackFeeLookup, type EcotrackServiceType } from './contract';
@@ -28,6 +29,7 @@ export function resolveEcotrackDeliveryFee(
   wilayaId: number | null | undefined,
   deliveryType: DeliveryType,
   serviceType: EcotrackServiceType = 'livraison',
+  weightKg = 0,
 ) {
   if (!wilayaId) {
     return 0;
@@ -41,7 +43,9 @@ export function resolveEcotrackDeliveryFee(
     return 0;
   }
 
-  return deliveryType === 0
-    ? parseNumericAmount(serviceFee.homeFee)
-    : parseNumericAmount(serviceFee.stopDeskFee);
+  const base =
+    deliveryType === 0
+      ? parseNumericAmount(serviceFee.homeFee)
+      : parseNumericAmount(serviceFee.stopDeskFee);
+  return base + getWeightSurcharge(weightKg);
 }

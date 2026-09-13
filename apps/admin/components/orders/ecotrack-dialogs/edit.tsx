@@ -1,4 +1,5 @@
 'use client';
+import { getTotalWeightKg } from '@bric/storefront-core/delivery-weight';
 import { Save, Send } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { resolveEcotrackDeliveryFee } from '../../../lib/order-presentation';
@@ -63,6 +64,7 @@ export function EcotrackEditDialog({
         delivery,
         nextState,
         parseNumericAmount(current.deliveryFeeInput),
+        getTotalWeightKg(summarizeEditableProducts(current.editableProducts)),
       ),
     ),
   });
@@ -250,6 +252,7 @@ export function EcotrackEditDialog({
                     productId: product.id,
                     title: product.title,
                     unitPrice: parseNumericAmount(product.price),
+                    weightKg: product.weightKg == null ? null : Number(product.weightKg),
                     thumbnailUrl: product.images[0] ?? null,
                     missing: false,
                   },

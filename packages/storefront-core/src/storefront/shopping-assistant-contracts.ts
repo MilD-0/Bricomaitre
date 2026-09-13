@@ -90,6 +90,7 @@ export const shoppingAssistantProductSchema = z
     characteristicsAr: z.array(z.string().trim().min(1).max(300)).max(16).default([]),
     price: z.string().nullable(),
     oldPrice: z.string().nullable(),
+    weightKg: z.string().nullable().optional(),
     inStock: z.boolean(),
     availabilityStatus: z.string(),
     imageUrl: z.string().nullable(),

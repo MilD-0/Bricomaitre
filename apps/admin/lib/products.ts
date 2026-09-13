@@ -60,6 +60,11 @@ export const productPayloadSchema = z
     price: z.coerce.number().min(0),
     oldPrice: nullableNumber,
     purchasePrice: nullableNumber,
+    weightKg: z
+      .union([z.number(), z.string().trim().min(1).pipe(z.coerce.number())])
+      .pipe(z.number().nonnegative().max(999999999.999).multipleOf(0.001))
+      .optional()
+      .nullable(),
 
     active: z.boolean().default(true),
     inStock: z.boolean().default(true),
