@@ -26,6 +26,7 @@
       "project": [
         "**/*.{ts,tsx,mjs,css}!",
         "!**/*.{test,spec}.{ts,tsx}!",
+        "!**/*.test-helpers.{ts,tsx}!",
         "!test/**!",
         "!tests/**!"
       ],
