@@ -172,11 +172,18 @@ export function createQueueWorker<T>(
     }
 
     if (!isJobCancellationError(error)) {
+      const snapshot = await getJobSnapshot(queueName, job.id).catch(() => null);
       Sentry.withScope((scope: Sentry.Scope) => {
         scope.setTag('service', 'runtime');
         scope.setTag('runtime_component', 'queue_worker');
         scope.setTag('queue', queueName);
         scope.setTag('job_id', job.id);
+        if (snapshot?.resultSummary?.diagnostics) {
+          scope.setContext(
+            'job_diagnostics',
+            snapshot.resultSummary.diagnostics as Record<string, unknown>,
+          );
+        }
         scope.setTag('job_name', job.name);
         const jobMeta = (
           job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }

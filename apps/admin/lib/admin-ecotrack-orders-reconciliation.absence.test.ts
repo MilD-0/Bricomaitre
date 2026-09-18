@@ -356,11 +356,25 @@ describe('admin ecotrack shipment reconciliation', () => {
   it('keeps a complete scheduled upstream outage visible as a failed job', async () => {
     const { db } = createDbMock([createShipmentRow(11), createShipmentRow(12)]);
     getDbMock.mockReturnValue(db);
-    getEcotrackOrdersStatusMock.mockRejectedValue(new Error('upstream unavailable'));
+    getEcotrackOrdersStatusMock.mockRejectedValue(
+      new Error('ECOTRACK request failed for /get/orders/status: 503 unavailable'),
+    );
     getEcotrackTrackingsInfoMock.mockResolvedValue({ data: new Map() });
 
-    await expect(syncEcotrackShipmentStates()).rejects.toThrow(
+    const onSummary = vi.fn().mockResolvedValue(undefined);
+    await expect(syncEcotrackShipmentStates({ onSummary })).rejects.toThrow(
       'ECOTRACK shipment sync failed for all 2 candidates.',
+    );
+    expect(onSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total: 2,
+        failed: 2,
+        batchFailed: 2,
+        failureCount: 1,
+        failures: [
+          expect.objectContaining({ stage: 'status', status: 503, batch: 1, orderIds: [11, 12] }),
+        ],
+      }),
     );
     expect(getEcotrackMajMock).not.toHaveBeenCalled();
   });

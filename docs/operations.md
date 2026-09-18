@@ -135,3 +135,27 @@ The main operational sources are
 [`compose.prod.yml`](../ops/docker/compose.prod.yml), and
 [`ops/scripts`](../ops/scripts). They are authoritative when this explanation
 and executable behavior diverge.
+
+### ECOTRACK sync failures
+
+Catalog locations do not imply delivery tariff availability. A successful sync
+records `unpricedWilayaIds` in its job summary and action history. Quotes for those
+locations remain pending. Sync rejects empty catalogs and the loss of previously
+priced wilayas, lists the lost IDs in the error, and preserves the saved catalog.
+A confirmed carrier withdrawal of coverage needs an explicit catalog change;
+repeated retries will not remove a previously available tariff automatically.
+
+Shipment reconciliation records counters and up to 20 failure samples before
+returning or throwing. Each sample identifies the provider, endpoint or persistence
+stage, batch number, affected count, up to 10 internal order IDs, HTTP status,
+SQLSTATE or network code, retry delay when supplied, and source file positions.
+`failureCount` counts failed operations, not shipments; `failuresTruncated` counts
+omitted samples. Two endpoint failures in one batch count as two operations but
+each shipment counts only once in `failed`.
+
+Partial failures emit a Sentry warning and a worker log with the job ID and release.
+Complete failures attach the saved summary as `job_diagnostics` to the queue's
+Sentry exception. Correlate those IDs with Admin job history before its 24-hour
+retention expires. Diagnostics exclude raw carrier responses, request URLs,
+tracking numbers, SQL parameters, and customer contact information. Use the
+internal order IDs for an authorized lookup when more evidence is needed.
