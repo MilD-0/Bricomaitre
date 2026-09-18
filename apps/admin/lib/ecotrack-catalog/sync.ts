@@ -5,13 +5,14 @@ import {
   ecotrackWeightFees,
   ecotrackWilayas,
 } from '@bric/db/schema';
-import { count, desc, eq } from 'drizzle-orm';
+import { count, desc, eq, sql } from 'drizzle-orm';
 import { recordExplicitActionLog, type ActionActor } from '../action-history';
 import {
   assertCompleteEcotrackCatalogSnapshot,
   ECOTRACK_SYNC_ACTOR_NAME,
   type Database,
   type EcotrackSyncResult,
+  type EcotrackCatalogSnapshot,
   type Transaction,
 } from './contract';
 import { fetchEcotrackCatalogSnapshot } from './fetch';
@@ -61,15 +62,30 @@ export async function syncEcotrackCatalog(
   const startedAt = options.now ?? new Date();
   const trigger = options.trigger ?? 'manual';
 
+  let snapshot: EcotrackCatalogSnapshot | undefined;
   try {
-    const snapshot = await fetchEcotrackCatalogSnapshot({
+    snapshot = await fetchEcotrackCatalogSnapshot({
       fetchImpl: options.fetchImpl,
       env: options.env,
     });
-    assertCompleteEcotrackCatalogSnapshot(snapshot);
+    const fetchedSnapshot = snapshot;
+    let unpricedWilayaIds = assertCompleteEcotrackCatalogSnapshot(snapshot);
     const finishedAt = new Date();
 
     await db.transaction(async (tx) => {
+      // Serialize replacement and the comparison against the saved tariff set.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended('ecotrack-catalog-sync', 0))`,
+      );
+      const previousFees = await tx
+        .select({ wilayaId: ecotrackServiceFees.wilayaId })
+        .from(ecotrackServiceFees)
+        .where(eq(ecotrackServiceFees.serviceType, 'livraison'));
+      unpricedWilayaIds = assertCompleteEcotrackCatalogSnapshot(
+        fetchedSnapshot,
+        previousFees.map((fee) => fee.wilayaId),
+      );
+      const snapshot = fetchedSnapshot;
       const beforeCounts = await readCatalogCounts(tx);
       const [previousSuccessfulRun] = await tx
         .select()
@@ -173,6 +189,7 @@ export async function syncEcotrackCatalog(
           startedAt,
           finishedAt,
           errorMessage: null,
+          unpricedWilayaIds,
           rateLimitSnapshot: snapshot.rateLimits,
           previousSuccessfulFinishedAt: previousSuccessfulRun?.finishedAt ?? null,
         },
@@ -182,6 +199,7 @@ export async function syncEcotrackCatalog(
 
     return {
       trigger,
+      unpricedWilayaIds,
       syncedAt: finishedAt.toISOString(),
       requestCount: snapshot.rateLimits.length,
       wilayaCount: snapshot.wilayas.length,
@@ -208,7 +226,8 @@ export async function syncEcotrackCatalog(
         .values({
           trigger,
           status: 'failed',
-          requestCount: 0,
+          rateLimitSnapshot: snapshot?.rateLimits ?? null,
+          requestCount: snapshot?.rateLimits.length ?? 0,
           wilayaCount: 0,
           communeCount: 0,
           serviceFeeCount: 0,
@@ -234,11 +253,11 @@ export async function syncEcotrackCatalog(
           ...beforeCounts,
           trigger,
           status: 'failed',
-          requestCount: 0,
+          requestCount: snapshot?.rateLimits.length ?? 0,
           startedAt,
           finishedAt,
           errorMessage,
-          rateLimitSnapshot: null,
+          rateLimitSnapshot: snapshot?.rateLimits ?? null,
           previousSuccessfulFinishedAt: previousSuccessfulRun?.finishedAt ?? null,
         },
         actor: resolveEcotrackActor(options.actor),

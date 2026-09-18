@@ -6,6 +6,7 @@ import {
 } from '@bric/storefront-core/ecotrack-client';
 import { getDb } from '@bric/db/client';
 
+import { createEcotrackSyncDiagnostics } from './ecotrack-sync-diagnostics';
 import type { ActionActor } from './action-history';
 import { providerRequestOptions } from './ecotrack-shipment-evidence';
 import {
@@ -54,9 +55,12 @@ export async function syncEcotrackShipmentStates(
   options: {
     includeMaj?: boolean;
     actor?: ActionActor | null;
+    onSummary?: (summary: Record<string, unknown>) => Promise<void>;
   } = {},
 ) {
   const db = getDb();
+  const diagnostics = createEcotrackSyncDiagnostics();
+  let batchNumber = 0;
   let total = 0;
   let synced = 0;
   let missing = 0;
@@ -71,20 +75,33 @@ export async function syncEcotrackShipmentStates(
   for await (const batch of shipmentBatches(db)) {
     total += batch.length;
     const trackingNumbers = batch.map((row) => row.trackingNumber);
-    let statusResponse: Awaited<ReturnType<typeof getEcotrackOrdersStatus>>;
-    let trackingResponse: Awaited<ReturnType<typeof getEcotrackTrackingsInfo>>;
-    try {
-      [statusResponse, trackingResponse] = await Promise.all([
-        getEcotrackOrdersStatus(trackingNumbers, 'all', providerRequestOptions(batch[0])),
-        getEcotrackTrackingsInfo(trackingNumbers, providerRequestOptions(batch[0])),
-      ]);
-    } catch {
+    batchNumber += 1;
+    const context = {
+      provider: batch[0].provider === 'emir' ? 'emir' : 'delivro',
+      batch: batchNumber,
+      candidateCount: batch.length,
+      orderIds: batch.map((row) => row.order.id),
+    };
+    const [statusResult, trackingResult] = await Promise.allSettled([
+      getEcotrackOrdersStatus(trackingNumbers, 'all', providerRequestOptions(batch[0])),
+      getEcotrackTrackingsInfo(trackingNumbers, providerRequestOptions(batch[0])),
+    ]);
+    if (statusResult.status === 'rejected') {
+      diagnostics.record(statusResult.reason, { ...context, stage: 'status' });
+    }
+    if (trackingResult.status === 'rejected') {
+      diagnostics.record(trackingResult.reason, { ...context, stage: 'tracking' });
+    }
+    if (statusResult.status === 'rejected' || trackingResult.status === 'rejected') {
       failed += batch.length;
       batchFailed += batch.length;
       continue;
     }
+    const statusResponse = statusResult.value;
+    const trackingResponse = trackingResult.value;
 
     for (const row of batch) {
+      const rowContext = { ...context, candidateCount: 1, orderIds: [row.order.id] };
       const trackingInfo = trackingResponse.data.get(row.trackingNumber) ?? null;
       const rawTrackingInfo =
         trackingResponse.rawData?.get(row.trackingNumber) ?? trackingInfo ?? null;
@@ -113,7 +130,8 @@ export async function syncEcotrackShipmentStates(
               }
               continue;
             }
-          } catch {
+          } catch (error) {
+            diagnostics.record(error, { ...rowContext, stage: 'fallback' });
             failed += 1;
             continue;
           }
@@ -133,7 +151,8 @@ export async function syncEcotrackShipmentStates(
           const majResponse = await getEcotrackMaj(row.trackingNumber, providerRequestOptions(row));
           majEntries = majResponse.data;
           rawMajEntries = majResponse.payload;
-        } catch {
+        } catch (error) {
+          diagnostics.record(error, { ...rowContext, stage: 'maj' });
           // Status and tracking history remain useful when the optional MAJ feed
           // rejects one old or provider-incompatible tracking number.
           majFailed += 1;
@@ -165,17 +184,14 @@ export async function syncEcotrackShipmentStates(
         } else {
           missing += 1;
         }
-      } catch {
+      } catch (error) {
+        diagnostics.record(error, { ...rowContext, stage: 'persist' });
         failed += 1;
       }
     }
   }
 
-  if (total > 0 && synced + missing + retired === 0 && failed > 0) {
-    throw new Error(`ECOTRACK shipment sync failed for all ${failed} candidates.`);
-  }
-
-  return {
+  const summary = {
     total,
     synced,
     missing,
@@ -187,5 +203,12 @@ export async function syncEcotrackShipmentStates(
     failed,
     batchFailed,
     majFailed,
+    ...diagnostics.summary(),
   };
+  // Save evidence even when the job fails completely and has no return value.
+  await options.onSummary?.(summary);
+  if (total > 0 && synced + missing + retired + superseded === 0 && failed > 0) {
+    throw new Error(`ECOTRACK shipment sync failed for all ${failed} candidates.`);
+  }
+  return summary;
 }
