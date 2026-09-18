@@ -192,8 +192,29 @@ describe('storefront transaction boundaries', () => {
       await getPool().query(
         `CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.${column} = '${eventId}' THEN RAISE EXCEPTION 'simulated optional persistence failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER ${functionName} BEFORE INSERT ON ${table} FOR EACH ROW EXECUTE FUNCTION ${functionName}()`,
       );
+      const feeWhere = and(
+        eq(ecotrackServiceFees.wilayaId, 16),
+        eq(ecotrackServiceFees.serviceType, 'livraison'),
+      );
+      const [previousWilaya] = await db
+        .select()
+        .from(ecotrackWilayas)
+        .where(eq(ecotrackWilayas.wilayaId, 16));
+      const [previousFee] = await db.select().from(ecotrackServiceFees).where(feeWhere);
       let orderId: number | undefined;
       try {
+        // A normal commercial order needs a known tariff independently of Meta.
+        await db
+          .insert(ecotrackWilayas)
+          .values({ wilayaId: 16, name: 'Alger' })
+          .onConflictDoNothing();
+        await db
+          .insert(ecotrackServiceFees)
+          .values({ serviceType: 'livraison', wilayaId: 16, homeFee: '500', stopDeskFee: '300' })
+          .onConflictDoUpdate({
+            target: [ecotrackServiceFees.serviceType, ecotrackServiceFees.wilayaId],
+            set: { homeFee: '500', stopDeskFee: '300' },
+          });
         const result = await createStorefrontOrder(db, payload, {
           idempotency: { keyHash, fingerprint, createdAt: claim.createdAt },
           reportEnrichmentError,
@@ -215,6 +236,10 @@ describe('storefront transaction boundaries', () => {
         );
         if (orderId) await db.delete(orders).where(eq(orders.id, orderId));
         await db.delete(products).where(eq(products.id, product!.id));
+        if (previousFee) await db.update(ecotrackServiceFees).set(previousFee).where(feeWhere);
+        else await db.delete(ecotrackServiceFees).where(feeWhere);
+        if (!previousWilaya)
+          await db.delete(ecotrackWilayas).where(eq(ecotrackWilayas.wilayaId, 16));
         await db
           .delete(storefrontOrderIdempotency)
           .where(eq(storefrontOrderIdempotency.keyHash, keyHash));
