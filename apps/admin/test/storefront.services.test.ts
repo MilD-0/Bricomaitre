@@ -225,10 +225,6 @@ describe('storefront transaction boundaries', () => {
         await db
           .delete(storefrontOrderIdempotency)
           .where(eq(storefrontOrderIdempotency.keyHash, keyHash));
-        if (previousFee) await db.update(ecotrackServiceFees).set(previousFee).where(feeWhere);
-        else await db.delete(ecotrackServiceFees).where(feeWhere);
-        if (!previousWilaya)
-          await db.delete(ecotrackWilayas).where(eq(ecotrackWilayas.wilayaId, wilayaId));
       }
     },
   );
