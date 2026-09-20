@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   streamOptions: null as Record<string, unknown> | null,
   streamParts: [] as Array<Record<string, unknown>>,
   streamAttempts: null as Array<Array<Record<string, unknown>>> | null,
+  streamFactory: null as ((options: Record<string, unknown>) => AsyncIterable<unknown>) | null,
   result: { products: [] as unknown[], cartMutations: [] as unknown[] },
   recordRun: vi.fn(),
   createLanguageModel: vi.fn(() => 'storefront-language-model'),
@@ -49,9 +50,11 @@ vi.mock('ai', async (importOriginal) => ({
     mocks.streamOptions = options;
     const parts = mocks.streamAttempts?.shift() ?? mocks.streamParts;
     return {
-      stream: (async function* () {
-        for (const part of parts) yield part;
-      })(),
+      stream:
+        mocks.streamFactory?.(options) ??
+        (async function* () {
+          for (const part of parts) yield part;
+        })(),
     };
   },
   stepCountIs: () => 'bounded-steps',
@@ -118,6 +121,7 @@ describe('POST /api/ai/chat', () => {
     mocks.settings.aiFallbackModel = null;
     mocks.streamOptions = null;
     mocks.streamAttempts = null;
+    mocks.streamFactory = null;
     mocks.streamParts = [
       { type: 'tool-call', toolName: 'search_catalog' },
       { type: 'tool-result', toolName: 'search_catalog' },
@@ -258,5 +262,29 @@ describe('POST /api/ai/chat', () => {
       .map((line) => JSON.parse(line));
     expect(mocks.createLanguageModel).toHaveBeenCalledTimes(1);
     expect(events.at(-1)).toEqual({ type: 'error', code: 'assistant_unavailable' });
+  });
+
+  it('aborts generation without closing an already-cancelled response controller', async () => {
+    mocks.streamFactory = (options) =>
+      (async function* () {
+        const signal = options.abortSignal as AbortSignal;
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+        throw new DOMException('The response was cancelled', 'AbortError');
+      })();
+
+    const response = await POST(request(validBody()));
+    const reader = response.body!.getReader();
+    await expect(reader.read()).resolves.toMatchObject({ done: false });
+    await reader.cancel();
+
+    await vi.waitFor(() => {
+      expect((mocks.streamOptions?.abortSignal as AbortSignal).aborted).toBe(true);
+      expect(mocks.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'cancelled', errorCode: 'request_aborted' }),
+      );
+    });
   });
 });
