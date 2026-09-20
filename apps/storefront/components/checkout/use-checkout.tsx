@@ -1,9 +1,14 @@
 'use client';
+import {
+  DEFAULT_CHECKOUT_FIELDS,
+  sanitizeCheckoutFields,
+  type CheckoutFields,
+} from '@bric/storefront-core/settings';
 import { useCheckoutState } from './use-checkout-state';
 
 import type { StorefrontEcotrackCatalogResponse } from '@bric/storefront-core/contracts';
 import { PackageCheck } from 'lucide-react';
-import { useEffect, useMemo, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import { CheckoutContentSkeleton } from '@/components/storefront-skeletons';
 import {
@@ -24,7 +29,8 @@ import {
 } from '@/lib/cart';
 import {
   buildCheckoutOrderPayload,
-  checkoutFormSchema,
+  createCheckoutFormSchema,
+  checkoutFieldErrors,
   clearPendingCheckout,
   expandCheckoutCart,
   getCheckoutCommunes,
@@ -55,7 +61,9 @@ export function useCheckoutForm({
   initialNotice,
   labels,
   support,
+  checkoutFields: initialCheckoutFields = DEFAULT_CHECKOUT_FIELDS,
 }: {
+  checkoutFields?: CheckoutFields;
   locale: Locale;
   catalog: StorefrontEcotrackCatalogResponse;
   directItem: CartItem | null;
@@ -65,6 +73,7 @@ export function useCheckoutForm({
   labels: CheckoutLabels;
   support?: { contact: StorefrontSupportContact; labels: SupportContactLabels };
 }) {
+  const [checkoutFields, setCheckoutFields] = useState(initialCheckoutFields);
   const {
     cartMode,
     pending,
@@ -113,6 +122,7 @@ export function useCheckoutForm({
     initialNotice,
     labels,
     support,
+    checkoutFields,
   });
 
   useEffect(() => {
@@ -131,23 +141,46 @@ export function useCheckoutForm({
 
   useEffect(() => {
     if (!hydrated) return;
-    writeCheckoutDraft(window.localStorage, {
-      phoneNumber1,
-      lastName,
-      firstName,
-      state,
-      city,
-      homeAddress,
-      email,
-      delivery,
-    });
-  }, [city, delivery, email, firstName, homeAddress, hydrated, lastName, phoneNumber1, state]);
+    writeCheckoutDraft(
+      window.localStorage,
+      sanitizeCheckoutFields(
+        {
+          phoneNumber1,
+          lastName,
+          firstName,
+          state,
+          city,
+          homeAddress,
+          email,
+          delivery,
+        },
+        checkoutFields,
+      ),
+    );
+  }, [
+    checkoutFields,
+    city,
+    delivery,
+    email,
+    firstName,
+    homeAddress,
+    hydrated,
+    lastName,
+    phoneNumber1,
+    state,
+  ]);
 
-  const communes = useMemo(() => getCheckoutCommunes(catalog, state), [catalog, state]);
-  const officeAvailable = hasCheckoutStopDesk(catalog, state);
+  const communes = useMemo(
+    () => getCheckoutCommunes(catalog, checkoutFields.state.active ? state : null),
+    [catalog, state, checkoutFields.state.active],
+  );
+  const officeAvailable = hasCheckoutStopDesk(catalog, checkoutFields.state.active ? state : null);
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const deliveryFee = pending?.deliveryFee ?? getCheckoutDeliveryFee(catalog, state, delivery);
-  const total = subtotal + deliveryFee;
+  const deliveryFee =
+    pending && pending.deliveryFee !== undefined
+      ? pending.deliveryFee
+      : getCheckoutDeliveryFee(catalog, checkoutFields.state.active ? state : null, delivery);
+  const total = subtotal + (deliveryFee ?? 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   useEffect(() => {
@@ -234,7 +267,16 @@ export function useCheckoutForm({
       router.push(`/${locale}/thank-you?token=${encodeURIComponent(order.publicToken!)}`);
     } catch (error) {
       const code = error instanceof CheckoutOrderError ? error.code : 'request_failed';
-      if (code === 'cart_changed' || code === 'validation') {
+      if (code === 'checkout_fields' && error instanceof CheckoutOrderError) {
+        clearPendingCheckout(window.localStorage);
+        setPending(null);
+        if (error.checkoutFields) setCheckoutFields(error.checkoutFields);
+        setErrors(
+          Object.fromEntries((error.fields ?? []).map((field) => [field, labels.requiredError])),
+        );
+        focusInvalidRef.current = true;
+        setRequestError('');
+      } else if (code === 'cart_changed' || code === 'validation') {
         clearPendingCheckout(window.localStorage);
         setPending(null);
         if (delivery === 'office' && !officeAvailable) setDelivery('home');
@@ -295,7 +337,7 @@ export function useCheckoutForm({
       setRequestError(labels.quantityLimit);
       return;
     }
-    const parsed = checkoutFormSchema.safeParse({
+    const parsed = createCheckoutFormSchema(checkoutFields).safeParse({
       phoneNumber1,
       lastName,
       firstName,
@@ -306,16 +348,7 @@ export function useCheckoutForm({
       delivery,
     });
     if (!parsed.success) {
-      const nextErrors: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const field = String(issue.path[0] ?? 'form');
-        nextErrors[field] =
-          issue.message === 'invalid_email'
-            ? labels.emailError
-            : issue.message === 'phone_invalid'
-              ? labels.phoneError
-              : labels.requiredError;
-      }
+      const nextErrors = checkoutFieldErrors(parsed.error, labels);
       focusInvalidRef.current = true;
       setErrors(nextErrors);
       setRequestError('');
@@ -414,6 +447,7 @@ export function useCheckoutForm({
 
   return {
     view: {
+      checkoutFields,
       Root,
       embedded,
       Heading,

@@ -6,7 +6,13 @@ import {
 } from '@bric/storefront-core/contracts';
 import type { StorefrontOrderMarketing } from '@bric/storefront-core/marketing-contracts';
 import { META_SEMANTICS_VERSION } from '@bric/storefront-core/meta-contracts';
-import { normalizeAlgerianPhoneNumber } from '@bric/storefront-core/settings';
+import {
+  DEFAULT_CHECKOUT_FIELDS,
+  sanitizeCheckoutFields,
+  missingCheckoutFields,
+  type CheckoutFields,
+  normalizeAlgerianPhoneNumber,
+} from '@bric/storefront-core/settings';
 import { z } from 'zod';
 
 import { cartItemSchema, type CartItem } from '@/lib/cart';
@@ -31,16 +37,33 @@ const algerianPhone = z
   .transform(normalizeAlgerianPhoneNumber)
   .refine((value) => /^\d{8,15}$/.test(value), 'phone_invalid');
 
-export const checkoutFormSchema = z.object({
+const checkoutBaseSchema = z.object({
   phoneNumber1: algerianPhone,
   lastName: optionalText(80),
   firstName: optionalText(80),
-  state: z.coerce.number().int().min(1, 'location_required').max(58, 'location_required'),
-  city: z.string().trim().min(1, 'location_required').max(120),
+  state: z.preprocess(
+    (value) => (value === '' || value == null ? null : value),
+    z.coerce.number().int().min(1).max(58).nullable(),
+  ),
+  city: optionalText(120),
   homeAddress: optionalText(300),
   email: optionalEmail,
   delivery: z.enum(['home', 'office']),
 });
+
+export function createCheckoutFormSchema(fields: CheckoutFields) {
+  return z.preprocess(
+    (input) =>
+      input && typeof input === 'object'
+        ? sanitizeCheckoutFields(input as z.input<typeof checkoutBaseSchema>, fields)
+        : input,
+    checkoutBaseSchema.superRefine((value, context) => {
+      for (const name of missingCheckoutFields(value, fields))
+        context.addIssue({ code: 'custom', path: [name], message: 'field_required' });
+    }),
+  );
+}
+export const checkoutFormSchema = createCheckoutFormSchema(DEFAULT_CHECKOUT_FIELDS);
 
 export type ValidatedCheckoutForm = z.output<typeof checkoutFormSchema>;
 
@@ -64,13 +87,13 @@ export function getCheckoutDeliveryFee(
   wilayaId: number | null,
   delivery: 'home' | 'office',
 ) {
-  if (wilayaId == null) return 0;
+  if (wilayaId == null) return null;
   const fee = catalog.serviceFees.find(
     (entry) => entry.wilayaId === wilayaId && entry.serviceType === 'livraison',
   );
-  if (!fee) return 0;
+  if (!fee) return null;
   const value = Number(delivery === 'office' ? fee.stopDeskFee : fee.homeFee);
-  return Number.isFinite(value) && value >= 0 ? value : 0;
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 export function expandCheckoutCart(items: CartItem[]) {
@@ -133,7 +156,7 @@ const pendingCheckoutSchema = z.object({
   retryReason: z.enum(['rate_limit', 'processing']).optional(),
   items: z.array(cartItemSchema).max(50).optional(),
   cartMode: z.enum(['cart', 'direct']).optional(),
-  deliveryFee: z.number().nonnegative().optional(),
+  deliveryFee: z.number().nonnegative().nullable().optional(),
 });
 
 const checkoutConfirmationSchema = z.object({
@@ -236,4 +259,20 @@ export function writeCheckoutConfirmation(
   } catch {
     return false;
   }
+}
+
+export function checkoutFieldErrors(
+  error: z.ZodError,
+  labels: { emailError: string; phoneError: string; requiredError: string },
+) {
+  return Object.fromEntries(
+    error.issues.map((issue) => [
+      String(issue.path[0] ?? 'form'),
+      issue.message === 'invalid_email'
+        ? labels.emailError
+        : issue.message === 'phone_invalid'
+          ? labels.phoneError
+          : labels.requiredError,
+    ]),
+  );
 }

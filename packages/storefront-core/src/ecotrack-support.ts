@@ -55,13 +55,19 @@ export async function readEcotrackCatalog(
 }
 
 export async function readEcotrackDeliveryFee(
+  ...args: Parameters<typeof readEcotrackDeliveryQuote>
+) {
+  return (await readEcotrackDeliveryQuote(...args)) ?? 0;
+}
+
+export async function readEcotrackDeliveryQuote(
   db: Database,
   wilayaId: number | null | undefined,
   deliveryType: DeliveryType,
   serviceType: EcotrackServiceType = 'livraison',
 ) {
   if (!wilayaId) {
-    return 0;
+    return null;
   }
 
   const [serviceFee] = await db
@@ -79,7 +85,7 @@ export async function readEcotrackDeliveryFee(
     .limit(1);
 
   if (!serviceFee) {
-    return 0;
+    return null;
   }
 
   return deliveryType === 0

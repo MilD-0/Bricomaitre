@@ -1,3 +1,5 @@
+import { readCheckoutFields } from '../../../lib/checkout-settings';
+import { missingCheckoutFields, sanitizeCheckoutFields } from '@bric/storefront-core/settings';
 import { after, NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
@@ -214,6 +216,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const checkoutFields = await readCheckoutFields();
+    const sanitized = sanitizeCheckoutFields(parsed.data, checkoutFields);
+    const missing = missingCheckoutFields(sanitized, checkoutFields);
+    if (missing.length) {
+      await clearClaim();
+      return NextResponse.json(
+        {
+          error: 'Required checkout fields are missing.',
+          code: 'checkout_fields',
+          fields: missing,
+          checkoutFields,
+        },
+        { status: 400, headers: withRequestIdHeaders(requestId) },
+      );
+    }
+    const acceptedPayload = storefrontOrderCreateRequestSchema.parse(sanitized);
     let velocity;
     try {
       velocity = await enforceOrderVelocityLimit(req, {
@@ -241,7 +259,7 @@ export async function POST(req: NextRequest) {
         },
       );
     }
-    const { item, meta, coalesced } = await createStorefrontOrder(getDb(), parsed.data, {
+    const { item, meta, coalesced } = await createStorefrontOrder(getDb(), acceptedPayload, {
       reportTiming: (entry) => timings.push(entry),
       metaRequestContext: getMetaRequestContext(req, marketingSourceUrls[0]),
       idempotency,

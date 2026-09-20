@@ -1,5 +1,5 @@
 'use client';
-import { type LandingPageBlock } from '@bric/storefront-core/landing-pages';
+import { landingPageOutline, type LandingPageBlock } from '@bric/storefront-core/landing-pages';
 import { ArrowLeft, ExternalLink, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '../../../lib/utils';
@@ -165,47 +165,84 @@ export function LandingPageBuilderView({
             {t.outline}
           </div>
           <div className="divide-y divide-border/55">
-            {document.blocks.map((block, index) => (
-              <div
-                key={block.id}
-                className={cn(
-                  'flex items-center gap-2 px-2 py-2',
-                  block.id === selected?.id && 'bg-primary/5',
-                )}
-              >
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 px-1 py-1 text-start"
-                  onClick={() => {
-                    setSelectedId(block.id);
-                    setShowEditor(true);
-                  }}
+            {landingPageOutline(document).map((block, rowIndex) => {
+              if (block === null)
+                return (
+                  <div key="checkout" className="flex items-center gap-2 px-3 py-3">
+                    <span className="min-w-0 flex-1 text-sm font-medium">
+                      {rowIndex + 1} ·{' '}
+                      {adminLocale === 'ar'
+                        ? 'نموذج الطلب'
+                        : adminLocale === 'fr'
+                          ? 'Formulaire de commande'
+                          : 'Checkout'}
+                    </span>
+                    <CompactMenu
+                      label={
+                        adminLocale === 'ar'
+                          ? 'موضع نموذج الطلب'
+                          : adminLocale === 'fr'
+                            ? 'Position du formulaire de commande'
+                            : 'Checkout position'
+                      }
+                    >
+                      <CompactMenuItem disabled={rowIndex === 0} onClick={() => move(rowIndex, -1)}>
+                        {t.moveUp}
+                      </CompactMenuItem>
+                      <CompactMenuItem
+                        disabled={rowIndex === document.blocks.length}
+                        onClick={() => move(rowIndex, 1)}
+                      >
+                        {t.moveDown}
+                      </CompactMenuItem>
+                    </CompactMenu>
+                  </div>
+                );
+              const index = document.blocks.findIndex((item) => item.id === block.id);
+              return (
+                <div
+                  key={block.id}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-2',
+                    block.id === selected?.id && 'bg-primary/5',
+                  )}
                 >
-                  <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {index + 1} · {labels[block.type]}
-                  </span>
-                  <span className="mt-0.5 block truncate text-sm">{blockSummary(block)}</span>
-                </button>
-                <CompactMenu label={`${labels[block.type]} · ${t.more}`}>
-                  <CompactMenuItem disabled={index === 0} onClick={() => move(index, -1)}>
-                    {t.moveUp}
-                  </CompactMenuItem>
-                  <CompactMenuItem
-                    disabled={index === document.blocks.length - 1}
-                    onClick={() => move(index, 1)}
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 px-1 py-1 text-start"
+                    onClick={() => {
+                      setSelectedId(block.id);
+                      setShowEditor(true);
+                    }}
                   >
-                    {t.moveDown}
-                  </CompactMenuItem>
-                  <CompactMenuItem onClick={() => duplicate(index)}>{t.duplicate}</CompactMenuItem>
-                  {(block.type !== 'product-hero' && block.type !== 'final-cta') ||
-                  document.blocks.filter((item) => item.type === block.type).length > 1 ? (
-                    <CompactMenuItem destructive onClick={() => remove(index)}>
-                      {t.delete}
+                    <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {rowIndex + 1} · {labels[block.type]}
+                    </span>
+                    <span className="mt-0.5 block truncate text-sm">{blockSummary(block)}</span>
+                  </button>
+                  <CompactMenu label={`${labels[block.type]} · ${t.more}`}>
+                    <CompactMenuItem disabled={rowIndex === 0} onClick={() => move(rowIndex, -1)}>
+                      {t.moveUp}
                     </CompactMenuItem>
-                  ) : null}
-                </CompactMenu>
-              </div>
-            ))}
+                    <CompactMenuItem
+                      disabled={rowIndex === document.blocks.length}
+                      onClick={() => move(rowIndex, 1)}
+                    >
+                      {t.moveDown}
+                    </CompactMenuItem>
+                    <CompactMenuItem onClick={() => duplicate(index)}>
+                      {t.duplicate}
+                    </CompactMenuItem>
+                    {(block.type !== 'product-hero' && block.type !== 'final-cta') ||
+                    document.blocks.filter((item) => item.type === block.type).length > 1 ? (
+                      <CompactMenuItem destructive onClick={() => remove(index)}>
+                        {t.delete}
+                      </CompactMenuItem>
+                    ) : null}
+                  </CompactMenu>
+                </div>
+              );
+            })}
           </div>
           <div className="space-y-3 border-t border-border/60 p-3">
             <label className="grid gap-1.5 text-sm font-medium">

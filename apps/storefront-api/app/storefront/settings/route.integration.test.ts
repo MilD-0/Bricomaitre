@@ -1,3 +1,4 @@
+import { DEFAULT_CHECKOUT_FIELDS } from '@bric/storefront-core/settings';
 vi.mock('next/cache', () => ({ unstable_cache: (load: (...args: unknown[]) => unknown) => load }));
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -53,6 +54,7 @@ describe('app/storefront/settings/route', () => {
     const response = await GET();
 
     await expect(response.json()).resolves.toEqual({
+      checkoutFields: DEFAULT_CHECKOUT_FIELDS,
       phoneDisplay: '0555 12 34 56',
       phoneHref: 'tel:+213555123456',
       phoneEnabled: true,

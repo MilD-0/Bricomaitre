@@ -261,13 +261,13 @@
   color: var(--foreground);
   font-weight: var(--sf-weight-semibold, 620);
 }
-.checkout-summary dl div:last-child {
+.checkout-summary dl .checkout-total {
   margin-block-start: calc(0.25rem * var(--sf-density));
   color: var(--foreground);
   font-size: var(--sf-type-body, 1rem);
   font-weight: var(--sf-weight-bold, 680);
 }
-.checkout-summary dl div:last-child dd {
+.checkout-summary dl .checkout-total dd {
   color: var(--primary);
   font-size: var(--sf-type-subheading, 1.25rem);
 }

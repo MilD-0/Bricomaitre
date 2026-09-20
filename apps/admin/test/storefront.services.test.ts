@@ -1,5 +1,7 @@
 import { getDb, getPool } from '@bric/db/client';
 import {
+  ecotrackServiceFees,
+  ecotrackWilayas,
   landingPageRevisions,
   landingPages,
   metaEventOutbox,
@@ -25,7 +27,7 @@ import {
   StorefrontOrderClaimLostError,
 } from '@bric/storefront-core/order-idempotency';
 import { createStorefrontOrder } from '@bric/storefront-core/orders';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -152,6 +154,24 @@ describe('storefront transaction boundaries', () => {
         processingTtlSeconds: 120,
       });
       if (claim.kind !== 'started') throw new Error('Expected new claim');
+      const wilayaId = 16;
+      const feeWhere = and(
+        eq(ecotrackServiceFees.wilayaId, wilayaId),
+        eq(ecotrackServiceFees.serviceType, 'livraison'),
+      );
+      const [previousWilaya] = await db
+        .select()
+        .from(ecotrackWilayas)
+        .where(eq(ecotrackWilayas.wilayaId, wilayaId));
+      const [previousFee] = await db.select().from(ecotrackServiceFees).where(feeWhere);
+      await db.insert(ecotrackWilayas).values({ wilayaId, name: 'Alger' }).onConflictDoNothing();
+      await db
+        .insert(ecotrackServiceFees)
+        .values({ wilayaId, serviceType: 'livraison', homeFee: '500', stopDeskFee: '300' })
+        .onConflictDoUpdate({
+          target: [ecotrackServiceFees.serviceType, ecotrackServiceFees.wilayaId],
+          set: { homeFee: '500', stopDeskFee: '300' },
+        });
       const [product] = await db
         .insert(products)
         .values({ title: 'Optional capture product', slug: eventId, price: '100' })
@@ -159,7 +179,7 @@ describe('storefront transaction boundaries', () => {
       const payload = storefrontOrderCreateRequestSchema.parse({
         phoneNumber1: '0551119992',
         cartProducts: [String(product!.id)],
-        state: 16,
+        state: wilayaId,
         city: 'Alger Centre',
         homeAddress: 'Test address',
         meta: {
@@ -198,6 +218,10 @@ describe('storefront transaction boundaries', () => {
         await db
           .delete(storefrontOrderIdempotency)
           .where(eq(storefrontOrderIdempotency.keyHash, keyHash));
+        if (previousFee) await db.update(ecotrackServiceFees).set(previousFee).where(feeWhere);
+        else await db.delete(ecotrackServiceFees).where(feeWhere);
+        if (!previousWilaya)
+          await db.delete(ecotrackWilayas).where(eq(ecotrackWilayas.wilayaId, wilayaId));
       }
     },
   );

@@ -303,12 +303,20 @@ export function ThankYouConfirmation({
             </div>
             <div>
               <dt>{labels.delivery}</dt>
-              <dd>{formatProductPrice(String(order.deliveryFee), locale)}</dd>
+              <dd>
+                {order.deliveryFeePending || order.state == null
+                  ? locale === 'ar'
+                    ? 'تُؤكّد تكلفة التوصيل هاتفياً'
+                    : 'Livraison confirmée par téléphone'
+                  : formatProductPrice(String(order.deliveryFee), locale)}
+              </dd>
             </div>
-            <div>
-              <dt>{labels.total}</dt>
-              <dd>{formatProductPrice(String(order.totalAmount), locale)}</dd>
-            </div>
+            {!order.deliveryFeePending && order.state != null ? (
+              <div className="thank-you-total">
+                <dt>{labels.total}</dt>
+                <dd>{formatProductPrice(String(order.totalAmount), locale)}</dd>
+              </div>
+            ) : null}
           </dl>
         </section>
         <section className="thank-you-customer">

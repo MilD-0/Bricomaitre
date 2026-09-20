@@ -1645,7 +1645,23 @@
     "savingAction": "Enregistrement...",
     "saving": "Enregistrement des paramètres de la boutique...",
     "saved": "Paramètres de la boutique enregistrés.",
-    "saveError": "Impossible d’enregistrer les paramètres de la boutique."
+    "saveError": "Impossible d’enregistrer les paramètres de la boutique.",
+    "checkout": {
+      "title": "Champs de commande",
+      "description": "Choisissez les champs affichés et obligatoires. La commune dépend de la wilaya. Ces réglages s’appliquent à tous les formulaires de commande.",
+      "field": "Champ",
+      "active": "Actif",
+      "required": "Obligatoire",
+      "phoneNumber1": "Téléphone",
+      "lastName": "Nom",
+      "firstName": "Prénom",
+      "state": "Wilaya",
+      "city": "Commune",
+      "homeAddress": "Adresse du domicile",
+      "email": "E-mail",
+      "phoneNumber1Hint": "Toujours obligatoire pour confirmer les commandes par téléphone.",
+      "homeAddressHint": "Obligatoire uniquement pour la livraison à domicile."
+    }
   },
   "auth": {
     "title": "Accès BricoAdmin",

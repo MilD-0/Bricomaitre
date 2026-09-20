@@ -46,7 +46,7 @@ export function normalizeGeneratedLandingPage(
 
   return landingPageDocumentSchema.parse({
     ...document,
-    schemaVersion: 2,
+    schemaVersion: document.checkoutPosition === undefined ? 2 : 3,
     seo: { ...document.seo, indexable: false },
     blocks: document.blocks.map((block) => {
       if (block.type === 'image-gallery') {

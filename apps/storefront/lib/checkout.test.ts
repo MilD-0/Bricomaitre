@@ -95,7 +95,15 @@ describe('checkout domain', () => {
     expect(hasCheckoutStopDesk(catalog, 16)).toBe(true);
     expect(getCheckoutDeliveryFee(catalog, 16, 'home')).toBe(600);
     expect(getCheckoutDeliveryFee(catalog, 16, 'office')).toBe(450);
-    expect(getCheckoutDeliveryFee(catalog, null, 'home')).toBe(0);
+    expect(getCheckoutDeliveryFee({ ...catalog, serviceFees: [] }, 16, 'home')).toBeNull();
+    expect(
+      getCheckoutDeliveryFee(
+        { ...catalog, serviceFees: [{ ...catalog.serviceFees[0]!, homeFee: '0' }] },
+        16,
+        'home',
+      ),
+    ).toBe(0);
+    expect(getCheckoutDeliveryFee(catalog, null, 'home')).toBeNull();
   });
 
   it('expands quantities into the canonical order references and builds a PII-bounded payload', () => {

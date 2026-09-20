@@ -81,6 +81,13 @@ const server = createServer((request, response) => {
       ...landingPage(contentLocale),
       slug: only ? url.pathname.split('/').at(-1) : `lampe-${locale}`,
     });
+  } else if (url.pathname === '/storefront/landing-pages/moved-checkout') {
+    const page = landingPage(url.searchParams.get('locale'));
+    result = json({
+      ...page,
+      slug: 'moved-checkout',
+      document: { ...page.document, schemaVersion: 3, checkoutPosition: 1 },
+    });
   } else if (url.pathname === '/storefront/landing-pages/unavailable') {
     result = json({ error: 'Unavailable' }, 503);
   } else if (url.pathname === '/storefront/landing-pages/lampe-atelier') {

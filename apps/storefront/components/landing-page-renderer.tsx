@@ -1,3 +1,5 @@
+import { Fragment, type ReactNode } from 'react';
+import { landingPageOutline } from '@bric/storefront-core/landing-pages';
 import type {
   LandingPageBlock,
   StorefrontLandingPageResponse,
@@ -84,10 +86,12 @@ export function LandingPageRenderer({
   page,
   locale,
   nonce,
+  checkout,
 }: {
   page: StorefrontLandingPageResponse;
   locale: Locale;
   nonce?: string;
+  checkout?: ReactNode;
 }) {
   const { product, document } = page;
   const token = product.canonicalToken;
@@ -148,7 +152,8 @@ export function LandingPageRenderer({
         productId={product.id}
         productSlug={token}
       />
-      {document.blocks.map((block) => {
+      {landingPageOutline(document).map((block) => {
+        if (block === null) return <Fragment key="checkout">{checkout}</Fragment>;
         if (block.type === 'product-hero')
           return (
             <section key={block.id} id={block.id} className={blockClass(block, 'landing-hero')}>

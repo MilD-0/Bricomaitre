@@ -1,3 +1,4 @@
+import { preserveCheckoutPosition } from '@bric/storefront-core/landing-pages';
 import {
   createAiLanguageModel,
   getAiConfig,
@@ -328,7 +329,8 @@ export function createLandingPageEditor(
 
       const document = normalizeGeneratedLandingPage(
         {
-          schemaVersion: 2,
+          schemaVersion: 3,
+          checkoutPosition: preserveCheckoutPosition(input.currentDocument, blocks),
           theme: plan.theme,
           seo: { ...plan.seo, indexable: false },
           blocks,

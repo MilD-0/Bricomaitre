@@ -111,6 +111,7 @@ export const storefrontOrderResponseItemSchema = z.object({
   homeAddress: z.string().nullable(),
   productSubtotal: z.number(),
   deliveryFee: z.number(),
+  deliveryFeePending: z.boolean().optional(),
   totalAmount: z.number(),
   promoCode: z.string().nullable().default(null),
   productPromos: productPromosSchema.optional(),

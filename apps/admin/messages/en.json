@@ -1645,7 +1645,23 @@
     "savingAction": "Saving...",
     "saving": "Saving storefront settings...",
     "saved": "Storefront settings saved.",
-    "saveError": "Storefront settings could not be saved."
+    "saveError": "Storefront settings could not be saved.",
+    "checkout": {
+      "title": "Checkout fields",
+      "description": "Choose which customer fields appear and which must be completed. Commune depends on wilaya. Changes apply to all storefront checkouts.",
+      "field": "Field",
+      "active": "Active",
+      "required": "Required",
+      "phoneNumber1": "Phone",
+      "lastName": "Last name",
+      "firstName": "First name",
+      "state": "Wilaya",
+      "city": "Commune",
+      "homeAddress": "Home address",
+      "email": "Email",
+      "phoneNumber1Hint": "Always required to confirm orders by phone.",
+      "homeAddressHint": "Required only for home delivery."
+    }
   },
   "auth": {
     "title": "BricoAdmin access",

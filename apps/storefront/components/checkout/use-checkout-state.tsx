@@ -1,4 +1,5 @@
 'use client';
+import { sanitizeCheckoutFields, type CheckoutFields } from '@bric/storefront-core/settings';
 import { useLandingOrder } from '@/components/landing-order-context';
 import {
   type StorefrontSupportContact,
@@ -31,7 +32,9 @@ export function useCheckoutState({
   embedded = false,
   initialNotice,
   labels,
+  checkoutFields,
 }: {
+  checkoutFields: CheckoutFields;
   locale: Locale;
   catalog: StorefrontEcotrackCatalogResponse;
   directItem: CartItem | null;
@@ -94,6 +97,7 @@ export function useCheckoutState({
   const viewedRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const focusInvalidRef = useRef(false);
+  const initialCheckoutFieldsRef = useRef(checkoutFields);
   useEffect(() => {
     if (!focusInvalidRef.current || busy) return;
     const field = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
@@ -105,6 +109,7 @@ export function useCheckoutState({
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- Checkout persistence must hydrate before the customer can submit the form. */
+    const initialCheckoutFields = initialCheckoutFieldsRef.current;
     const savedAttempt = readPendingCheckout(window.localStorage);
     setCartMode(savedAttempt?.cartMode ?? (directItem ? 'direct' : 'cart'));
     if (savedAttempt) setItems(savedAttempt.items ?? []);
@@ -138,7 +143,9 @@ export function useCheckoutState({
           email: savedAttempt.payload.email ?? '',
           delivery: savedAttempt.payload.delivery === 1 ? ('office' as const) : ('home' as const),
         }
-      : savedDraft;
+      : savedDraft
+        ? sanitizeCheckoutFields(savedDraft, initialCheckoutFields)
+        : null;
     if (restored) {
       const validCity =
         restored.state != null &&
@@ -170,7 +177,11 @@ export function useCheckoutState({
           window.localStorage.getItem('bric:cart:delivery-estimate:v1') ?? 'null',
         ) as { wilayaId?: unknown; delivery?: unknown } | null;
         const estimatedState = Number(estimate?.wilayaId);
-        if (Number.isInteger(estimatedState) && estimatedState > 0) {
+        if (
+          initialCheckoutFields.state.active &&
+          Number.isInteger(estimatedState) &&
+          estimatedState > 0
+        ) {
           setState(estimatedState);
           setDelivery(
             estimate?.delivery === 'office' && hasCheckoutStopDesk(catalog, estimatedState)
