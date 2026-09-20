@@ -56,6 +56,12 @@ jobs:
 
   service-contracts:
     name: PostgreSQL and Redis contracts
+    needs:
+      - static-quality
+      - tests
+      - browser-acceptance
+      - admin-browser-acceptance
+      - production-builds
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
     steps:
@@ -73,6 +79,7 @@ jobs:
     timeout-minutes: 25
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         suite:
           - ops-packages
