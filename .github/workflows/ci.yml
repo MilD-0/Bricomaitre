@@ -75,6 +75,9 @@ jobs:
 
   tests:
     name: Tests / ${{ matrix.suite }}
+    needs:
+      - static-quality
+      - production-builds
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 25
     strategy:
@@ -122,6 +125,7 @@ jobs:
 
   browser-acceptance:
     name: Browser acceptance
+    needs: tests
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     env:
@@ -158,6 +162,7 @@ jobs:
 
   admin-browser-acceptance:
     name: Admin browser acceptance
+    needs: tests
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     env:
