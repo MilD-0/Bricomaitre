@@ -45,10 +45,11 @@ Sentry.
 
 ## Release path
 
-A push to `main` starts CI. Production release begins only after that exact
-commit passes the required workflow, and it stops if a newer `main` commit has
-already superseded it. Image groups build independently, but production
-cutovers are serialized.
+The normal release path is a verified pull request merged into `main`. The
+resulting `main` commit gets a fresh CI run. Production release begins only
+after that exact push run passes the required workflow, and it stops if a newer
+`main` commit has already superseded it. Image groups build independently, but
+production cutovers are serialized.
 
 The deploy job then:
 
