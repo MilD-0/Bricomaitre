@@ -40,7 +40,7 @@ export function CheckoutFieldsSettings({
             <tr key={name} className="border-b border-border/50">
               <th scope="row" className="py-3 text-start font-medium">
                 {t(name)}
-                {name === 'phoneNumber1' || name === 'homeAddress' ? (
+                {name === 'phoneNumber1' ? (
                   <span
                     id={`checkout-${name}-hint`}
                     className="mt-1 block text-xs font-normal text-muted-foreground"
@@ -55,11 +55,7 @@ export function CheckoutFieldsSettings({
                     checked={value[name][option]}
                     disabled={name === 'phoneNumber1'}
                     aria-label={`${t(name)} · ${t(option)}`}
-                    aria-describedby={
-                      name === 'phoneNumber1' || name === 'homeAddress'
-                        ? `checkout-${name}-hint`
-                        : undefined
-                    }
+                    aria-describedby={name === 'phoneNumber1' ? `checkout-${name}-hint` : undefined}
                     onCheckedChange={(checked) =>
                       onChange(setCheckoutField(value, name, option, checked))
                     }

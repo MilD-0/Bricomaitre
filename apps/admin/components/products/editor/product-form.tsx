@@ -129,12 +129,8 @@ export function ProductForm({
                 type="number"
                 min="0"
                 step="0.001"
-                aria-describedby="selected-product-weight-hint"
                 {...form.register('weightKg', { setValueAs: optionalNumericInput })}
               />
-              <p id="selected-product-weight-hint" className="text-xs text-muted-foreground">
-                {t('labels.weightKgHint')}
-              </p>
               {form.formState.errors.weightKg ? (
                 <FieldError role="alert">{form.formState.errors.weightKg.message}</FieldError>
               ) : null}
