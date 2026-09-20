@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ADMIN_AI_MUTATION_EVENT, type AdminAiMutationEventDetail } from '../lib/admin-ai-events';
 import { AdminAiChat } from './admin-ai-chat';
+import { openAdminAiChat } from './admin-ai-chat.test-helpers';
 
 function chatResponse(body: string | object, init?: ResponseInit) {
   const {
@@ -120,7 +121,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Update the order',
@@ -162,7 +163,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(await screen.findByRole('textbox', { name: 'aiChat.placeholder' }), 'Help me');
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
 
@@ -208,7 +209,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Compare products',
@@ -288,7 +289,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     expect(await screen.findByText('Saved answer')).toBeInTheDocument();
     expect(screen.getByText('SKU-1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'aiChat.helpful' })).toHaveAttribute(
@@ -342,7 +343,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await screen.findByText('Saved answer');
     await user.type(screen.getByRole('textbox', { name: 'aiChat.searchChats' }), 'Arabic title');
     await waitFor(() =>
@@ -404,7 +405,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     expect(await screen.findByText('aiChat.loadingMessages')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Second chat' }));
     expect(await screen.findByText('Second chat answer')).toBeInTheDocument();

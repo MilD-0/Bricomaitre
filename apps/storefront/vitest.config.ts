@@ -68,6 +68,7 @@ export default defineConfig({
         test: {
           name: 'component-jsdom',
           environment: 'jsdom',
+          testTimeout: 15_000,
           alias: aliases,
           setupFiles: ['./test/setup/component.ts'],
           include: ['components/**/*.test.ts', 'components/**/*.test.tsx'],

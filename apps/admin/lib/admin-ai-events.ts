@@ -1,4 +1,8 @@
 export const ADMIN_AI_OPEN_EVENT = 'bricomaitre:admin-ai-open';
+
+export function openAdminAiAssistant() {
+  window.dispatchEvent(new CustomEvent(ADMIN_AI_OPEN_EVENT));
+}
 export const ADMIN_AI_MUTATION_EVENT = 'bricomaitre:admin-ai-mutation';
 
 export type AdminAiMutationEventDetail = {

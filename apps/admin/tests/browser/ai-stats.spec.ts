@@ -29,7 +29,7 @@ test('AI operations stats use focused pages and preserve the active range', asyn
 
   await page.goto('/en/stats/ai-assistants?range=30d&grain=auto');
   await expect(page.getByRole('heading', { name: 'AI operations' })).toBeVisible();
-  await expect(page.getByText('Interactive requests')).toBeVisible();
+  await expect(page.getByText('Interactive requests').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible();
   await expect(page.getByText(/AI-influenced/i)).toHaveCount(0);
 
@@ -40,7 +40,7 @@ test('AI operations stats use focused pages and preserve the active range', asyn
     await page.getByRole('button', { name: '90 days' }).click();
   }
   await expect(page).toHaveURL(/range=90d/);
-  await expect(page.getByText('Interactive requests')).toBeVisible();
+  await expect(page.getByText('Interactive requests').first()).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'AI operations' })).toBeVisible();
 
@@ -79,7 +79,7 @@ test('AI operations stats use focused pages and preserve the active range', asyn
 
 test('AI stats keep prior data visible when a filtered request fails', async ({ page }) => {
   await page.goto('/en/stats/ai-assistants?range=30d&grain=auto');
-  await expect(page.getByText('Interactive requests')).toBeVisible();
+  await expect(page.getByText('Interactive requests').first()).toBeVisible();
 
   let intercepted = false;
   await page.route(/\/api\/stats\/ai(?:\?|$)/, async (route) => {
@@ -105,7 +105,7 @@ test('AI stats keep prior data visible when a filtered request fails', async ({ 
   }
 
   await expect.poll(() => intercepted).toBe(true);
-  await expect(page.getByText('Interactive requests')).toBeVisible();
+  await expect(page.getByText('Interactive requests').first()).toBeVisible();
   await expect(
     page.getByText(/Simulated analytics failure|request failed with status 500/i),
   ).toBeVisible();

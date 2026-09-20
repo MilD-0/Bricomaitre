@@ -90,10 +90,8 @@ export function OrdersEcotrackManagerView({
         onScanQueryChange={setScanQuery}
         onScanSubmit={() => void handleScanSubmit()}
         onStatusChange={(value) => {
-          startFilterTransition(() => {
-            setPage(1);
-            setStatusFilter(value);
-          });
+          setPage(1);
+          setStatusFilter(value);
         }}
         onStaleOnlyChange={(value) => {
           startFilterTransition(() => {

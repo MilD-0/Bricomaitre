@@ -412,6 +412,18 @@ describe('AppShell', () => {
     expect(document.body.style.overflow).toBe('');
   });
 
+  it('exposes the assistant as a workspace utility on desktop and mobile', () => {
+    const view = render(
+      <AppShell initialPermissions={[]} initialRole="viewer">
+        <div>orders</div>
+      </AppShell>,
+    );
+
+    expect(view.container.querySelector('[data-admin-ai-entry="workspace"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-admin-ai-entry="mobile-header"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-admin-ai-entry="navigation"]')).toBeNull();
+  });
+
   it('keeps the mobile sidebar locked and open when its profile dialog closes', async () => {
     render(
       <AppShell initialPermissions={['orders_write']} initialRole="employee">

@@ -8,6 +8,7 @@ export const offPipelineSales = adminSchema.table(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     reference: text('reference'),
+    legacyTracking: text('legacy_tracking'),
     description: text('description').notNull(),
     recognizedOn: date('recognized_on').notNull(),
     amountCollected: numeric('amount_collected', { precision: 18, scale: 2 }).notNull(),

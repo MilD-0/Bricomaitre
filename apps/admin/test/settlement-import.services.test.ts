@@ -5,6 +5,9 @@ import * as XLSX from 'xlsx';
 
 import { getDb, getPool } from '@bric/db/client';
 import {
+  actionLogs,
+  adminMutationIdempotency,
+  offPipelineSales,
   importBatches,
   orderLineItems,
   orders,
@@ -12,6 +15,9 @@ import {
   processedOrders,
   products,
 } from '@bric/db/schema';
+import { backfillLegacyManualOrders } from '../lib/off-pipeline-sales-backfill';
+import { updateOffPipelineSale } from '../lib/off-pipeline-sales';
+import { loadRealizedDayEconomics } from '../lib/profit-tracker/sources';
 import { deleteImportBatch, importStatsSpreadsheet } from '../lib/stats-order-import';
 
 afterAll(async () => {
@@ -36,6 +42,7 @@ it('imports captured unit economics and retains incomplete settlements for corre
     .returning();
   const ids = orderRows.map((order) => order.id);
   const batches: string[] = [];
+  let migratedId: number | undefined;
   const trackings = ids.map((id) => `settlement-${key}-${id}`);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
@@ -79,6 +86,21 @@ it('imports captured unit economics and retains incomplete settlements for corre
       profit: '1100',
       importBatchId: 'MANUAL',
     });
+    await backfillLegacyManualOrders(db);
+    const [migrated] = await db
+      .select()
+      .from(offPipelineSales)
+      .where(eq(offPipelineSales.legacyTracking, trackings[0]!));
+    migratedId = migrated!.id;
+    await updateOffPipelineSale(
+      {
+        id: migratedId,
+        requestId: key,
+        changes: { reference: 'Corrected reference' },
+      },
+      { email: key },
+      db,
+    );
     const first = await importStatsSpreadsheet(buffer, `${key}.xlsx`);
     batches.push(first.batchId);
     expect(first).toMatchObject({
@@ -91,6 +113,14 @@ it('imports captured unit economics and retains incomplete settlements for corre
       .from(processedOrders)
       .where(inArray(processedOrders.tracking, trackings));
     expect(settlements).toHaveLength(2);
+    expect(
+      await db.select().from(offPipelineSales).where(eq(offPipelineSales.id, migratedId)),
+    ).toEqual([]);
+    const history = await db.select().from(actionLogs).where(eq(actionLogs.createdBy, key));
+    expect(history).toHaveLength(1);
+    expect(history[0]!.isReversible).toBe(false);
+    const realized = await loadRealizedDayEconomics(db, null, '2099-12-31');
+    expect(realized.reduce((sum, day) => sum + day.offPipelineSales, 0)).toBe(0);
     const captured = settlements.find((row) => row.tracking === trackings[0])!;
     expect(captured).toMatchObject({ productCost: '200.00', profit: '1100.00' });
     const children = await db
@@ -154,6 +184,9 @@ it('imports captured unit economics and retains incomplete settlements for corre
       profit: '400.00',
     });
   } finally {
+    await db.delete(actionLogs).where(eq(actionLogs.createdBy, key));
+    await db.delete(adminMutationIdempotency).where(eq(adminMutationIdempotency.requestId, key));
+    if (migratedId) await db.delete(offPipelineSales).where(eq(offPipelineSales.id, migratedId));
     for (const batch of batches) await deleteImportBatch(batch);
     await db.delete(processedOrders).where(inArray(processedOrders.tracking, trackings));
     await db.delete(orders).where(inArray(orders.id, ids));

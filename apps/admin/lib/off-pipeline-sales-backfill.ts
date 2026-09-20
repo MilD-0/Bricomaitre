@@ -1,9 +1,11 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import { actionLogs, offPipelineSales, processedOrders } from '@bric/db/schema';
 import { dayInTimezone } from './analytics/date-range';
 import { ANALYTICS_TIMEZONE } from './profit-tracker/contract';
+
+import { reconcileLegacySales } from './off-pipeline-sales-reconciliation';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -14,6 +16,21 @@ export async function backfillLegacyManualOrders(db: Database) {
       .set({ isReversible: false })
       .where(and(eq(actionLogs.entityType, 'statsManualOrders'), eq(actionLogs.isReversible, true)))
       .returning({ id: actionLogs.id });
+    // Recover provenance for entries migrated before legacyTracking was introduced.
+    // The migration's reference and note together distinguish them from direct sales.
+    await tx
+      .update(offPipelineSales)
+      .set({
+        legacyTracking: sql`substring(${offPipelineSales.reference} from 15)`,
+      })
+      .where(
+        and(
+          isNull(offPipelineSales.legacyTracking),
+          sql`${offPipelineSales.reference} like 'legacy-manual:%'`,
+          sql`${offPipelineSales.note} like 'Migrated from retired manual record %.'`,
+        ),
+      );
+    await reconcileLegacySales(tx);
     const rows = await tx
       .select()
       .from(processedOrders)
@@ -25,6 +42,7 @@ export async function backfillLegacyManualOrders(db: Database) {
     await tx.insert(offPipelineSales).values(
       rows.map((row) => ({
         reference: `legacy-manual:${row.tracking}`,
+        legacyTracking: row.tracking,
         description: 'Legacy off-pipeline sale',
         recognizedOn: dayInTimezone(
           row.encaissedAt ?? row.deliveredAt ?? row.orderCreatedAt ?? row.createdAt,

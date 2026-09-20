@@ -1,0 +1,1 @@
+ALTER TABLE "admin"."off_pipeline_sales" ADD COLUMN "legacy_tracking" text;

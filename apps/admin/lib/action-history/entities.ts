@@ -13,14 +13,16 @@ import {
   importBatches,
   offPipelineSales,
   orders,
+  processedOrders,
   productCards,
   products,
   roleDefinitionPermissions,
   roleDefinitions,
   userAccessGrants,
 } from '@bric/db/schema';
-import { asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 import {
+  ActionHistoryConflictError,
   fetchFeaturedGroupState,
   fetchOrderState,
   fetchProductState,
@@ -247,6 +249,36 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
   offPipelineSales: {
     resource: 'stats',
     table: offPipelineSales,
+    insertState: async (tx, snapshot) => {
+      const legacyTracking =
+        typeof snapshot.legacyTracking === 'string'
+          ? snapshot.legacyTracking
+          : typeof snapshot.reference === 'string' &&
+              snapshot.reference.startsWith('legacy-manual:') &&
+              typeof snapshot.note === 'string' &&
+              snapshot.note.startsWith('Migrated from retired manual record ')
+            ? snapshot.reference.slice('legacy-manual:'.length)
+            : null;
+      if (legacyTracking) {
+        const [settlement] = await tx
+          .select({ id: processedOrders.id })
+          .from(processedOrders)
+          .where(
+            and(
+              eq(processedOrders.tracking, legacyTracking),
+              ne(processedOrders.importBatchId, 'MANUAL'),
+            ),
+          )
+          .limit(1);
+        if (settlement)
+          throw new ActionHistoryConflictError(
+            'This sale is already represented by a carrier settlement.',
+          );
+      }
+      await tx
+        .insert(offPipelineSales)
+        .values(snapshotValues(offPipelineSales, { ...snapshot, legacyTracking }));
+    },
     label: (row) => String(row.reference ?? row.description ?? `#${row.id ?? 'unknown'}`),
   },
   // Retained only so historical entries still have a label. The retired shape

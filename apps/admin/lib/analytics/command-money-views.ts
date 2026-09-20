@@ -1,4 +1,4 @@
-import { getProfitTrackerSettings } from '../profit-tracker';
+import { getProfitTrackerSettings, loadProfitTrackerReportForRange } from '../profit-tracker';
 import { loadStorefrontOrderConversion } from './commerce-data';
 import { cohortCompletionCovers, loadCohortCompletionPair } from './cohort-completion';
 import type { AnalyticsFilters } from './contract';
@@ -254,6 +254,10 @@ export async function loadMoneyView(
     cutoffs.paidFrom,
   );
   const { current, previous } = await loadEconomicsPair(db, economicsFilters, cutoffs.metaFrom);
+  const realizedReport =
+    filters.startDate === economicsFilters.startDate && filters.endDate === economicsFilters.endDate
+      ? current
+      : await loadProfitTrackerReportForRange(db, filters);
   const [sources, automaticPaid, previousAutomaticPaid, cohorts, leadingForecast] =
     await Promise.all([
       loadSourceHealth(db, filters, current, cutoffs.orders ?? undefined),
@@ -303,7 +307,7 @@ export async function loadMoneyView(
       series: performanceSeries.filter((point) => !point.isForecast),
       performanceSeries,
       automaticPaid,
-      realized: current.realized,
+      realized: realizedReport.realized,
       coverage: current.coverage,
       paidSeries: aggregateAutomaticPaidSeries(
         automaticPaid,
@@ -320,6 +324,7 @@ export async function loadMoneyView(
     effectiveRanges: [
       effectiveRange('economics', economicsFilters, ['orders', 'meta', 'assumptions']),
       effectiveRange('paid', fulfillmentFilters, ['orders', 'ecotrack']),
+      effectiveRange('realized', filters, ['settlements']),
     ],
     sources,
     warnings: [...economicsWarnings(current), ...sourceWarnings(sources)],

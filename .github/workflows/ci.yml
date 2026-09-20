@@ -28,6 +28,11 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: ./.github/actions/setup-workspace
+      - name: Ensure complete history for secret scanning
+        run: |
+          if [[ "$(git rev-parse --is-shallow-repository)" == 'true' ]]; then
+            git fetch --unshallow --no-tags origin
+          fi
       - name: Set up the production Buildx driver
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
         with:
@@ -51,6 +56,12 @@ jobs:
 
   service-contracts:
     name: PostgreSQL and Redis contracts
+    needs:
+      - static-quality
+      - tests
+      - browser-acceptance
+      - admin-browser-acceptance
+      - production-builds
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
     steps:
@@ -64,10 +75,14 @@ jobs:
 
   tests:
     name: Tests / ${{ matrix.suite }}
+    needs:
+      - static-quality
+      - production-builds
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 25
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         suite:
           - ops-packages
@@ -110,6 +125,7 @@ jobs:
 
   browser-acceptance:
     name: Browser acceptance
+    needs: tests
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     env:
@@ -146,6 +162,7 @@ jobs:
 
   admin-browser-acceptance:
     name: Admin browser acceptance
+    needs: tests
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     env:

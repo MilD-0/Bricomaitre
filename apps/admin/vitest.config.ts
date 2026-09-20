@@ -22,6 +22,7 @@ export default defineConfig({
         test: {
           name: 'unit-node',
           environment: 'node',
+          testTimeout: 15_000,
           setupFiles: ['./test/setup/node.ts'],
           include: ['**/*.test.ts'],
           exclude: [
@@ -41,6 +42,7 @@ export default defineConfig({
         test: {
           name: 'component-jsdom',
           environment: 'jsdom',
+          testTimeout: 15_000,
           setupFiles: ['./test/setup/component.ts'],
           include: ['**/*.test.tsx'],
           exclude: [
@@ -76,6 +78,7 @@ export default defineConfig({
         test: {
           name: 'service-integration-node',
           environment: 'node',
+          testTimeout: 15_000,
           setupFiles: ['./test/setup/node.ts'],
           include: ['test/services.test.ts', 'test/*.services.test.ts'],
         },

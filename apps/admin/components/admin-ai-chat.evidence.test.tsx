@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AdminAiChat } from './admin-ai-chat';
+import { openAdminAiChat } from './admin-ai-chat.test-helpers';
 
 function chatResponse(body: string | object, init?: ResponseInit) {
   const {
@@ -103,7 +104,7 @@ describe('AdminAiChat', () => {
     });
     const user = userEvent.setup();
     render(<AdminAiChat />);
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Create a launch landing page',
@@ -257,7 +258,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Summarize catalog performance',
@@ -328,7 +329,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Show assistant P95 latency',
@@ -368,7 +369,7 @@ describe('AdminAiChat', () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
 
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    openAdminAiChat();
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Explain the EcoTrack coverage gap',
