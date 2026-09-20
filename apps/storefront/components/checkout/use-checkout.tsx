@@ -1,4 +1,5 @@
 'use client';
+import { getTotalWeightKg } from '@bric/storefront-core/delivery-weight';
 import {
   DEFAULT_CHECKOUT_FIELDS,
   sanitizeCheckoutFields,
@@ -29,6 +30,7 @@ import {
 } from '@/lib/cart';
 import {
   buildCheckoutOrderPayload,
+  createCheckoutAttemptId,
   createCheckoutFormSchema,
   checkoutFieldErrors,
   clearPendingCheckout,
@@ -45,12 +47,6 @@ import type { CheckoutLabels } from '@/lib/checkout-labels';
 import { triggerHaptic } from '@/lib/haptics';
 import { getMarketingOrderContext } from '@/lib/marketing-attribution';
 import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
-
-function createId() {
-  return (
-    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
-}
 
 export function useCheckoutForm({
   locale,
@@ -179,7 +175,12 @@ export function useCheckoutForm({
   const deliveryFee =
     pending && pending.deliveryFee !== undefined
       ? pending.deliveryFee
-      : getCheckoutDeliveryFee(catalog, checkoutFields.state.active ? state : null, delivery);
+      : getCheckoutDeliveryFee(
+          catalog,
+          checkoutFields.state.active ? state : null,
+          delivery,
+          getTotalWeightKg(items),
+        );
   const total = subtotal + (deliveryFee ?? 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -374,7 +375,7 @@ export function useCheckoutForm({
           return;
         }
       }
-      const purchaseEventId = createId();
+      const purchaseEventId = createCheckoutAttemptId();
       let attribution: Pick<
         Parameters<typeof buildCheckoutOrderPayload>[0],
         'visitId' | 'journeyId' | 'sessionId' | 'marketing'
@@ -391,6 +392,7 @@ export function useCheckoutForm({
         form: parsed.data,
         cartProducts: expandCheckoutCart(validatedItems),
         productPromos: getCartProductPromos(validatedItems),
+        expectedWeightKg: getTotalWeightKg(validatedItems),
         expectedProductSubtotal: validatedItems.reduce(
           (sum, item) => sum + item.unitPrice * item.quantity,
           0,
@@ -398,7 +400,7 @@ export function useCheckoutForm({
         ...attribution,
       });
       const attempt = {
-        idempotencyKey: createId(),
+        idempotencyKey: createCheckoutAttemptId(),
         payload,
         items: validatedItems,
         cartMode,

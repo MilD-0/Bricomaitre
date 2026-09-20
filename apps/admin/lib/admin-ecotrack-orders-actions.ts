@@ -1,3 +1,4 @@
+import { getTotalWeightKg, getWeightSurcharge } from '@bric/storefront-core/delivery-weight';
 import { getDb } from '@bric/db/client';
 import { captureAdminException } from './sentry';
 import {
@@ -16,6 +17,7 @@ import {
 import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 import {
   buildOrderCommercialValues,
+  readOrderWeightKg,
   readOrderProductSubtotal,
   resolveOrderCommercialState,
 } from '@bric/storefront-core/order-commercial';
@@ -149,7 +151,7 @@ async function prepareCarrierOrderChange(
     subtotalOverride: row.order.price,
     ...Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined)),
   });
-  const deliveryFee = draft.deliveryFee ?? Number(row.order.deliveryFee ?? 0);
+  let deliveryFee = draft.deliveryFee ?? Number(row.order.deliveryFee ?? 0);
   const commercial =
     draft.cartProducts === undefined
       ? undefined
@@ -159,6 +161,14 @@ async function prepareCarrierOrderChange(
           productPromos: row.order.productPromos,
           now,
         });
+  if (commercial && changes.deliveryFee == null) {
+    deliveryFee = Math.max(
+      0,
+      deliveryFee +
+        getWeightSurcharge(getTotalWeightKg(commercial.lines)) -
+        getWeightSurcharge(await readOrderWeightKg(db, row.order.id)),
+    );
+  }
   const productSubtotal =
     commercial?.productSubtotal ?? (await readOrderProductSubtotal(db, row.order));
   const desired: CarrierOrderChange = {
@@ -197,6 +207,7 @@ async function prepareCarrierOrderChange(
         rawValue: line.rawValue,
         title: line.title,
         effectiveUnitPrice: line.effectiveUnitPrice,
+        weightKg: line.weightKg ?? null,
         quantity: line.quantity,
         lineTotal: line.lineTotal,
         thumbnailUrl: line.thumbnailUrl,

@@ -1,3 +1,4 @@
+import { getWeightSurcharge } from '@bric/storefront-core/delivery-weight';
 import type { EcotrackCatalogResponse } from './ecotrack-admin-contracts';
 import { parseNumericAmount } from './orders';
 
@@ -136,6 +137,7 @@ export function resolveEcotrackDeliveryFee(
   delivery: 0 | 1,
   stateValue: string,
   fallback: number,
+  weightKg = 0,
 ) {
   if (!catalog) {
     return fallback;
@@ -154,5 +156,8 @@ export function resolveEcotrackDeliveryFee(
     return fallback;
   }
 
-  return parseNumericAmount(delivery === 0 ? serviceFee.homeFee : serviceFee.stopDeskFee);
+  return (
+    parseNumericAmount(delivery === 0 ? serviceFee.homeFee : serviceFee.stopDeskFee) +
+    getWeightSurcharge(weightKg)
+  );
 }

@@ -26,6 +26,38 @@ const item = {
 };
 
 describe('storefront cart boundary', () => {
+  it('refreshes stored weights and requires review before a changed delivery charge', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: item.productId,
+              slug: item.token,
+              title: item.title,
+              price: String(item.unitPrice),
+              weightKg: '3.100',
+              inStock: true,
+              availabilityStatus: 'in_stock',
+              images: [],
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await reconcileCartWithCatalog([item], fetcher);
+    expect(result.items[0]).toMatchObject({ weightKg: 3.1, quantity: 2 });
+    expect(result.requiresReview).toBe(true);
+    const stored = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        stored.set(key, value);
+      },
+    };
+    writeCart(storage, result.items);
+    expect(readCart(storage)[0]?.weightKg).toBe(3.1);
+  });
   it('merges refreshed quotes without erasing concurrent quantities, offers, additions or removals', () => {
     const refreshed = { ...item, unitPrice: 1700 };
     const other = { ...item, productId: 90 };

@@ -15,6 +15,7 @@ export const productSelection = {
   barcode: products.barcode,
   price: products.price,
   oldPrice: products.oldPrice,
+  weightKg: products.weightKg,
   inStock: products.inStock,
   availabilityStatus: products.availabilityStatus,
   brandId: products.brandId,

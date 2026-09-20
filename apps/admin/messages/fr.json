@@ -265,6 +265,8 @@
     "developer": "Développeur"
   },
   "labels": {
+    "weightKg": "Poids en kg, facultatif",
+    "weightKgHint": "Livraison : +50 DA par kilo entamé au-delà de 5 kg pour toute la commande.",
     "currentRole": "Rôle actuel : {role}",
     "opsAccess": "Les contrôles d'opérations sont disponibles.",
     "roles": "Rôles",

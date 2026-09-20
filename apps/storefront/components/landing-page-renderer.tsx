@@ -103,6 +103,7 @@ export function LandingPageRenderer({
     title,
     imageUrl: image,
     unitPrice: parseProductPrice(product.price),
+    weightKg: product.weightKg == null ? null : Number(product.weightKg),
     availabilityStatus: product.availability.status,
   };
   const actionLabels =

@@ -21,6 +21,7 @@ export type StorefrontProductDtoRow = Pick<
   | 'barcode'
   | 'price'
   | 'oldPrice'
+  | 'weightKg'
   | 'inStock'
   | 'availabilityStatus'
   | 'brandId'
@@ -43,6 +44,7 @@ export function toStorefrontProductDto(row: StorefrontProductDtoRow) {
     barcode: row.barcode,
     price: row.price,
     oldPrice: row.oldPrice,
+    weightKg: row.weightKg ?? null,
     inStock: row.inStock,
     availabilityStatus: row.availabilityStatus,
     brandId: row.brandId,
@@ -73,6 +75,7 @@ export function toStorefrontProductDetailDto(row: StorefrontProductDetailDtoRow)
     barcode: row.barcode,
     price: row.price,
     oldPrice: row.oldPrice,
+    weightKg: row.weightKg ?? null,
     availability: {
       status: row.availabilityStatus,
       inStock: row.inStock,

@@ -15,6 +15,7 @@
     "./assets": "./src/storefront/assets.ts",
     "./catalog": "./src/storefront/catalog.ts",
     "./contracts": "./src/storefront/contracts.ts",
+    "./delivery-weight": "./src/delivery-weight.ts",
     "./dto": "./src/storefront/dto.ts",
     "./ecotrack-client": "./src/ecotrack-client.ts",
     "./ecotrack-support": "./src/ecotrack-support.ts",

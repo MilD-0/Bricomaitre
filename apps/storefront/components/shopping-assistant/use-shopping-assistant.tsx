@@ -108,6 +108,7 @@ export function ProductResult({
         imageUrl: product.imageUrl,
         unitPrice: Number(product.price),
         quantity: 1,
+        weightKg: product.weightKg == null ? null : Number(product.weightKg),
         availabilityStatus: product.availabilityStatus,
       });
       if (!writeCart(window.localStorage, next)) return;

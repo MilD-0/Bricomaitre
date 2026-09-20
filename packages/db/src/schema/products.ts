@@ -30,6 +30,7 @@ export const products = pgTable(
     price: numeric('price', { precision: 12, scale: 2 }).notNull(),
     oldPrice: numeric('old_price', { precision: 12, scale: 2 }),
     purchasePrice: numeric('purchase_price', { precision: 12, scale: 2 }),
+    weightKg: numeric('weight_kg', { precision: 12, scale: 3 }),
 
     active: boolean('active').notNull().default(true),
     inStock: boolean('in_stock').notNull().default(true),
@@ -74,6 +75,7 @@ export const products = pgTable(
       'products_purchase_price_nonnegative_check',
       sql`${t.purchasePrice} is null or ${t.purchasePrice} >= 0`,
     ),
+    check('products_weight_nonnegative_check', sql`${t.weightKg} is null or ${t.weightKg} >= 0`),
     check('products_units_sold_nonnegative_check', sql`${t.unitsSold} >= 0`),
     check('products_inventory_quantity_nonnegative_check', sql`${t.inventoryQuantity} >= 0`),
     check(

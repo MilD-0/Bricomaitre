@@ -154,24 +154,6 @@ describe('storefront transaction boundaries', () => {
         processingTtlSeconds: 120,
       });
       if (claim.kind !== 'started') throw new Error('Expected new claim');
-      const wilayaId = 16;
-      const feeWhere = and(
-        eq(ecotrackServiceFees.wilayaId, wilayaId),
-        eq(ecotrackServiceFees.serviceType, 'livraison'),
-      );
-      const [previousWilaya] = await db
-        .select()
-        .from(ecotrackWilayas)
-        .where(eq(ecotrackWilayas.wilayaId, wilayaId));
-      const [previousFee] = await db.select().from(ecotrackServiceFees).where(feeWhere);
-      await db.insert(ecotrackWilayas).values({ wilayaId, name: 'Alger' }).onConflictDoNothing();
-      await db
-        .insert(ecotrackServiceFees)
-        .values({ wilayaId, serviceType: 'livraison', homeFee: '500', stopDeskFee: '300' })
-        .onConflictDoUpdate({
-          target: [ecotrackServiceFees.serviceType, ecotrackServiceFees.wilayaId],
-          set: { homeFee: '500', stopDeskFee: '300' },
-        });
       const [product] = await db
         .insert(products)
         .values({ title: 'Optional capture product', slug: eventId, price: '100' })
@@ -179,7 +161,7 @@ describe('storefront transaction boundaries', () => {
       const payload = storefrontOrderCreateRequestSchema.parse({
         phoneNumber1: '0551119992',
         cartProducts: [String(product!.id)],
-        state: wilayaId,
+        state: 16,
         city: 'Alger Centre',
         homeAddress: 'Test address',
         meta: {
@@ -192,8 +174,29 @@ describe('storefront transaction boundaries', () => {
       await getPool().query(
         `CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.${column} = '${eventId}' THEN RAISE EXCEPTION 'simulated optional persistence failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER ${functionName} BEFORE INSERT ON ${table} FOR EACH ROW EXECUTE FUNCTION ${functionName}()`,
       );
+      const feeWhere = and(
+        eq(ecotrackServiceFees.wilayaId, 16),
+        eq(ecotrackServiceFees.serviceType, 'livraison'),
+      );
+      const [previousWilaya] = await db
+        .select()
+        .from(ecotrackWilayas)
+        .where(eq(ecotrackWilayas.wilayaId, 16));
+      const [previousFee] = await db.select().from(ecotrackServiceFees).where(feeWhere);
       let orderId: number | undefined;
       try {
+        // A normal commercial order needs a known tariff independently of Meta.
+        await db
+          .insert(ecotrackWilayas)
+          .values({ wilayaId: 16, name: 'Alger' })
+          .onConflictDoNothing();
+        await db
+          .insert(ecotrackServiceFees)
+          .values({ serviceType: 'livraison', wilayaId: 16, homeFee: '500', stopDeskFee: '300' })
+          .onConflictDoUpdate({
+            target: [ecotrackServiceFees.serviceType, ecotrackServiceFees.wilayaId],
+            set: { homeFee: '500', stopDeskFee: '300' },
+          });
         const result = await createStorefrontOrder(db, payload, {
           idempotency: { keyHash, fingerprint, createdAt: claim.createdAt },
           reportEnrichmentError,
@@ -215,13 +218,13 @@ describe('storefront transaction boundaries', () => {
         );
         if (orderId) await db.delete(orders).where(eq(orders.id, orderId));
         await db.delete(products).where(eq(products.id, product!.id));
-        await db
-          .delete(storefrontOrderIdempotency)
-          .where(eq(storefrontOrderIdempotency.keyHash, keyHash));
         if (previousFee) await db.update(ecotrackServiceFees).set(previousFee).where(feeWhere);
         else await db.delete(ecotrackServiceFees).where(feeWhere);
         if (!previousWilaya)
-          await db.delete(ecotrackWilayas).where(eq(ecotrackWilayas.wilayaId, wilayaId));
+          await db.delete(ecotrackWilayas).where(eq(ecotrackWilayas.wilayaId, 16));
+        await db
+          .delete(storefrontOrderIdempotency)
+          .where(eq(storefrontOrderIdempotency.keyHash, keyHash));
       }
     },
   );

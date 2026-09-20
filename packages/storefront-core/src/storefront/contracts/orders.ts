@@ -12,6 +12,7 @@ import { isoTimestampSchema } from './primitives';
 export const storefrontOrderCreateRequestSchema = storefrontOrderCreateSchema
   .extend({
     expectedProductSubtotal: z.number().finite().nonnegative().optional(),
+    expectedWeightKg: z.number().finite().nonnegative().optional(),
     meta: storefrontOrderMetaSchema.optional(),
     marketing: storefrontOrderMarketingSchema.optional(),
   })
@@ -99,6 +100,7 @@ export const storefrontOrderResponseItemSchema = z.object({
       title: z.string(),
       titleAr: z.string().nullable().optional(),
       unitPrice: z.number(),
+      weightKg: z.number().nonnegative().nullable().optional(),
       quantity: z.number().int().positive(),
       lineTotal: z.number(),
       thumbnailUrl: z.string().nullable(),

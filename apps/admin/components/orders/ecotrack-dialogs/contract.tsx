@@ -1,4 +1,5 @@
 'use client';
+import { getTotalWeightKg, getWeightSurcharge } from '@bric/storefront-core/delivery-weight';
 import type { EcotrackCatalogResponse } from '../../../lib/ecotrack-admin-contracts';
 import { summarizeEditableProducts, type EditableOrderProduct } from '../order-products-editor';
 import { formatEcotrackAmountInput as formatAmountInput } from '../orders-ecotrack-presentation';
@@ -58,6 +59,14 @@ export function updateProducts(current: EditDialogState, editableProducts: Edita
   return {
     ...current,
     editableProducts,
+    deliveryFeeInput: formatAmountInput(
+      Math.max(
+        0,
+        Number(current.deliveryFeeInput || 0) +
+          getWeightSurcharge(getTotalWeightKg(summarizeEditableProducts(editableProducts))) -
+          getWeightSurcharge(getTotalWeightKg(summarizeEditableProducts(current.editableProducts))),
+      ),
+    ),
     subtotalInput: formatAmountInput(subtotal),
     hasManualSubtotalOverride: false,
   };

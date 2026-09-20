@@ -1,4 +1,5 @@
 'use client';
+import { getTotalWeightKg, getWeightSurcharge } from '@bric/storefront-core/delivery-weight';
 
 /* eslint-disable @next/next/no-img-element -- Operational product thumbnails may use legacy external origins. */
 
@@ -176,8 +177,21 @@ export function useOrderEditorBody({
     ? selectedProducts.reduce((sum, product) => sum + product.lineTotal, 0)
     : (baseline.subtotalOverride ?? baseline.productSubtotal);
   const deliveryFee = deliveryChanged
-    ? resolveEcotrackDeliveryFee(catalog, draft.delivery, draft.state, baseline.deliveryFee)
-    : baseline.deliveryFee;
+    ? resolveEcotrackDeliveryFee(
+        catalog,
+        draft.delivery,
+        draft.state,
+        baseline.deliveryFee,
+        getTotalWeightKg(selectedProducts),
+      )
+    : productsChanged
+      ? Math.max(
+          0,
+          baseline.deliveryFee +
+            getWeightSurcharge(getTotalWeightKg(selectedProducts)) -
+            getWeightSurcharge(getTotalWeightKg(baseline.orderProducts)),
+        )
+      : baseline.deliveryFee;
   // Unrelated edits retain accepted amounts, including manual subtotal overrides.
   const total =
     productsChanged || deliveryChanged ? productSubtotal + deliveryFee : baseline.totalAmount;
@@ -218,6 +232,7 @@ export function useOrderEditorBody({
         ...(product.slug !== undefined ? { slug: product.slug } : {}),
         title: product.title,
         unitPrice: parseNumericAmount(product.price),
+        weightKg: product.weightKg == null ? null : Number(product.weightKg),
         thumbnailUrl: product.images[0] ?? null,
         missing: false,
       },

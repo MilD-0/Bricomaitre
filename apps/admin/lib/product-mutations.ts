@@ -42,7 +42,7 @@ export async function toProductMutationValues(
   data: ReturnType<typeof productPayloadSchema.parse>,
   currentId?: number,
 ) {
-  const { promoCodes, ...productValues } = data;
+  const { promoCodes, weightKg, ...productValues } = data;
   void promoCodes;
   return {
     ...productValues,
@@ -50,6 +50,7 @@ export async function toProductMutationValues(
     price: data.price.toFixed(2),
     oldPrice: data.oldPrice == null ? null : data.oldPrice.toFixed(2),
     purchasePrice: data.purchasePrice == null ? null : data.purchasePrice.toFixed(2),
+    ...(weightKg !== undefined ? { weightKg: weightKg === null ? null : weightKg.toFixed(3) } : {}),
   };
 }
 

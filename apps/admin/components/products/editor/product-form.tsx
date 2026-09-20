@@ -123,6 +123,23 @@ export function ProductForm({
               ) : null}
             </Field>
             <Field>
+              <FieldLabel htmlFor="selected-product-weight">{t('labels.weightKg')}</FieldLabel>
+              <Input
+                id="selected-product-weight"
+                type="number"
+                min="0"
+                step="0.001"
+                aria-describedby="selected-product-weight-hint"
+                {...form.register('weightKg', { setValueAs: optionalNumericInput })}
+              />
+              <p id="selected-product-weight-hint" className="text-xs text-muted-foreground">
+                {t('labels.weightKgHint')}
+              </p>
+              {form.formState.errors.weightKg ? (
+                <FieldError role="alert">{form.formState.errors.weightKg.message}</FieldError>
+              ) : null}
+            </Field>
+            <Field>
               <FieldLabel htmlFor="selected-product-quantity">
                 {t('labels.inventoryQuantity')}
               </FieldLabel>

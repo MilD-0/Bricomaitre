@@ -1,3 +1,4 @@
+import { getWeightSurcharge } from '@bric/storefront-core/delivery-weight';
 import {
   storefrontOrderCreateRequestSchema,
   storefrontOrderResponseItemSchema,
@@ -86,6 +87,7 @@ export function getCheckoutDeliveryFee(
   catalog: StorefrontEcotrackCatalogResponse,
   wilayaId: number | null,
   delivery: 'home' | 'office',
+  weightKg = 0,
 ) {
   if (wilayaId == null) return null;
   const fee = catalog.serviceFees.find(
@@ -93,7 +95,7 @@ export function getCheckoutDeliveryFee(
   );
   if (!fee) return null;
   const value = Number(delivery === 'office' ? fee.stopDeskFee : fee.homeFee);
-  return Number.isFinite(value) && value >= 0 ? value : null;
+  return Number.isFinite(value) && value >= 0 ? value + getWeightSurcharge(weightKg) : null;
 }
 
 export function expandCheckoutCart(items: CartItem[]) {
@@ -114,6 +116,7 @@ export function buildCheckoutOrderPayload(options: {
   promoCode?: string | null;
   productPromos?: Array<{ productId: number; code: string }>;
   expectedProductSubtotal?: number;
+  expectedWeightKg?: number;
 }): StorefrontOrderCreateRequest {
   return storefrontOrderCreateRequestSchema.parse({
     firstName: options.form.firstName,
@@ -129,6 +132,9 @@ export function buildCheckoutOrderPayload(options: {
     note: null,
     promoCode: options.promoCode ?? null,
     ...(options.productPromos ? { productPromos: options.productPromos } : {}),
+    ...(options.expectedWeightKg !== undefined
+      ? { expectedWeightKg: options.expectedWeightKg }
+      : {}),
     ...(options.expectedProductSubtotal !== undefined
       ? { expectedProductSubtotal: options.expectedProductSubtotal }
       : {}),
@@ -274,5 +280,11 @@ export function checkoutFieldErrors(
           ? labels.phoneError
           : labels.requiredError,
     ]),
+  );
+}
+
+export function createCheckoutAttemptId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
 }
