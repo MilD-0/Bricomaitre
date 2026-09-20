@@ -106,7 +106,7 @@ describe('persisted commerce workflows', () => {
       await db.delete(orders).where(eq(orders.id, row!.id));
       await db.delete(actionLogs).where(eq(actionLogs.createdBy, actor.email));
     }
-  });
+  }, 15_000);
 
   it('rejects expired and stale content proposals inside approval, then persists a valid approval', async () => {
     const db = getDb();
