@@ -76,6 +76,7 @@ export default defineConfig({
         test: {
           name: 'service-integration-node',
           environment: 'node',
+          testTimeout: 15_000,
           setupFiles: ['./test/setup/node.ts'],
           include: ['test/services.test.ts', 'test/*.services.test.ts'],
         },

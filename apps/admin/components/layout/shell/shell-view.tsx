@@ -73,7 +73,6 @@ export function AppShellView({
           ref={sidebarRef}
           data-desktop-navigation
           aria-label={t('adminWorkspace.products.selectionMore')}
-          aria-hidden={!isDesktop && !sidebarOpen ? true : undefined}
           aria-modal={!isDesktop && sidebarOpen ? true : undefined}
           role={!isDesktop && sidebarOpen ? 'dialog' : undefined}
           inert={!isDesktop && !sidebarOpen ? true : undefined}

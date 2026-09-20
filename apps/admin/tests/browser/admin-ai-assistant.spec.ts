@@ -107,7 +107,9 @@ const ecotrackTerminalMessage = {
 };
 
 async function openHydratedAssistant(page: Page, copy = en.aiChat) {
-  const launcher = page.getByRole('button', { name: copy.open, exact: true });
+  const launcher = page.locator(
+    `[data-admin-ai-entry="${(page.viewportSize()?.width ?? 1_280) < 1_024 ? 'mobile-header' : 'workspace'}"]`,
+  );
   const close = page.getByRole('button', { name: copy.close });
   await launcher.waitFor({ state: 'visible', timeout: 30_000 });
 
