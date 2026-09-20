@@ -154,24 +154,6 @@ describe('storefront transaction boundaries', () => {
         processingTtlSeconds: 120,
       });
       if (claim.kind !== 'started') throw new Error('Expected new claim');
-      const wilayaId = 16;
-      const feeWhere = and(
-        eq(ecotrackServiceFees.wilayaId, wilayaId),
-        eq(ecotrackServiceFees.serviceType, 'livraison'),
-      );
-      const [previousWilaya] = await db
-        .select()
-        .from(ecotrackWilayas)
-        .where(eq(ecotrackWilayas.wilayaId, wilayaId));
-      const [previousFee] = await db.select().from(ecotrackServiceFees).where(feeWhere);
-      await db.insert(ecotrackWilayas).values({ wilayaId, name: 'Alger' }).onConflictDoNothing();
-      await db
-        .insert(ecotrackServiceFees)
-        .values({ wilayaId, serviceType: 'livraison', homeFee: '500', stopDeskFee: '300' })
-        .onConflictDoUpdate({
-          target: [ecotrackServiceFees.serviceType, ecotrackServiceFees.wilayaId],
-          set: { homeFee: '500', stopDeskFee: '300' },
-        });
       const [product] = await db
         .insert(products)
         .values({ title: 'Optional capture product', slug: eventId, price: '100' })
@@ -179,7 +161,7 @@ describe('storefront transaction boundaries', () => {
       const payload = storefrontOrderCreateRequestSchema.parse({
         phoneNumber1: '0551119992',
         cartProducts: [String(product!.id)],
-        state: wilayaId,
+        state: 16,
         city: 'Alger Centre',
         homeAddress: 'Test address',
         meta: {
