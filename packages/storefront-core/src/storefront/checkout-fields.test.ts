@@ -36,7 +36,7 @@ describe('checkout field policy', () => {
     expect(enabled.state).toEqual({ active: true, required: true });
     expect(checkoutFieldsSchema.parse(enabled)).toEqual(enabled);
   });
-  it('drops hidden draft values and only requires an address for home delivery', () => {
+  it('drops hidden draft values and requires configured fields for every delivery method', () => {
     let fields = setCheckoutField(DEFAULT_CHECKOUT_FIELDS, 'state', 'active', false);
     fields = setCheckoutField(fields, 'email', 'active', false);
     fields = setCheckoutField(fields, 'homeAddress', 'required', true);
@@ -50,7 +50,7 @@ describe('checkout field policy', () => {
       email: 'invalid',
       delivery: 'office',
     };
-    expect(missingCheckoutFields(form, fields)).toEqual([]);
+    expect(missingCheckoutFields(form, fields)).toEqual(['homeAddress']);
     const sanitized = sanitizeCheckoutFields(form, fields);
     expect(sanitized).toMatchObject({ state: null, city: '', email: '', delivery: 'home' });
     expect(missingCheckoutFields(sanitized, fields)).toEqual(['homeAddress']);

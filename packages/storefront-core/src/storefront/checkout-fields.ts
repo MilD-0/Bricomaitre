@@ -90,8 +90,6 @@ export function missingCheckoutFields(
 ) {
   return checkoutFieldNames.filter((name) => {
     if (!fields[name].required) return false;
-    if (name === 'homeAddress' && (input.delivery === 1 || input.delivery === 'office'))
-      return false;
     const value = input[name];
     return value == null || (typeof value === 'string' && !value.trim());
   });

@@ -265,8 +265,7 @@
     "developer": "Developer"
   },
   "labels": {
-    "weightKg": "Weight in kg, optional",
-    "weightKgHint": "Delivery adds 50 DA per started kilo above 5 kg for the whole order.",
+    "weightKg": "Weight in kg",
     "currentRole": "Current role: {role}",
     "opsAccess": "Ops controls and logs are available.",
     "roles": "Roles",
@@ -1661,8 +1660,7 @@
       "city": "Commune",
       "homeAddress": "Home address",
       "email": "Email",
-      "phoneNumber1Hint": "Always required to confirm orders by phone.",
-      "homeAddressHint": "Required only for home delivery."
+      "phoneNumber1Hint": "Always required to confirm orders by phone."
     }
   },
   "auth": {

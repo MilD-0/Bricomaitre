@@ -243,15 +243,11 @@ export function CheckoutFormView({
               <label className="checkout-field checkout-field-wide">
                 <span>
                   {labels.address}{' '}
-                  {checkoutFields.homeAddress.required && delivery === 'home' ? (
-                    <b>*</b>
-                  ) : (
-                    <em>{labels.optional}</em>
-                  )}
+                  {checkoutFields.homeAddress.required ? <b>*</b> : <em>{labels.optional}</em>}
                 </span>
                 <input
                   name="homeAddress"
-                  aria-required={checkoutFields.homeAddress.required && delivery === 'home'}
+                  aria-required={checkoutFields.homeAddress.required}
                   autoComplete="street-address"
                   value={homeAddress}
                   aria-invalid={Boolean(errors.homeAddress)}
