@@ -101,7 +101,7 @@ export async function persistStatusEvidence(
   if (activities.length > 0) {
     await tx
       .insert(ecotrackOrderActivities)
-      .values(activities)
+      .values([...new Map(activities.map((activity) => [activity.sourceKey, activity])).values()])
       .onConflictDoUpdate({
         target: [ecotrackOrderActivities.orderId, ecotrackOrderActivities.sourceKey],
         set: {

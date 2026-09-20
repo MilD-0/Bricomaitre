@@ -117,6 +117,7 @@ export type EcotrackSyncResult = {
   serviceFeeCount: number;
   weightFeeCount: number;
   rateLimits: EcotrackRateLimitSnapshot[];
+  unpricedWilayaIds: number[];
 };
 
 export type EcotrackFeeLookup = Pick<EcotrackCatalogRecord, 'serviceFees'>;
@@ -128,7 +129,10 @@ class EcotrackCatalogSnapshotIncompleteError extends Error {
   }
 }
 
-export function assertCompleteEcotrackCatalogSnapshot(snapshot: EcotrackCatalogSnapshot) {
+export function assertCompleteEcotrackCatalogSnapshot(
+  snapshot: EcotrackCatalogSnapshot,
+  previousDeliveryWilayaIds: number[] = [],
+) {
   if (snapshot.wilayas.length === 0 || snapshot.communes.length === 0) {
     throw new EcotrackCatalogSnapshotIncompleteError(
       'ECOTRACK returned an empty location catalog; the previous catalog was preserved.',
@@ -140,12 +144,20 @@ export function assertCompleteEcotrackCatalogSnapshot(snapshot: EcotrackCatalogS
       .filter((fee) => fee.serviceType === 'livraison')
       .map((fee) => fee.wilayaId),
   );
-  const missingFeeWilayas = snapshot.wilayas.filter(
-    (wilaya) => !deliveryFeeWilayas.has(wilaya.wilayaId),
-  );
-  if (missingFeeWilayas.length > 0) {
+  if (deliveryFeeWilayas.size === 0) {
     throw new EcotrackCatalogSnapshotIncompleteError(
-      `ECOTRACK omitted delivery fees for ${missingFeeWilayas.length} wilaya(s); the previous catalog was preserved.`,
+      'ECOTRACK returned no delivery tariffs; the previous catalog was preserved.',
     );
   }
+  // Location coverage and tariff availability are separate. Never invent a fee
+  // for an unpriced location, but reject the loss of previously priced coverage.
+  const lostTariffIds = previousDeliveryWilayaIds.filter((id) => !deliveryFeeWilayas.has(id));
+  if (lostTariffIds.length > 0) {
+    throw new EcotrackCatalogSnapshotIncompleteError(
+      `ECOTRACK omitted previously available delivery fees for wilaya IDs ${lostTariffIds.join(', ')}; the previous catalog was preserved.`,
+    );
+  }
+  return snapshot.wilayas
+    .filter((wilaya) => !deliveryFeeWilayas.has(wilaya.wilayaId))
+    .map((wilaya) => wilaya.wilayaId);
 }

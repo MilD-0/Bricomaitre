@@ -168,7 +168,7 @@ export function AppShellView({
                 type="button"
                 data-admin-ai-entry="workspace"
                 className={cn(
-                  'flex min-h-11 items-center gap-3 rounded-lg border border-primary/15 bg-primary/5 px-2.5 py-2 text-start text-foreground transition-colors hover:border-primary/30 hover:bg-primary/10',
+                  'flex min-w-0 cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2.5 text-start text-sm text-muted-foreground transition-[background-color,color] hover:bg-muted/70 hover:text-foreground',
                   sidebarCollapsed && 'lg:justify-center',
                 )}
                 onClick={() => {
@@ -178,24 +178,21 @@ export function AppShellView({
                 aria-label={t('aiChat.open')}
                 title={sidebarCollapsed ? t('aiChat.open') : undefined}
               >
-                <span className="relative grid size-7 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
-                  <Bot className="size-4" />
-                  <Sparkles className="absolute -end-1 -top-1 size-2 text-amber-200" />
-                </span>
-                <span className={cn('min-w-0', sidebarCollapsed && 'lg:hidden')}>
-                  <strong className="block truncate text-xs font-semibold">
-                    {t('aiChat.open')}
-                  </strong>
-                  <small className="block truncate text-[0.6875rem] text-muted-foreground">
-                    {activeNavigation.title}
-                  </small>
+                <Bot className="size-4 shrink-0" />
+                <span
+                  className={cn(
+                    'min-w-0 whitespace-normal break-words text-left leading-5',
+                    sidebarCollapsed && 'lg:hidden',
+                  )}
+                >
+                  {t('aiChat.open')}
                 </span>
               </button>
             ) : null}
             <button
               type="button"
               className={cn(
-                'flex items-center gap-3 rounded-lg px-1 py-1.5 text-start transition-colors hover:bg-muted hover:text-foreground',
+                'flex cursor-pointer items-center gap-3 rounded-lg px-1 py-1.5 text-start transition-colors hover:bg-muted hover:text-foreground',
                 sidebarCollapsed && 'lg:justify-center',
               )}
               aria-controls="sidebar-profile-drawer"

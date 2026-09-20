@@ -74,6 +74,10 @@ parallel CI lanes do not each expand to the host CPU count. Browser and
 performance lanes run after setup in a loopback-only network namespace, while
 real-service fixtures use pinned local container images.
 
+Pull request CI verifies a change before merge. Merging creates a new `main`
+commit and runs CI again; only a successful push run for that `main` commit can
+start the production release.
+
 CI enforces coverage floors in each app's Vitest configuration and scans production
 dependencies for high-severity advisories. The [dependency audit](../ops/scripts/production-dependency-audit.mjs)
 records the pinned SheetJS CDN exception; changes require dependency review.

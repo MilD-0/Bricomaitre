@@ -84,13 +84,20 @@ export async function POST(request: NextRequest) {
     const messages = shoppingAssistantModelMessages(parsed.data);
     const candidates = modelCandidates(settings.aiModel, settings.aiFallbackModel);
     const encoder = new TextEncoder();
+    const responseCancelled = new AbortController();
+    let responseOpen = true;
     const responseStream = new ReadableStream<Uint8Array>({
       start(controller) {
         const write = (event: ShoppingAssistantStreamEvent) => {
-          if (request.signal.aborted) return;
+          if (!responseOpen || request.signal.aborted) return;
           controller.enqueue(
             encoder.encode(`${JSON.stringify(shoppingAssistantStreamEventSchema.parse(event))}\n`),
           );
+        };
+        const close = () => {
+          if (!responseOpen) return;
+          responseOpen = false;
+          controller.close();
         };
         write({ type: 'status', status: 'thinking' });
 
@@ -116,9 +123,10 @@ export async function POST(request: NextRequest) {
                   abortSignal: config.requestTimeoutMs
                     ? AbortSignal.any([
                         request.signal,
+                        responseCancelled.signal,
                         AbortSignal.timeout(config.requestTimeoutMs),
                       ])
-                    : request.signal,
+                    : AbortSignal.any([request.signal, responseCancelled.signal]),
                   maxRetries: config.maxRetries,
                   maxOutputTokens: STOREFRONT_ASSISTANT_MAX_OUTPUT_TOKENS,
                 });
@@ -208,9 +216,13 @@ export async function POST(request: NextRequest) {
               });
             }
           } finally {
-            controller.close();
+            close();
           }
         })();
+      },
+      cancel() {
+        responseOpen = false;
+        responseCancelled.abort();
       },
     });
 

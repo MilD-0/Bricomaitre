@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { getDb } from '@bric/db/client';
 import { syncEcotrackShipmentStates } from '../admin-ecotrack-orders-data';
 import { refreshAnalyticsFacts } from '../analytics-facts';
@@ -64,10 +65,46 @@ export async function runEcotrackSyncJob(
 export async function runEcotrackShipmentSyncJob(
   payload: EcotrackShipmentSyncPayload,
   helpers: {
+    job?: { id?: string };
     updateSummary: (summary: Record<string, unknown>) => Promise<void>;
   },
 ) {
-  const result = await syncEcotrackShipmentStates({ actor: payload.actor });
+  const result = await syncEcotrackShipmentStates({
+    actor: payload.actor,
+    onSummary: async (result) => {
+      const summary = { trigger: payload.trigger, ...result, diagnostics: result };
+      if (Number(result.failureCount) > 0) {
+        const jobId = helpers.job?.id ?? null;
+        console.warn(
+          '[ecotrack-shipment-sync] failures',
+          JSON.stringify({
+            jobId,
+            release: process.env.SENTRY_RELEASE ?? null,
+            trigger: payload.trigger,
+            ...result,
+          }),
+        );
+        // Total failures are captured by the queue worker with this saved summary.
+        if (
+          Number(result.synced) +
+            Number(result.missing) +
+            Number(result.retired) +
+            Number(result.superseded) >
+          0
+        ) {
+          Sentry.withScope((scope) => {
+            scope.setTag('queue', 'admin-ecotrack-shipment-sync');
+            scope.setTag('job_name', 'ecotrack-shipment-sync');
+            if (jobId) scope.setTag('job_id', jobId);
+            scope.setContext('ecotrack_sync', summary);
+            scope.setFingerprint(['ecotrack-shipment-sync', 'partial-failure']);
+            Sentry.captureMessage('ECOTRACK shipment sync partially failed', 'warning');
+          });
+        }
+      }
+      await helpers.updateSummary(summary);
+    },
+  });
   await refreshAnalyticsFacts({ db: getReportingDb() });
   const summary = {
     trigger: payload.trigger,

@@ -265,8 +265,7 @@
     "developer": "Développeur"
   },
   "labels": {
-    "weightKg": "Poids en kg, facultatif",
-    "weightKgHint": "Livraison : +50 DA par kilo entamé au-delà de 5 kg pour toute la commande.",
+    "weightKg": "Poids en kg",
     "currentRole": "Rôle actuel : {role}",
     "opsAccess": "Les contrôles d'opérations sont disponibles.",
     "roles": "Rôles",
@@ -1661,8 +1660,7 @@
       "city": "Commune",
       "homeAddress": "Adresse du domicile",
       "email": "E-mail",
-      "phoneNumber1Hint": "Toujours obligatoire pour confirmer les commandes par téléphone.",
-      "homeAddressHint": "Obligatoire uniquement pour la livraison à domicile."
+      "phoneNumber1Hint": "Toujours obligatoire pour confirmer les commandes par téléphone."
     }
   },
   "auth": {

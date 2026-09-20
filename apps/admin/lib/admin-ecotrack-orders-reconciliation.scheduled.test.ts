@@ -261,7 +261,7 @@ describe('admin ecotrack shipment reconciliation', () => {
       .mockRejectedValueOnce(new Error('selected tracking is invalid'))
       .mockResolvedValueOnce({ data: [] });
 
-    await expect(syncEcotrackShipmentStates({ includeMaj: true })).resolves.toEqual({
+    await expect(syncEcotrackShipmentStates({ includeMaj: true })).resolves.toMatchObject({
       total: 2,
       synced: 2,
       missing: 0,

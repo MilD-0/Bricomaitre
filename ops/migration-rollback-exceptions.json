@@ -20,6 +20,11 @@
       "migration": "0109_flaky_shriek.sql",
       "sha256": "1dc854e316aa46b5b2e12f0c0e7e9820817a9681b401adc3d783d28ee950d989",
       "reason": "The new checkout_fields column is additive on the single-row settings table and has a complete JSON default. Existing runtime reads and writes omit the column safely, while the default backfills the existing settings row before the new runtime reads it."
+    },
+    {
+      "migration": "0110_puzzling_mysterio.sql",
+      "sha256": "dcb515b09e649511dc40ed6e4f1f1b20112e65aa5c5d46e3283443e4c4436ac6",
+      "reason": "The new checks constrain only nullable weight snapshots and the new nullable product weight field. Existing rows remain valid, and the previous runtime ignores both columns; the constraints therefore preserve compatibility while rejecting invalid future weight data."
     }
   ]
 }
