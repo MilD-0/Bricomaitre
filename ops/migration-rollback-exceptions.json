@@ -15,6 +15,11 @@
       "migration": "0101_cold_blindfold.sql",
       "sha256": "bc19c5dbdae39cab15eeeec00b0ebc8aa6318d489c0b63d2bb269d67030d37d5",
       "reason": "The operation constraints apply only to the new ecotrack_mutations table, which the previous runtime does not use. The two existing unique indexes are widened by tracking_number without removing columns. At source31f91789 admin-ecotrack-shipment-state.ts357/369, the only MAJ and tracking-event writers use untargeted ON CONFLICT DO NOTHING, which remains valid. Observation/activity (order_id, source_key) indexes and their explicit conflict targets are unchanged. carrier-mutations.services.test.ts executes these previous-runtime insert forms against the migrated schema and verifies separate shipment attempts."
+    },
+    {
+      "migration": "0109_flaky_shriek.sql",
+      "sha256": "1dc854e316aa46b5b2e12f0c0e7e9820817a9681b401adc3d783d28ee950d989",
+      "reason": "The new checkout_fields column is additive on the single-row settings table and has a complete JSON default. Existing runtime reads and writes omit the column safely, while the default backfills the existing settings row before the new runtime reads it."
     }
   ]
 }
