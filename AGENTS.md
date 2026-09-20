@@ -153,16 +153,21 @@ clean up long-lived processes, and keep expensive work bounded and observable.
 
 ## Git And Releases
 
-Commit coherent completed work whenever it improves the repository history;
-commits do not require separate permission. Use clear messages that describe
-the real change set.
+Use a branch or worktree for substantive changes. The normal path is local
+verification, branch push, pull request, CI and review, then merge. Direct
+pushes to `main` are exceptions.
+
+Commit coherent completed work whenever it improves the repository history.
+Commits do not require separate permission. Use clear messages that describe
+the real change set. Evaluate automated review findings against the code and
+requirements before applying them.
 
 Pushing requires Mild's permission. Once granted, permission for ordinary
 pushes persists for the conversation until explicitly revoked.
 
-Complete relevant local gates before pushing, keep pushes coherent, and do not
-use empty commits or duplicate workflow runs to make CI retry work it cannot
-prove.
+Complete relevant local gates before pushing. Keep pushes and pull requests
+coherent, and do not use empty commits or duplicate workflow runs to make CI
+retry work it cannot prove.
 
 ## Documentation And Repository Integrity
 

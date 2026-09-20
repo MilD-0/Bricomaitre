@@ -91,3 +91,13 @@ the deployed release and relevant request/job IDs before diagnosing production.
 `pnpm dead-code:check` scans dependencies and production reachability. Keep
 `knip.json` aligned with executable entry points; test imports alone do not justify
 keeping application code.
+
+## Finish a task
+
+After local verification, push the task branch and open a pull request against
+`main`. Address relevant CI and review findings on the same branch. Merge only
+after the required checks pass.
+
+The merge starts a fresh CI run for the resulting `main` commit. After the task
+is merged, delete its branch and run `./bric env destroy` before removing its
+worktree.
