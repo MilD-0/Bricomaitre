@@ -23,7 +23,8 @@ describe('client instrumentation loading', () => {
   it('loads Sentry for an error, not for successful-session interactions or navigation', async () => {
     vi.useFakeTimers();
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN_STOREFRONT', 'https://public@example.ingest.sentry.io/123');
-    vi.stubEnv('NEXT_PUBLIC_RELEASE', 'release-test');
+    vi.stubEnv('NEXT_PUBLIC_RELEASE', 'sha-release-test');
+    vi.stubEnv('NEXT_PUBLIC_SENTRY_RELEASE', 'release-test');
     vi.stubEnv('SENTRY_RELEASE', '');
     const removeListener = vi.spyOn(window, 'removeEventListener');
 

@@ -65,16 +65,23 @@ describe('storefront Sentry privacy boundary', () => {
 
   it('uses the public build release when the server-only release is unavailable', () => {
     const previousServerRelease = process.env.SENTRY_RELEASE;
+    const previousPublicSentryRelease = process.env.NEXT_PUBLIC_SENTRY_RELEASE;
     const previousPublicRelease = process.env.NEXT_PUBLIC_RELEASE;
     try {
       delete process.env.SENTRY_RELEASE;
-      process.env.NEXT_PUBLIC_RELEASE = 'abc123';
+      process.env.NEXT_PUBLIC_SENTRY_RELEASE = 'abc123';
+      process.env.NEXT_PUBLIC_RELEASE = 'sha-abc123';
       expect(getSentryRelease()).toBe('abc123');
       process.env.SENTRY_RELEASE = 'server456';
       expect(getSentryRelease()).toBe('server456');
+      delete process.env.SENTRY_RELEASE;
+      delete process.env.NEXT_PUBLIC_SENTRY_RELEASE;
+      expect(getSentryRelease()).toBeUndefined();
     } finally {
       if (previousServerRelease === undefined) delete process.env.SENTRY_RELEASE;
       else process.env.SENTRY_RELEASE = previousServerRelease;
+      if (previousPublicSentryRelease === undefined) delete process.env.NEXT_PUBLIC_SENTRY_RELEASE;
+      else process.env.NEXT_PUBLIC_SENTRY_RELEASE = previousPublicSentryRelease;
       if (previousPublicRelease === undefined) delete process.env.NEXT_PUBLIC_RELEASE;
       else process.env.NEXT_PUBLIC_RELEASE = previousPublicRelease;
     }

@@ -163,6 +163,8 @@ an `app://` wrapper or a browser extension. Mixed and stackless errors remain
 visible. All deployable processes should tag Sentry events with the release
 SHA. A browser event without a release cannot establish whether a fix held;
 verify the release tag on real production browser events after deployment.
+The Storefront build passes the raw commit SHA as `NEXT_PUBLIC_SENTRY_RELEASE`;
+`NEXT_PUBLIC_RELEASE` is the `sha-` prefixed image tag used by analytics.
 
 The existing project alerts email issue owners about high-priority issues.
 Separate production regression alerts cover
