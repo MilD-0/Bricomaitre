@@ -401,4 +401,32 @@ describe('POST /api/ai/chat model-led runtime', () => {
     );
     expect(recoveryEvidence.split('this turn:\n')[1]).toHaveLength(100);
   });
+
+  it('bypasses configured limits for an extended run and keeps request cancellation', async () => {
+    mocks.configOverrides = {
+      adminRequestTimeoutMs: 60_000,
+      adminMaxSteps: 8,
+      adminMaxOutputTokens: 1_600,
+      adminSynthesisEvidenceCharacterLimit: 100,
+    };
+    mocks.streamParts = [
+      {
+        type: 'tool-result',
+        toolCallId: 'orders-1',
+        toolName: 'query_orders',
+        input: {},
+        output: { rows: 'x'.repeat(200) },
+      },
+    ];
+    const chatRequest = request({ message: 'Investigate.', conversationKey, extendedRun: true });
+    const response = await POST(chatRequest);
+    await response.text();
+
+    expect(mocks.streamOptions).not.toHaveProperty('maxOutputTokens');
+    expect(mocks.streamOptions!.abortSignal).toBe(chatRequest.signal);
+    expect(await (mocks.streamOptions!.stopWhen as () => boolean)()).toBe(false);
+    const recovery = mocks.generateText.mock.calls[0]![0];
+    expect(recovery).not.toHaveProperty('maxOutputTokens');
+    expect(recovery.messages.at(-1).content).toContain('x'.repeat(200));
+  });
 });

@@ -456,7 +456,7 @@ export function buildShoppingAssistantTools(input: {
     }),
     present_products: tool({
       description:
-        'Show a useful subset of products as compact customer-facing cards. Use product IDs from catalog, product, cart, or prior conversation evidence; omit cards when prose alone is clearer.',
+        'Show customer-facing product cards with images, prices, availability, and links. Call when the answer discusses identifiable products, including a current product, recommendation, or comparison. Use product IDs from catalog, product, cart, or prior conversation evidence; select only products discussed.',
       inputSchema: shoppingAssistantProductSelectionSchema,
       execute: async ({ productIds }) => {
         await loadValidatedProducts(productIds);

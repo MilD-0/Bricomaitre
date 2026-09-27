@@ -105,6 +105,7 @@ describe('AdminAiChat', () => {
     expect(within(dialog).queryByText('aiChat.description')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.sendHint')).not.toBeInTheDocument();
     expect(within(dialog).getByRole('switch', { name: 'aiChat.autoAccept' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('switch', { name: 'aiChat.extendedRun' })).toBeInTheDocument();
   });
 
   it('uses a full-screen workspace automatically when the viewport is narrow', async () => {
@@ -232,6 +233,7 @@ describe('AdminAiChat', () => {
       message: 'Find missing Arabic titles',
       conversationKey: expect.any(String),
       autoAcceptProposals: false,
+      extendedRun: false,
       model: 'gpt-5.6-luna',
       reasoningEffort: 'medium',
     });
@@ -274,9 +276,11 @@ describe('AdminAiChat', () => {
     const model = await screen.findByRole('combobox', { name: 'aiChat.model' });
     const effort = screen.getByRole('combobox', { name: 'aiChat.reasoningEffort' });
     const autoAccept = screen.getByRole('switch', { name: 'aiChat.autoAccept' });
+    const extendedRun = screen.getByRole('switch', { name: 'aiChat.extendedRun' });
     await user.selectOptions(model, 'gpt-5.6-luna');
     await user.selectOptions(effort, 'medium');
     await user.click(autoAccept);
+    await user.click(extendedRun);
 
     expect(window.localStorage.getItem(ADMIN_AI_MODEL_STORAGE_KEY)).toBe('gpt-5.6-luna');
     expect(window.localStorage.getItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY)).toBe('medium');
@@ -299,7 +303,9 @@ describe('AdminAiChat', () => {
       model: 'gpt-5.6-luna',
       reasoningEffort: 'medium',
       autoAcceptProposals: true,
+      extendedRun: true,
     });
+    expect(extendedRun).toHaveAttribute('data-state', 'unchecked');
   });
 
   it('renders proposal review controls and applies the selected review action', async () => {

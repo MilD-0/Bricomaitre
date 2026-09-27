@@ -33,6 +33,25 @@ it('keeps absent caps disabled and preserves the live request cancellation signa
   expect(adminAiGenerationOptions({ maxRetries: 2 }).abortSignal).toBeUndefined();
 });
 
+it('removes configured generation caps for an extended run while keeping cancellation', async () => {
+  const request = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  const options = adminAiGenerationOptions(
+    {
+      maxRetries: 2,
+      adminMaxSteps: 16,
+      adminMaxOutputTokens: 3_200,
+      adminRequestTimeoutMs: 60_000,
+    },
+    request.signal,
+    true,
+  );
+  expect(await options.stopWhen({ steps: Array(100).fill({}) })).toBe(false);
+  expect(options).not.toHaveProperty('maxOutputTokens');
+  expect(options.abortSignal).toBe(request.signal);
+  expect(timeout).not.toHaveBeenCalled();
+});
+
 it.each(['request', 'deadline'])('combines the live request with the deadline: %s', (source) => {
   const request = new AbortController();
   const deadline = new AbortController();

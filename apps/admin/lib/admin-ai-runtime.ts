@@ -27,6 +27,7 @@ export const adminAiChatRequestSchema = z
     conversationKey: z.uuid(),
     context: adminAiSurfaceContextSchema.optional(),
     autoAcceptProposals: z.boolean().optional().default(false),
+    extendedRun: z.boolean().optional().default(false),
     model: adminAiModelIdSchema.optional().default(ADMIN_AI_DEFAULT_MODEL),
     reasoningEffort: adminAiReasoningEffortSchema.optional(),
   })

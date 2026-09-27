@@ -2,7 +2,7 @@
 import { useConversationActions } from './conversation-actions';
 import { useConversationState } from './use-conversation-state';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { consumeAdminAiChatResponse } from '../../lib/admin-ai-chat-stream';
 import { notifyAdminAiMutation } from '../../lib/admin-ai-events';
@@ -95,6 +95,7 @@ export function useAdminAiChat({
     conversationSearch,
     setConversationSearch,
   } = useConversationState({ permissions, modelIds });
+  const [extendedRun, setExtendedRun] = useState(false);
 
   useEffect(() => {
     const autoAccept = window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY) === 'true';
@@ -176,6 +177,10 @@ export function useAdminAiChat({
     window.localStorage.setItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY, String(enabled));
   }
 
+  function updateExtendedRun(enabled: boolean) {
+    setExtendedRun(enabled);
+  }
+
   function updateReasoningEffort(nextEffort: AdminAiReasoningEffort) {
     if (!supportsAdminAiReasoningEffort(model, nextEffort)) return;
     setReasoningEffort(nextEffort);
@@ -242,6 +247,8 @@ export function useAdminAiChat({
   async function send() {
     const message = input.trim();
     if (!message || pending || loadingConversation || conversationLoadError) return;
+    const extendedRunForTurn = extendedRun;
+    setExtendedRun(false);
     conversationKeyRef.current ??= crypto.randomUUID();
     setMessages((items) => [...items, { role: 'user', content: message }]);
     setInput('');
@@ -268,6 +275,7 @@ export function useAdminAiChat({
           message,
           conversationKey: conversationKeyRef.current,
           autoAcceptProposals,
+          extendedRun: extendedRunForTurn,
           model,
           reasoningEffort,
           context: surfaceContext.surface === 'unknown' ? undefined : surfaceContext,
@@ -443,6 +451,8 @@ export function useAdminAiChat({
       updateReasoningEffort,
       autoAcceptProposals,
       updateAutoAcceptProposals,
+      extendedRun,
+      updateExtendedRun,
       setFullScreen,
       mobilePanel,
       setMobilePanel,

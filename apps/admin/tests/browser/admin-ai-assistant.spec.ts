@@ -197,6 +197,7 @@ test('renders a live landing-page result without desktop or mobile overflow', as
   await openHydratedAssistant(page);
   const dialog = page.getByRole('dialog');
   const workspace = dialog.locator('[data-slot="admin-ai-workspace"]');
+  await dialog.getByRole('switch', { name: 'Extended run' }).check();
   await page
     .getByRole('textbox', { name: 'Message the AI assistant' })
     .fill('Unpublish landing page 91 without changing its content');
@@ -210,6 +211,7 @@ test('renders a live landing-page result without desktop or mobile overflow', as
   );
   expect(requestBodies[0]).toMatchObject({
     model: 'gpt-5.6-luna',
+    extendedRun: true,
     context: { surface: 'assets', section: 'landingPages' },
   });
   await expect
