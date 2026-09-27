@@ -1,9 +1,7 @@
 'use client';
 
-import { z } from 'zod';
-import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
 import { Package, PhoneCall, Plus, Search, Trash2 } from 'lucide-react';
-import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 
@@ -34,34 +32,18 @@ type CreateResponse = {
   duplicateCandidates: Array<{ id: number; createdAt: string }>;
 };
 
-const storedPhoneAttemptSchema = z.object({
-  requestId: z.string().uuid(),
-  body: z.string(),
-  products: z.array(
-    z.object({
-      id: z.number().int().positive(),
-      title: z.string(),
-      price: z.union([z.string(), z.number()]),
-      images: z.array(z.string()),
-    }),
-  ),
-});
-
 export function OrderSalesDesk({
   catalog,
-  operatorId,
   writable,
   onOpenOrder,
   onCreated,
 }: {
   catalog?: EcotrackCatalogResponse;
-  operatorId?: string;
   writable: boolean;
   onOpenOrder: (id: number) => void;
   onCreated: (order: OrderRecord) => Promise<void>;
 }) {
   const t = useTranslations('salesDesk');
-  const storageKey = operatorId ? `bric:phone-order-attempt:${operatorId}` : null;
   const [createOpen, setCreateOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -77,6 +59,16 @@ export function OrderSalesDesk({
   const attemptRef = useRef<{ requestId: string; body: string } | null>(null);
   const [unresolved, setUnresolved] = useState(false);
   const [created, setCreated] = useState<CreateResponse | null>(null);
+  useEffect(() => {
+    try {
+      for (let index = window.sessionStorage.length - 1; index >= 0; index--) {
+        const key = window.sessionStorage.key(index);
+        if (key?.startsWith('bric:phone-order-attempt:')) window.sessionStorage.removeItem(key);
+      }
+    } catch {
+      // Storage may be disabled by the browser.
+    }
+  }, []);
   const productSearchQuery = useQuery({
     queryKey: ['sales-desk-product-search', deferredSearch],
     enabled: createOpen && deferredSearch.length > 0,
@@ -91,40 +83,7 @@ export function OrderSalesDesk({
     [catalog?.communes, state],
   );
 
-  function clearStoredAttempt() {
-    if (storageKey) {
-      try {
-        window.sessionStorage.removeItem(storageKey);
-      } catch {
-        /* Storage may be unavailable. */
-      }
-    }
-  }
-
   function openCreate() {
-    if (!attemptRef.current && storageKey) {
-      try {
-        const raw = window.sessionStorage.getItem(storageKey);
-        if (raw) {
-          const stored = storedPhoneAttemptSchema.parse(JSON.parse(raw));
-          const body = JSON.parse(stored.body);
-          const data = storefrontOrderCreateSchema.parse(body);
-          if (body.requestId !== stored.requestId) throw new Error('Invalid saved attempt');
-          attemptRef.current = { requestId: stored.requestId, body: stored.body };
-          setFullName([data.firstName, data.lastName].filter(Boolean).join(' '));
-          setPhone(data.phoneNumber1);
-          setDelivery(data.delivery);
-          setState(data.state == null ? '' : String(data.state));
-          setCity(data.city ?? '');
-          setAddress(data.homeAddress ?? '');
-          setNote(data.note ?? '');
-          setProducts(stored.products);
-          setUnresolved(true);
-        }
-      } catch {
-        clearStoredAttempt();
-      }
-    }
     setCreateOpen(true);
   }
 
@@ -140,7 +99,6 @@ export function OrderSalesDesk({
     setProductSearch('');
     setCreated(null);
     attemptRef.current = null;
-    clearStoredAttempt();
     setUnresolved(false);
   }
 
@@ -176,19 +134,11 @@ export function OrderSalesDesk({
           note: note || null,
         });
       attemptRef.current = { requestId, body };
-      if (storageKey) {
-        try {
-          window.sessionStorage.setItem(storageKey, JSON.stringify({ requestId, body, products }));
-        } catch {
-          /* The in-memory attempt still supports retry. */
-        }
-      }
       const response = await request<CreateResponse>('/api/orders', {
         method: 'POST',
         body,
       });
       setCreated(response);
-      clearStoredAttempt();
       setUnresolved(false);
       toast.success(t('created', { id: response.item.id }));
       try {
@@ -199,7 +149,6 @@ export function OrderSalesDesk({
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 400) {
         attemptRef.current = null;
-        clearStoredAttempt();
         setUnresolved(false);
       } else {
         setUnresolved(true);

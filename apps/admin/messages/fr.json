@@ -120,7 +120,7 @@
     "pageOf": "Page {page} sur {total}"
   },
   "salesDesk": {
-    "retryUnconfirmed": "La création n’a pas pu être confirmée. Réessayez pour vérifier la même commande. Cette tentative sera conservée si vous fermez.",
+    "retryUnconfirmed": "La création n’a pas pu être confirmée. Réessayez cette même tentative. Fermer cette fenêtre la conserve jusqu’au départ ou au rechargement de la page. Après un rechargement, vérifiez les commandes avant d’en créer une autre.",
     "refreshError": "La commande a été créée, mais la liste n’a pas pu être actualisée. Ouvrez la commande créée ou rechargez la page.",
     "newOrder": "Commande téléphone",
     "newOrderTitle": "Créer une commande assistée par téléphone",

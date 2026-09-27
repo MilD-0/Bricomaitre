@@ -68,9 +68,7 @@ const analyticsSessionSchema = z
 export type StorefrontAttribution = z.infer<typeof storefrontAttributionSchema>;
 
 function createId() {
-  return (
-    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-  );
+  return globalThis.crypto.randomUUID();
 }
 
 function trimmedQueryValue(query: URLSearchParams, name: string, max: number) {

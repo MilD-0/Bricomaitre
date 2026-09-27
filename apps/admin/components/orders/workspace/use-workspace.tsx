@@ -32,12 +32,10 @@ export const ordersOverviewQueryKey = ['orders-overview'] as const;
 
 export function useOrdersWorkspace({
   initialOrders,
-  operatorId,
   initialCatalog,
   initialOverview,
 }: {
   initialOrders: OrdersResponse;
-  operatorId?: string;
   initialCatalog?: EcotrackCatalogResponse;
   initialOverview?: DailyOrderStatusOverview;
 }) {
@@ -328,7 +326,6 @@ export function useOrdersWorkspace({
       t,
       pagination,
       orders,
-      operatorId,
       initialCatalog,
       writable,
       openOrderById,

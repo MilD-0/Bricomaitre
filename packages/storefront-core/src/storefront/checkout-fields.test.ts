@@ -36,6 +36,12 @@ describe('checkout field policy', () => {
     expect(enabled.state).toEqual({ active: true, required: true });
     expect(checkoutFieldsSchema.parse(enabled)).toEqual(enabled);
   });
+  it('rejects a field name outside the configured checkout fields', () => {
+    expect(() =>
+      setCheckoutField(DEFAULT_CHECKOUT_FIELDS, '__proto__' as never, 'active', true),
+    ).toThrow('Unknown checkout field.');
+    expect(Object.prototype).not.toHaveProperty('active');
+  });
   it('drops hidden draft values and requires configured fields for every delivery method', () => {
     let fields = setCheckoutField(DEFAULT_CHECKOUT_FIELDS, 'state', 'active', false);
     fields = setCheckoutField(fields, 'email', 'active', false);
