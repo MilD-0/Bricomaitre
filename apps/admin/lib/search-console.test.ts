@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readSearchConsoleConfig, SearchConsoleSyncError } from './search-console';
 import { fetchSearchConsoleSnapshot } from './search-console/fetch';
 
-const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const credentials = {
   client_email: 'analytics@bricomaitre.test',
   private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
@@ -78,7 +78,7 @@ describe('Search Console ingestion', () => {
     async (inspectionSucceeds) => {
       const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
         const url = String(input);
-        if (url.includes('oauth2.googleapis.com')) {
+        if (new URL(url).hostname === 'oauth2.googleapis.com') {
           return new Response(JSON.stringify({ access_token: 'search-token' }), { status: 200 });
         }
         expect(new Headers(init?.headers).get('authorization')).toBe('Bearer search-token');
@@ -201,7 +201,7 @@ it.each(['authentication', 'analytics'])(
   async (stage) => {
     vi.useFakeTimers();
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-      if (stage === 'analytics' && String(input).includes('oauth2.googleapis.com')) {
+      if (stage === 'analytics' && new URL(String(input)).hostname === 'oauth2.googleapis.com') {
         return new Response(JSON.stringify({ access_token: 'token' }));
       }
       return new Response('upstream proxy error', { status: 200 });

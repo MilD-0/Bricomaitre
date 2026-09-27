@@ -73,7 +73,7 @@ for (const path of ['/fr/products/desk-lamp', '/ar/landing/lampe-atelier']) {
       const nonce = policy.match(/'nonce-([^']+)'/)?.[1];
       expect(nonce).toBeTruthy();
       const html = await response.text();
-      const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map(([tag]) => tag);
+      const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map(([tag]) => tag);
       expect(scripts.length).toBeGreaterThan(0);
       for (const script of scripts) expect(script).toContain(`nonce="${nonce}"`);
       nonces.push(nonce!);

@@ -27,7 +27,8 @@ export function AdministrationShell({
   children: React.ReactNode;
 }) {
   const t = useTranslations();
-  const base = `/${locale}/administration`;
+  const safeLocale = locale === 'fr' || locale === 'ar' ? locale : 'en';
+  const base = `/${safeLocale}/administration`;
   useAdminAiSurfaceDetails(administrationAiSurfaceDetails(section));
   const label = (key: AdministrationSection) => {
     if (key === 'users') return t('settings.accessManager.title');
@@ -47,7 +48,8 @@ export function AdministrationShell({
           aria-label={t('nav.administration')}
           value={section}
           onChange={(event) => {
-            window.location.assign(href(event.target.value as AdministrationSection));
+            const selected = sections.find((key) => key === event.currentTarget.value);
+            if (selected) window.location.assign(href(selected));
           }}
         >
           {sections.map((key) => (

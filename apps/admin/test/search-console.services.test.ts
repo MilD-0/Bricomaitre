@@ -13,7 +13,7 @@ import { syncSearchConsole } from '../lib/search-console';
 vi.mock('../lib/analytics-snapshots', () => ({ invalidateAnalyticsSnapshots: vi.fn() }));
 const schema = `search_review_${randomUUID().replaceAll('-', '')}`;
 const db = createDb({ max: 2, options: `-c search_path=${schema},public` });
-const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const env = {
   GOOGLE_SEARCH_CONSOLE_CREDENTIALS_JSON: JSON.stringify({
     client_email: 'analytics@example.invalid',
@@ -24,7 +24,8 @@ const page = 'https://bricomaitre.com/fr/products/perceuse';
 let malformed = false;
 const fetchImpl: typeof fetch = async (input, init) => {
   const url = String(input);
-  if (url.includes('oauth2.googleapis.com')) return Response.json({ access_token: 'local-token' });
+  if (new URL(url).hostname === 'oauth2.googleapis.com')
+    return Response.json({ access_token: 'local-token' });
   if (url.endsWith('/sitemaps')) return Response.json({ sitemap: [] });
   if (url.includes('urlInspection'))
     return Response.json({

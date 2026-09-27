@@ -224,6 +224,7 @@ describe('OrdersWorkspace', { timeout: 15_000 }, () => {
 
   it('locks phone capture during creation and reuses the accepted attempt after a lost response', async () => {
     const user = userEvent.setup();
+    window.sessionStorage.setItem('bric:phone-order-attempt:phone-recovery-operator', 'legacy PII');
     const requests: Array<Record<string, unknown>> = [];
     let release!: () => void;
     const pending = new Promise<void>((resolve) => {
@@ -248,16 +249,14 @@ describe('OrdersWorkspace', { timeout: 15_000 }, () => {
           client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
         >
           <NextIntlClientProvider locale="en" messages={messages}>
-            <OrderSalesDesk
-              operatorId="phone-recovery-operator"
-              writable
-              onOpenOrder={vi.fn()}
-              onCreated={async () => undefined}
-            />
+            <OrderSalesDesk writable onOpenOrder={vi.fn()} onCreated={async () => undefined} />
           </NextIntlClientProvider>
         </QueryClientProvider>,
       );
-    let mounted = renderDesk();
+    renderDesk();
+    expect(
+      window.sessionStorage.getItem('bric:phone-order-attempt:phone-recovery-operator'),
+    ).toBeNull();
     const fillCapture = async () => {
       await user.click(screen.getByRole('button', { name: 'Phone order' }));
       await user.type(screen.getByLabelText('Customer name'), 'Operator test');
@@ -277,17 +276,15 @@ describe('OrdersWorkspace', { timeout: 15_000 }, () => {
     await screen.findByText(messages.salesDesk.retryUnconfirmed);
     expect(screen.getByLabelText('Telephone')).toHaveValue('+213 550 123 456');
     expect(screen.getByLabelText('Telephone')).toBeDisabled();
+    expect(
+      window.sessionStorage.getItem('bric:phone-order-attempt:phone-recovery-operator'),
+    ).toBeNull();
     await user.click(screen.getByRole('button', { name: /^Close$/ }));
-    mounted.unmount();
-    mounted = renderDesk();
     await user.click(screen.getByRole('button', { name: 'Phone order' }));
     expect(screen.getByLabelText('Telephone')).toHaveValue('+213 550 123 456');
     await user.click(screen.getByRole('button', { name: 'Create order' }));
     await screen.findByRole('button', { name: 'Open created order' });
     expect(requests[1]).toEqual(requests[0]);
-    expect(
-      window.sessionStorage.getItem('bric:phone-order-attempt:phone-recovery-operator'),
-    ).toBeNull();
     expect(requests[0]?.requestId).toEqual(expect.any(String));
     expect(screen.getByLabelText('Telephone')).toBeDisabled();
     await user.click(screen.getByRole('button', { name: /^Close$/ }));

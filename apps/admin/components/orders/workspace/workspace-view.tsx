@@ -26,7 +26,6 @@ export function OrdersWorkspaceView({
   t,
   pagination,
   orders,
-  operatorId,
   initialCatalog,
   writable,
   openOrderById,
@@ -80,7 +79,6 @@ export function OrdersWorkspaceView({
           />
           <WorkspaceActions>
             <OrderSalesDesk
-              operatorId={operatorId}
               catalog={initialCatalog}
               writable={writable}
               onOpenOrder={(id) => void openOrderById(id)}

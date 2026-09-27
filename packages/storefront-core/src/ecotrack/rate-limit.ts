@@ -31,10 +31,20 @@ export async function runWithLimiter<T>(action: () => Promise<T>, minIntervalMs:
 }
 
 export function cleanEcotrackEnvValue(value: string | undefined | null) {
-  return String(value ?? '')
-    .trim()
-    .replace(/^['"\s]+/, '')
-    .replace(/['",\s]+$/, '');
+  const text = String(value ?? '').trim();
+  let start = 0;
+  let end = text.length;
+  while (start < end && (text[start] === "'" || text[start] === '"' || /\s/u.test(text[start]!)))
+    start++;
+  while (
+    end > start &&
+    (text[end - 1] === "'" ||
+      text[end - 1] === '"' ||
+      text[end - 1] === ',' ||
+      /\s/u.test(text[end - 1]!))
+  )
+    end--;
+  return text.slice(start, end);
 }
 
 export function getEcotrackConfig(env: NodeJS.ProcessEnv = process.env) {

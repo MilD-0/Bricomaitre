@@ -52,6 +52,7 @@ export function setCheckoutField(
   option: 'active' | 'required',
   value: boolean,
 ): CheckoutFields {
+  if (!checkoutFieldNames.includes(name)) throw new Error('Unknown checkout field.');
   const next = structuredClone(fields);
   if (name === 'phoneNumber1') return next;
   next[name][option] = value;
