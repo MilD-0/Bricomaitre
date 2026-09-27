@@ -69,6 +69,7 @@ type StreamContext = {
   instructions: string;
   messages: NonNullable<Parameters<typeof generateText>[0]['messages']>;
   config: ReturnType<typeof getAiConfig>;
+  extendedRun: boolean;
   abortSignal: AbortSignal;
   locale: 'en' | 'fr' | 'ar';
   saveAssistantMessage: (content: (typeof aiMessages.$inferInsert)['content']) => Promise<number>;
@@ -85,6 +86,7 @@ export function createAdminAiResponseStream({
   instructions,
   messages,
   config,
+  extendedRun,
   abortSignal,
   locale,
   saveAssistantMessage,
@@ -226,13 +228,13 @@ export function createAdminAiResponseStream({
                     role: 'user' as const,
                     content: `Trusted tool evidence from this turn:\n${serializedEvidence(
                       toolResults,
-                      config.adminSynthesisEvidenceCharacterLimit,
+                      extendedRun ? undefined : config.adminSynthesisEvidenceCharacterLimit,
                     )}`,
                   },
                 ],
                 abortSignal,
                 maxRetries: config.maxRetries,
-                ...(config.adminMaxOutputTokens
+                ...(!extendedRun && config.adminMaxOutputTokens
                   ? { maxOutputTokens: config.adminMaxOutputTokens }
                   : {}),
               });

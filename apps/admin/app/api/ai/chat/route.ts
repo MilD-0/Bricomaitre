@@ -102,8 +102,10 @@ export async function POST(request: NextRequest) {
       .orderBy(desc(aiMessages.createdAt))
       .limit(ADMIN_AI_CONTEXT_QUERY_LIMIT);
     const previousMessages = buildAdminAiConversationContext(previousRows, {
-      characterLimit: config.adminContextCharacterLimit,
-      toolEvidenceCharacterLimit: config.adminToolEvidenceCharacterLimit,
+      characterLimit: parsed.data.extendedRun ? undefined : config.adminContextCharacterLimit,
+      toolEvidenceCharacterLimit: parsed.data.extendedRun
+        ? undefined
+        : config.adminToolEvidenceCharacterLimit,
     });
     const effectiveTitle = previousMessages.length === 0 ? title : conversation.title || title;
 
@@ -181,7 +183,11 @@ export async function POST(request: NextRequest) {
         autoAcceptProposals: parsed.data.autoAcceptProposals,
       },
     });
-    const generationOptions = adminAiGenerationOptions(config, request.signal);
+    const generationOptions = adminAiGenerationOptions(
+      config,
+      request.signal,
+      parsed.data.extendedRun,
+    );
     const abortSignal = generationOptions.abortSignal ?? request.signal;
     const createResult = () =>
       streamText({
@@ -200,6 +206,7 @@ export async function POST(request: NextRequest) {
       instructions,
       messages,
       config,
+      extendedRun: parsed.data.extendedRun,
       abortSignal,
       locale,
       saveAssistantMessage,

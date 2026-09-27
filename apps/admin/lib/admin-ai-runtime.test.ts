@@ -21,6 +21,7 @@ describe('model-led Admin assistant runtime', () => {
     expect(parsed).toMatchObject({
       message: 'What does adjusted profit mean this month?',
       autoAcceptProposals: false,
+      extendedRun: false,
       reasoningEffort: 'medium',
     });
     expect(adminAiChatRequestSchema.safeParse({ ...parsed, extra: 'not accepted' }).success).toBe(
@@ -29,6 +30,10 @@ describe('model-led Admin assistant runtime', () => {
     expect(adminAiChatRequestSchema.parse({ ...parsed, autoAcceptProposals: true })).toMatchObject({
       autoAcceptProposals: true,
     });
+    expect(adminAiChatRequestSchema.parse({ ...parsed, extendedRun: true }).extendedRun).toBe(true);
+    expect(adminAiChatRequestSchema.safeParse({ ...parsed, extendedRun: 'true' }).success).toBe(
+      false,
+    );
   });
 
   it('retrieves only model-selected canonical guidance topics', () => {

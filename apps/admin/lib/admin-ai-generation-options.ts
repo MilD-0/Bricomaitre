@@ -7,17 +7,22 @@ export function adminAiGenerationOptions(
     'adminMaxSteps' | 'adminMaxOutputTokens' | 'adminRequestTimeoutMs' | 'maxRetries'
   >,
   requestSignal?: AbortSignal,
+  extendedRun = false,
 ) {
-  const timeout = config.adminRequestTimeoutMs
-    ? AbortSignal.timeout(config.adminRequestTimeoutMs)
-    : undefined;
+  const timeout =
+    !extendedRun && config.adminRequestTimeoutMs
+      ? AbortSignal.timeout(config.adminRequestTimeoutMs)
+      : undefined;
   return {
-    stopWhen: config.adminMaxSteps ? stepCountIs(config.adminMaxSteps) : () => false,
+    stopWhen:
+      !extendedRun && config.adminMaxSteps ? stepCountIs(config.adminMaxSteps) : () => false,
     abortSignal:
       timeout && requestSignal
         ? AbortSignal.any([requestSignal, timeout])
         : (timeout ?? requestSignal),
     maxRetries: config.maxRetries,
-    ...(config.adminMaxOutputTokens ? { maxOutputTokens: config.adminMaxOutputTokens } : {}),
+    ...(!extendedRun && config.adminMaxOutputTokens
+      ? { maxOutputTokens: config.adminMaxOutputTokens }
+      : {}),
   };
 }

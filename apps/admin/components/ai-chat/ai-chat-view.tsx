@@ -27,6 +27,8 @@ export function AdminAiChatView({
   updateReasoningEffort,
   autoAcceptProposals,
   updateAutoAcceptProposals,
+  extendedRun,
+  updateExtendedRun,
   setFullScreen,
   mobilePanel,
   setMobilePanel,
@@ -88,7 +90,7 @@ export function AdminAiChatView({
               {t('aiChat.title')}
             </DialogTitle>
           </div>
-          <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(5.75rem,0.58fr)_auto] items-end gap-2 sm:mt-3 sm:grid-cols-[minmax(12rem,1fr)_minmax(8rem,0.65fr)_auto] sm:gap-3">
+          <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(5.75rem,0.58fr)] items-end gap-2 sm:mt-3 sm:grid-cols-[minmax(12rem,1fr)_minmax(8rem,0.65fr)_auto_auto] sm:gap-3">
             <label className="min-w-0">
               <span className="sr-only text-[length:var(--type-size-label)] font-medium text-muted-foreground sm:not-sr-only sm:mb-1 sm:block">
                 {t('aiChat.model')}
@@ -125,6 +127,22 @@ export function AdminAiChatView({
                   </option>
                 ))}
               </select>
+            </label>
+            <label
+              className="flex h-8 cursor-pointer items-center gap-1 sm:h-9 sm:gap-2.5"
+              title={t('aiChat.extendedRunHint')}
+            >
+              <Switch
+                checked={extendedRun}
+                onCheckedChange={updateExtendedRun}
+                aria-label={t('aiChat.extendedRun')}
+              />
+              <span className="text-[0.625rem] font-medium text-foreground md:hidden">
+                {t('aiChat.extendedRunShort')}
+              </span>
+              <span className="hidden text-xs font-medium text-foreground md:block md:max-w-32 md:leading-4">
+                {t('aiChat.extendedRun')}
+              </span>
             </label>
             <label
               className="flex h-8 cursor-pointer items-center gap-1 sm:h-9 sm:gap-2.5"
