@@ -137,6 +137,44 @@ The main operational sources are
 [`ops/scripts`](../ops/scripts). They are authoritative when this explanation
 and executable behavior diverge.
 
+### Sentry issue triage
+
+Use the three Sentry projects separately: `bricadmin` for Admin and workers,
+`brico-api` for the public API, and `bricomaitre` for the Storefront. Review
+production issues that are new, regressed, or escalating each day. Check open
+operational failures and archived issues weekly. Treat a failing public route
+or order flow as actionable even when the exception originates in a dependency.
+For workers, compare the issue with its job history and request or job ID.
+
+Classify each issue before changing its status:
+
+- Keep an application defect or a customer-facing dependency failure open and
+  assign its owner. Link the Sentry issue in the fix pull request.
+- Archive a confirmed external browser or wrapper error until escalating.
+  Record the exact origin before adding a client filter. Do not filter by error
+  title alone or assume that a stackless syntax error is external.
+- Resolve an issue in the release containing its fix, not when the code is
+  written. After deployment, check for events tagged with that release and
+  later releases. Reopen and investigate if the issue regresses. Older cached
+  browser bundles may still report events from an earlier release.
+
+The Storefront browser client drops errors only when every stack frame is from
+an `app://` wrapper or a browser extension. Mixed and stackless errors remain
+visible. All deployable processes should tag Sentry events with the release
+SHA. A browser event without a release cannot establish whether a fix held;
+verify the release tag on real production browser events after deployment.
+
+The existing project alerts email issue owners about high-priority issues.
+Separate production regression alerts cover
+[`bricadmin`](https://bricomaitre.sentry.io/monitors/alerts/6074157/),
+[`brico-api`](https://bricomaitre.sentry.io/monitors/alerts/6074159/), and
+[`bricomaitre`](https://bricomaitre.sentry.io/monitors/alerts/6074161/).
+They email issue owners, fall back to active members, and use a 30-minute
+notification interval. Add a separate alert for sustained
+public order failures once a normal traffic baseline is established. Sentry
+issue counts alone do not measure every customer-facing failure, because
+expected 4xx responses are not exceptions.
+
 ### ECOTRACK sync failures
 
 Catalog locations do not imply delivery tariff availability. A successful sync

@@ -4,6 +4,7 @@ import {
   readSampleRate,
   sanitizeSentryEvent,
 } from './lib/sentry-config';
+import { filterInjectedScriptError } from './lib/sentry-browser-filter';
 
 const dsn = normalizeSentryDsn(process.env.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT);
 
@@ -13,6 +14,7 @@ type BufferedException = { error: unknown; mechanism: 'error' | 'unhandledreject
 const bufferedExceptions: BufferedException[] = [];
 let sentryPromise: Promise<SentryClient> | null = null;
 let sentryClient: SentryClient | null = null;
+let removeBootstrapListeners = () => {};
 
 function initializeSentryClient() {
   if (!dsn) return Promise.resolve(null);
@@ -37,9 +39,10 @@ function initializeSentryClient() {
           instrumentNavigation: true,
         }),
       ],
-      beforeSend: sanitizeSentryEvent,
+      beforeSend: (event) => filterInjectedScriptError(sanitizeSentryEvent(event)),
       initialScope: { tags: { service: 'storefront' } },
     });
+    removeBootstrapListeners();
     sentryClient = Sentry;
     bufferedExceptions.splice(0).forEach(({ error, mechanism }) => {
       Sentry.captureException(error, { mechanism: { type: mechanism, handled: false } });
@@ -72,6 +75,10 @@ if (dsn && typeof window !== 'undefined') {
   };
   window.addEventListener('error', captureError);
   window.addEventListener('unhandledrejection', captureRejection);
+  removeBootstrapListeners = () => {
+    window.removeEventListener('error', captureError);
+    window.removeEventListener('unhandledrejection', captureRejection);
+  };
 }
 
 export function onRouterTransitionStart(
