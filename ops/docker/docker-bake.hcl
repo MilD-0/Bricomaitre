@@ -174,6 +174,7 @@ target "storefront-web" {
     NEXT_PUBLIC_GA_MEASUREMENT_ID                           = NEXT_PUBLIC_GA_MEASUREMENT_ID
     NEXT_PUBLIC_TIKTOK_PIXEL_ID                             = NEXT_PUBLIC_TIKTOK_PIXEL_ID
     NEXT_PUBLIC_RELEASE                                     = SHA_TAG
+    NEXT_PUBLIC_SENTRY_RELEASE                              = IMAGE_REVISION
     NEXT_PUBLIC_SENTRY_DSN_STOREFRONT                   = NEXT_PUBLIC_SENTRY_DSN_STOREFRONT
     NEXT_PUBLIC_SENTRY_ENVIRONMENT                          = "production"
     NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT    = "0.1"

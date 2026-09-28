@@ -78,6 +78,9 @@ describe('production packaging and release runtime', () => {
       expect(dockerfile).not.toMatch(/ARG SENTRY_AUTH_TOKEN|ENV SENTRY_AUTH_TOKEN/);
     }
     expect(bake).toContain('SENTRY_RELEASE      = IMAGE_REVISION');
+    expect(bake).toMatch(/NEXT_PUBLIC_SENTRY_RELEASE\s+= IMAGE_REVISION/);
+    expect(storefront).toContain('ARG NEXT_PUBLIC_SENTRY_RELEASE');
+    expect(storefront).toContain('ENV NEXT_PUBLIC_SENTRY_RELEASE="${NEXT_PUBLIC_SENTRY_RELEASE}"');
     expect(bake.match(/id=sentry_auth_token,env=SENTRY_AUTH_TOKEN/g)).toHaveLength(3);
     expect(workerBuilder).toContain("process.env.BRIC_WORKER_SOURCEMAPS === '1'");
     expect(workerBuilder).toContain("sourcemap: emitSourceMap ? 'external' : false");

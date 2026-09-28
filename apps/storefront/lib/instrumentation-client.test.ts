@@ -23,6 +23,10 @@ describe('client instrumentation loading', () => {
   it('loads Sentry for an error, not for successful-session interactions or navigation', async () => {
     vi.useFakeTimers();
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN_STOREFRONT', 'https://public@example.ingest.sentry.io/123');
+    vi.stubEnv('NEXT_PUBLIC_RELEASE', 'sha-release-test');
+    vi.stubEnv('NEXT_PUBLIC_SENTRY_RELEASE', 'release-test');
+    vi.stubEnv('SENTRY_RELEASE', '');
+    const removeListener = vi.spyOn(window, 'removeEventListener');
 
     const { onRouterTransitionStart } = await import('../instrumentation-client');
     expect(sentry.init).not.toHaveBeenCalled();
@@ -40,6 +44,7 @@ describe('client instrumentation loading', () => {
     expect(sentry.init).toHaveBeenCalledWith(
       expect.objectContaining({
         enabled: true,
+        release: 'release-test',
         sendDefaultPii: false,
         integrations: [{ name: 'BrowserTracing' }],
         initialScope: { tags: { service: 'storefront' } },
@@ -52,6 +57,11 @@ describe('client instrumentation loading', () => {
     expect(sentry.captureException).toHaveBeenCalledWith(error, {
       mechanism: { type: 'error', handled: false },
     });
+
+    expect(removeListener).toHaveBeenCalledWith('error', expect.any(Function));
+    expect(removeListener).toHaveBeenCalledWith('unhandledrejection', expect.any(Function));
+    expect(sentry.captureException).toHaveBeenCalledOnce();
+    removeListener.mockRestore();
 
     onRouterTransitionStart('/fr/checkout', 'push');
     expect(sentry.captureRouterTransitionStart).toHaveBeenCalledWith('/fr/checkout', 'push');

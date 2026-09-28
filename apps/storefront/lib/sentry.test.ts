@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { shouldCaptureServerException } from './sentry';
-import { normalizeSentryDsn, readSampleRate, sanitizeSentryEvent } from './sentry-config';
+import {
+  getSentryRelease,
+  normalizeSentryDsn,
+  readSampleRate,
+  sanitizeSentryEvent,
+} from './sentry-config';
+import { filterInjectedScriptError } from './sentry-browser-filter';
 
 describe('storefront Sentry privacy boundary', () => {
   it('does not generate exception event identifiers during production prerendering', () => {
@@ -55,5 +61,89 @@ describe('storefront Sentry privacy boundary', () => {
     expect(normalizeSentryDsn('https://example.ingest.sentry.io/not-a-project')).toBeUndefined();
     expect(normalizeSentryDsn('not-a-url')).toBeUndefined();
     expect(shouldCaptureServerException({ SENTRY_DSN_STOREFRONT: '"not-a-url"' })).toBe(false);
+  });
+
+  it('uses the public build release when the server-only release is unavailable', () => {
+    const previousServerRelease = process.env.SENTRY_RELEASE;
+    const previousPublicSentryRelease = process.env.NEXT_PUBLIC_SENTRY_RELEASE;
+    const previousPublicRelease = process.env.NEXT_PUBLIC_RELEASE;
+    try {
+      delete process.env.SENTRY_RELEASE;
+      process.env.NEXT_PUBLIC_SENTRY_RELEASE = 'abc123';
+      process.env.NEXT_PUBLIC_RELEASE = 'sha-abc123';
+      expect(getSentryRelease()).toBe('abc123');
+      process.env.SENTRY_RELEASE = 'server456';
+      expect(getSentryRelease()).toBe('server456');
+      delete process.env.SENTRY_RELEASE;
+      delete process.env.NEXT_PUBLIC_SENTRY_RELEASE;
+      expect(getSentryRelease()).toBeUndefined();
+    } finally {
+      if (previousServerRelease === undefined) delete process.env.SENTRY_RELEASE;
+      else process.env.SENTRY_RELEASE = previousServerRelease;
+      if (previousPublicSentryRelease === undefined) delete process.env.NEXT_PUBLIC_SENTRY_RELEASE;
+      else process.env.NEXT_PUBLIC_SENTRY_RELEASE = previousPublicSentryRelease;
+      if (previousPublicRelease === undefined) delete process.env.NEXT_PUBLIC_RELEASE;
+      else process.env.NEXT_PUBLIC_RELEASE = previousPublicRelease;
+    }
+  });
+
+  it('drops errors only when every stack frame belongs to a known injected script', () => {
+    const injected = {
+      exception: {
+        values: [
+          {
+            stacktrace: {
+              frames: [
+                { filename: 'app://navigation_performance_logger_android:1:18302' },
+                { filename: 'app://navigation_performance_logger_android:1:13750' },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    expect(filterInjectedScriptError(injected)).toBeNull();
+    expect(
+      filterInjectedScriptError({
+        exception: {
+          values: [
+            { stacktrace: { frames: [{ filename: 'chrome-extension://extension/script.js' }] } },
+          ],
+        },
+      }),
+    ).toBeNull();
+    expect(
+      filterInjectedScriptError({
+        exception: {
+          values: [{ stacktrace: { frames: [{ filename: 'app:///fr/products/example:1:1142' }] } }],
+        },
+      }),
+    ).toBeNull();
+    const mixed = {
+      exception: {
+        values: [
+          {
+            stacktrace: {
+              frames: [
+                { filename: 'app://navigation_performance_logger_android:1:18302' },
+                { filename: 'https://bricomaitre.com/_next/static/app.js' },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    expect(filterInjectedScriptError(mixed)).toBe(mixed);
+    const stackless = { exception: { values: [{ value: 'Unexpected end of input' }] } };
+    expect(filterInjectedScriptError(stackless)).toBe(stackless);
+    const partlyStackless = {
+      exception: {
+        values: [
+          { stacktrace: { frames: [{ filename: 'app:///fr/products/example:1:1142' }] } },
+          { value: 'Another error' },
+        ],
+      },
+    };
+    expect(filterInjectedScriptError(partlyStackless)).toBe(partlyStackless);
   });
 });
