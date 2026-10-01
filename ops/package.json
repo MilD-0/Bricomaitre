@@ -8,10 +8,10 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1",
-    "@types/node": "24.13.3",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.11",
-    "yaml": "2.9.0"
+    "yaml": "2.9.1"
   }
 }
