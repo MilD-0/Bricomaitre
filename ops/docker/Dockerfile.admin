@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS base
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV COREPACK_HOME="/corepack"
@@ -80,7 +80,7 @@ RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sha
   && cp /runtime/RUNTIME_THIRD_PARTY_LICENSES.txt \
     apps/admin/.next/standalone/RUNTIME_THIRD_PARTY_LICENSES.txt
 
-FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS web
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS web
 
 WORKDIR /app
 ARG BRIC_IMAGE_REVISION="unknown"
@@ -118,7 +118,7 @@ USER bric
 
 CMD ["node", "apps/admin/server.js"]
 
-FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS worker
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS worker
 
 WORKDIR /app
 ARG BRIC_IMAGE_REVISION="unknown"
@@ -152,7 +152,7 @@ USER bric
 
 CMD ["node", "apps/admin/dist/run-background-workers.cjs"]
 
-FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS migrations
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS migrations
 
 WORKDIR /app
 ARG BRIC_IMAGE_REVISION="unknown"
