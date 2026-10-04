@@ -43,7 +43,7 @@ export function snapshotValues<T extends PgTable>(
   return Object.fromEntries(
     Object.entries(getTableColumns(table)).flatMap(([key, column]) => {
       const value = snapshot[key];
-      if (value === undefined) return [];
+      if (value === undefined || column.generated) return [];
       return [
         [key, column.dataType === 'date' && typeof value === 'string' ? new Date(value) : value],
       ];

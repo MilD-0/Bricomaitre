@@ -40,7 +40,12 @@ if [[ ! -x "$cosign_bin" ]] || ! printf '%s  %s\n' "$cosign_sha256" "$cosign_bin
   temporary_bin=''
 fi
 
-"$cosign_bin" version | grep -Fq "$cosign_version"
+# Consume the complete version output before matching to avoid SIGPIPE.
+if ! cosign_version_output="$("$cosign_bin" version)" ||
+  ! grep -Fq "$cosign_version" <<< "$cosign_version_output"; then
+  echo "Cached Cosign binary did not report version $cosign_version." >&2
+  exit 1
+fi
 
 if [[ -n "${GITHUB_PATH:-}" ]]; then
   printf '%s\n' "$cosign_cache_dir" >> "$GITHUB_PATH"

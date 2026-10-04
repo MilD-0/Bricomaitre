@@ -54,7 +54,10 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
   }
   const db = getDb();
-  const row = await db.query.products.findFirst({ where: eq(products.id, numericId) });
+  const row = await db.query.products.findFirst({
+    where: eq(products.id, numericId),
+    columns: { searchDocument: false, searchTitle: false },
+  });
 
   if (!row) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });

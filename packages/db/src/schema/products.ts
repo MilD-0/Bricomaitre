@@ -13,6 +13,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { brands } from './brands';
 import { categories } from './categories';
+import { catalogSearchDocumentSql } from './catalogSearch';
 
 export const products = pgTable(
   'products',
@@ -26,6 +27,21 @@ export const products = pgTable(
     mongoId: text('mongo_id'),
     sku: text('sku'),
     barcode: text('barcode'),
+    searchDocument: text('search_document').generatedAlwaysAs(() =>
+      catalogSearchDocumentSql([
+        'title',
+        'title_ar',
+        'description',
+        'description_ar',
+        'sku',
+        'barcode',
+        'slug',
+        'mongo_id',
+      ]),
+    ),
+    searchTitle: text('search_title').generatedAlwaysAs(() =>
+      catalogSearchDocumentSql(['title', 'title_ar']),
+    ),
 
     price: numeric('price', { precision: 12, scale: 2 }).notNull(),
     oldPrice: numeric('old_price', { precision: 12, scale: 2 }),

@@ -61,7 +61,10 @@ if [[ ! -x "$osv_bin" ]] ||
   temporary_bin=''
 fi
 
-if ! "$osv_bin" --version | grep -Fxq "osv-scanner version: $osv_version"; then
+# Read all output before matching: grep -q can close a live pipe early and
+# make a valid Go binary fail with SIGPIPE under pipefail.
+if ! osv_version_output="$("$osv_bin" --version)" ||
+  ! grep -Fxq "osv-scanner version: $osv_version" <<< "$osv_version_output"; then
   echo "Cached OSV-Scanner binary did not report version $osv_version." >&2
   exit 1
 fi

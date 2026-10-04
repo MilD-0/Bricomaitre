@@ -7,12 +7,16 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { catalogSearchDocumentSql } from './catalogSearch';
 
 export const brands = pgTable(
   'brands',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     name: text('name').notNull(),
+    searchDocument: text('search_document').generatedAlwaysAs(() =>
+      catalogSearchDocumentSql(['name']),
+    ),
     slug: text('slug').notNull(),
     mongoId: text('mongo_id'),
     image: text('image'),

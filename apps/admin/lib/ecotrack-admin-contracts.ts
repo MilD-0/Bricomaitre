@@ -28,6 +28,7 @@ export type EcotrackCatalogResponse = {
 
 export type EcotrackStatusSummary = {
   currentStatus: string;
+  statusConflict?: { localStatus: number; carrierStatus: number } | null;
   driverPhone: string | null;
   estimatedFee: number | null;
   deskPhone: string | null;

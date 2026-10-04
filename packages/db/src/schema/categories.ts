@@ -12,6 +12,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { catalogSearchDocumentSql } from './catalogSearch';
 
 export const categories = pgTable(
   'categories',
@@ -22,6 +23,9 @@ export const categories = pgTable(
     mongoId: text('mongo_id'),
     nameEn: text('name_en'),
     nameAr: text('name_ar'),
+    searchDocument: text('search_document').generatedAlwaysAs(() =>
+      catalogSearchDocumentSql(['name', 'name_ar']),
+    ),
     image: text('image'),
     isActive: boolean('is_active').notNull().default(true),
     parentId: bigint('parent_id', { mode: 'number' }).references((): AnyPgColumn => categories.id, {
