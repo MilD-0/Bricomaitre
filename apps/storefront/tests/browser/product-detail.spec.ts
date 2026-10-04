@@ -42,11 +42,13 @@ test('renders the French product journey with SEO and governed analytics', async
   expect(
     await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor),
   ).toBe('rgb(245, 245, 243)');
+  // Chromium 153 serializes squircle as its equivalent numeric shape.
+  // https://www.w3.org/TR/css-borders-4/#corner-shape-values
   expect(
     await page
       .locator('.product-media-stage')
       .evaluate((element) => getComputedStyle(element).getPropertyValue('corner-shape')),
-  ).toBe('squircle');
+  ).toMatch(/^(squircle|superellipse\(2\))$/);
   expect(
     await page
       .locator('.product-price-block strong')
