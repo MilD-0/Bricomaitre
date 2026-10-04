@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableRow } from '../../ui/table
 import { WorkspaceFrame } from '../../ui/workspace';
 import { WorkspacePagination } from '../../ui/workspace-pagination';
 import { EcotrackRecovery } from '../ecotrack-recovery';
-import { EcotrackStatusBadge } from '../ecotrack-status-badge';
+import { EcotrackStatusBadge, EcotrackStatusConflict } from '../ecotrack-status-badge';
 import { formatEcotrackMoney } from '../orders-ecotrack-presentation';
 import { EcotrackWorkspaceChrome } from './chrome';
 import { type OrdersEcotrackWorkspaceProps } from './contract';
@@ -144,6 +144,7 @@ function RefinedLedger(props: OrdersEcotrackWorkspaceProps) {
                       {formatEcotrackMoney(props.locale, item.totalAmount)}
                     </span>
                   </div>
+                  <EcotrackStatusConflict status={item.status} t={t} />
                 </button>
                 <ShipmentAction
                   model={action}

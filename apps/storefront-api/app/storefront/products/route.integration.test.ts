@@ -13,6 +13,8 @@ const { hasDbMock, getDbMock, readStorefrontProductsMock, countStorefrontProduct
     countStorefrontProductsMock: vi.fn(),
   }));
 
+vi.mock('../../../lib/catalog-db', () => ({ getCatalogDb: getDbMock }));
+
 vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
   getDb: getDbMock,

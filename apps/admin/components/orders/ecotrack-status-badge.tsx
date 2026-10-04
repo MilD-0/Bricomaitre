@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 
 import type { EcotrackStatusSummary } from '../../lib/ecotrack-admin-contracts';
 import { formatOrderPhoneForDisplay } from '../../lib/order-presentation';
+import { coerceOrderStatus, getOrderStatusLabelKey } from '../../lib/orders';
 import { Badge } from '../ui/badge';
 import { formatEcotrackDateTime, formatEcotrackMoney } from './orders-ecotrack-presentation';
 
@@ -26,6 +27,7 @@ export function EcotrackStatusBadge({
           <Badge variant="outline">{t('ordersEcotrackManager.staleBadge')}</Badge>
         ) : null}
       </div>
+      <EcotrackStatusConflict status={status} t={t} />
       {status.driverPhone ? (
         <p className="text-sm text-muted-foreground">
           {t('ordersEcotrackManager.driverPhone')}: {formatOrderPhoneForDisplay(status.driverPhone)}
@@ -43,5 +45,27 @@ export function EcotrackStatusBadge({
           t('ordersEcotrackManager.neverSynced')}
       </p>
     </div>
+  );
+}
+
+export function EcotrackStatusConflict({
+  status,
+  t,
+}: {
+  status: EcotrackStatusSummary;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  if (!status.statusConflict) return null;
+  return (
+    <p className="mt-2 max-w-80 text-sm text-amber-700 dark:text-amber-400">
+      {t('ordersEcotrackManager.statusConflict', {
+        localStatus: t(
+          `ordersManager.status.${getOrderStatusLabelKey(coerceOrderStatus(status.statusConflict.localStatus))}`,
+        ),
+        carrierStatus: t(
+          `ordersManager.status.${getOrderStatusLabelKey(coerceOrderStatus(status.statusConflict.carrierStatus))}`,
+        ),
+      })}
+    </p>
   );
 }

@@ -41,6 +41,61 @@ function helpers() {
 }
 
 describe('catalog categorization background job', () => {
+  it('excludes new products and skips removed or recategorized products from a fixed selection', async () => {
+    const product = (id: number) => ({
+      id,
+      updatedAt: new Date(0),
+      title: `Tool ${id}`,
+      description: null,
+      sku: null,
+      brand: null,
+      categoryId: null as number | null,
+      category: null,
+    });
+    const catalog = new Map([1, 2, 3].map((id) => [id, product(id)]));
+    const classified: number[] = [];
+    const dependencies: AiCategorizationDependencies = {
+      listCategories: async () => categories,
+      listProductIds: async () => [...catalog.keys()],
+      listProductsByIds: async (_scope, ids) =>
+        ids.flatMap((id) => {
+          const row = catalog.get(id);
+          return row && row.categoryId === null ? [row] : [];
+        }),
+      listPendingProductIds: async () => new Set(),
+      classifier: {
+        classify: vi.fn(async ({ product: input }) => {
+          classified.push(input.id);
+          catalog.delete(2);
+          catalog.get(3)!.categoryId = 10;
+          catalog.set(4, product(4));
+          return {
+            decision: { categoryId: null, confidence: 0.1, ambiguous: true, reasoning: 'Unclear' },
+            usage: {},
+            model: 'test',
+            runId: 1,
+          };
+        }),
+      },
+      proposeCategory: vi.fn(),
+      applyProposal: vi.fn(),
+      refreshConsumers: vi.fn(),
+    };
+    const jobHelpers = helpers();
+    await expect(
+      runAiCategorizationJob(
+        payload({ batchSize: 1, scope: 'uncategorized' }),
+        jobHelpers,
+        dependencies,
+      ),
+    ).resolves.toMatchObject({ total: 3, processed: 3, skipped: 2, ambiguous: 1, complete: true });
+    expect(classified).toEqual([1]);
+    expect(jobHelpers.updateProgress).toHaveBeenLastCalledWith({
+      phase: 'classifying-products',
+      current: 3,
+      total: 3,
+    });
+  });
   it('enumerates the complete catalog with a stable cursor and reconciles every outcome', async () => {
     const products = [
       {
@@ -127,9 +182,9 @@ describe('catalog categorization background job', () => {
         }),
       },
       listCategories: async () => categories,
-      countProducts: async () => products.length,
-      listProductsAfter: async (_scope, lastId, limit) =>
-        products.filter((product) => product.id > lastId).slice(0, limit),
+      listProductIds: async () => products.map((product) => product.id),
+      listProductsByIds: async (_scope, ids) =>
+        products.filter((product) => ids.includes(product.id)),
       listPendingProductIds: async () => new Set([4]),
       proposeCategory: vi.fn(async (input) => {
         proposed.push({ productId: input.productId, categoryId: input.categoryId });
@@ -190,9 +245,9 @@ describe('catalog categorization background job', () => {
         })),
       },
       listCategories: async () => categories,
-      countProducts: async () => 2,
-      listProductsAfter: async (_scope, lastId) =>
-        products.filter((product) => product.id > lastId),
+      listProductIds: async () => [1, 2],
+      listProductsByIds: async (_scope, ids) =>
+        products.filter((product) => ids.includes(product.id)),
       listPendingProductIds: async () => new Set(),
       proposeCategory: vi.fn(async () => ({ id: 1 })),
       applyProposal: vi.fn(),
@@ -210,27 +265,33 @@ describe('catalog categorization background job', () => {
     expect(dependencies.proposeCategory).not.toHaveBeenCalled();
   });
 
-  it('fails truthfully when enumeration ends before the expected catalog total', async () => {
+  it('accounts for selected products removed or made ineligible during the run', async () => {
     const jobHelpers = helpers();
     const dependencies: AiCategorizationDependencies = {
       classifier: { classify: vi.fn() },
       listCategories: async () => categories,
-      countProducts: async () => 3,
-      listProductsAfter: async () => [],
+      listProductIds: async () => [1, 2, 3],
+      listProductsByIds: async () => [],
       listPendingProductIds: async () => new Set(),
       proposeCategory: vi.fn(async () => ({ id: 1 })),
       applyProposal: vi.fn(),
       refreshConsumers: vi.fn(async () => undefined),
     };
 
-    await expect(runAiCategorizationJob(payload(), jobHelpers, dependencies)).rejects.toThrow(
-      'stopped after 0 of 3',
-    );
+    await expect(
+      runAiCategorizationJob(payload(), jobHelpers, dependencies),
+    ).resolves.toMatchObject({
+      total: 3,
+      processed: 3,
+      skipped: 3,
+      complete: true,
+    });
     expect(jobHelpers.updateSummary).toHaveBeenLastCalledWith(
       expect.objectContaining({
         total: 3,
-        processed: 0,
-        complete: false,
+        processed: 3,
+        skipped: 3,
+        complete: true,
       }),
     );
   });
@@ -253,9 +314,9 @@ describe('catalog categorization background job', () => {
         })),
       },
       listCategories: async () => categories,
-      countProducts: async () => 1,
-      listProductsAfter: async (_scope, lastId) =>
-        lastId === 0
+      listProductIds: async () => [1],
+      listProductsByIds: async (_scope, ids) =>
+        ids.includes(1)
           ? [
               {
                 id: 1,
@@ -304,9 +365,9 @@ describe('catalog categorization background job', () => {
         })),
       },
       listCategories: async () => categories,
-      countProducts: async () => 1,
-      listProductsAfter: async (_scope, lastId) =>
-        lastId === 0
+      listProductIds: async () => [1],
+      listProductsByIds: async (_scope, ids) =>
+        ids.includes(1)
           ? [
               {
                 id: 1,

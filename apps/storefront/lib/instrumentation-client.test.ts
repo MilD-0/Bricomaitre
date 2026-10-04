@@ -39,7 +39,14 @@ describe('client instrumentation loading', () => {
     expect(sentry.captureRouterTransitionStart).not.toHaveBeenCalled();
 
     const error = new Error('after initialization');
-    window.dispatchEvent(new ErrorEvent('error', { error }));
+    window.dispatchEvent(
+      new ErrorEvent('error', {
+        error,
+        filename: 'https://user:secret@bricomaitre.com/_next/static/chunk.js?token=secret#details',
+        lineno: 8,
+        colno: 21,
+      }),
+    );
     await vi.waitFor(() => expect(sentry.init).toHaveBeenCalledOnce());
     expect(sentry.init).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -47,7 +54,7 @@ describe('client instrumentation loading', () => {
         release: 'release-test',
         sendDefaultPii: false,
         integrations: [{ name: 'BrowserTracing' }],
-        initialScope: { tags: { service: 'storefront' } },
+        initialScope: { tags: { service: 'storefront', capture_phase: 'sdk' } },
       }),
     );
     expect(sentry.browserTracingIntegration).toHaveBeenCalledWith({
@@ -56,6 +63,16 @@ describe('client instrumentation loading', () => {
     });
     expect(sentry.captureException).toHaveBeenCalledWith(error, {
       mechanism: { type: 'error', handled: false },
+      captureContext: {
+        tags: { capture_phase: 'bootstrap' },
+        contexts: {
+          browser_error: {
+            sourceUrl: 'https://bricomaitre.com/_next/static/chunk.js',
+            lineNumber: 8,
+            columnNumber: 21,
+          },
+        },
+      },
     });
 
     expect(removeListener).toHaveBeenCalledWith('error', expect.any(Function));

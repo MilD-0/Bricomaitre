@@ -166,6 +166,13 @@ verify the release tag on real production browser events after deployment.
 The Storefront build passes the raw commit SHA as `NEXT_PUBLIC_SENTRY_RELEASE`;
 `NEXT_PUBLIC_RELEASE` is the `sha-` prefixed image tag used by analytics.
 
+Errors captured before the browser SDK initializes include sanitized source URLs,
+line and column numbers in `browser_error`, when supplied by the browser. The
+`capture_phase` tag distinguishes bootstrap capture from the initialized SDK.
+Native wrapper and extension URLs retain their origin while losing credentials,
+query strings and fragments. Use this evidence to investigate stackless errors;
+a Facebook browser tag alone is insufficient to suppress an exception.
+
 The existing project alerts email issue owners about high-priority issues.
 Separate production regression alerts cover
 [`bricadmin`](https://bricomaitre.sentry.io/monitors/alerts/6074157/),
@@ -200,3 +207,21 @@ Sentry exception. Correlate those IDs with Admin job history before its 24-hour
 retention expires. Diagnostics exclude raw carrier responses, request URLs,
 tracking numbers, SQL parameters, and customer contact information. Use the
 internal order IDs for an authorized lookup when more evidence is needed.
+
+A carrier status that conflicts with the local order transition rules is saved
+with the carrier evidence. The local order status remains unchanged. The shipment
+workspace displays both statuses for review, including on mobile. These conflicts
+are not failed syncs: a successful reconciliation can refresh every shipment while
+leaving local decisions for an operator to review. An aligned carrier update or a
+local correction clears the displayed discrepancy. Check order history and carrier
+activity before correcting a terminal local status.
+
+### Catalog search performance
+
+PostgreSQL generated columns store normalized product, brand and category search
+text. They follow writes automatically, including edits and Undo/Redo; no scheduled
+index refresh is needed. Catalog reads combine the current active brand/category
+documents and retain French, Arabic, identifier and fuzzy matching. A separate,
+bounded API catalog pool disables PostgreSQL JIT compilation because its overhead
+dominates these short queries. Compare query plans and returned product ordering
+when changing search, rather than relying solely on Sentry's slow-query count.

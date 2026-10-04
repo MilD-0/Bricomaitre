@@ -88,6 +88,10 @@ server {
   add_header X-Request-ID $request_id always;
   set $admin_upstream admin-${BRIC_ACTIVE_SLOT}:3000;
 
+  if ($bric_invalid_action) {
+    return 400;
+  }
+
   location / {
     # Keep response-header ownership explicit at the proxying context. This
     # avoids duplicate IDs when the application echoes the incoming value.

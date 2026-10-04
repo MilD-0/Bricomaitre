@@ -112,6 +112,10 @@ export const ecotrackOrderStates = adminSchema.table(
     trackingNumber: text('tracking_number').notNull(),
     provider: text('provider').notNull().default('delivro'),
     currentStatus: text('current_status').notNull(),
+    statusConflict: jsonb('status_conflict').$type<{
+      localStatus: number;
+      carrierStatus: number;
+    }>(),
     currentAmount: numeric('current_amount', { precision: 14, scale: 2 }),
     currentAmountSource: text('current_amount_source'),
     deliveryTariff: numeric('delivery_tariff', { precision: 12, scale: 2 }),

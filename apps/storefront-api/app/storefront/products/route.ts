@@ -1,7 +1,8 @@
 import { unstable_cache } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getDb, hasDb } from '@bric/db/client';
+import { hasDb } from '@bric/db/client';
+import { getCatalogDb } from '../../../lib/catalog-db';
 import { countStorefrontProducts, readStorefrontProducts } from '@bric/storefront-core/catalog';
 import { storefrontProductListQuerySchema } from '@bric/storefront-core/contracts';
 import { CACHE_TAGS } from '@bric/storefront-core/server-cache';
@@ -9,7 +10,7 @@ import { CACHE_TAGS } from '@bric/storefront-core/server-cache';
 type ProductQuery = Parameters<typeof readStorefrontProducts>[1];
 const loadProducts = unstable_cache(
   async (query: ProductQuery) => {
-    const db = getDb();
+    const db = getCatalogDb();
     const [items, total] = await Promise.all([
       readStorefrontProducts(db, query),
       countStorefrontProducts(db, query),

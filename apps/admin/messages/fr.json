@@ -1177,6 +1177,7 @@
     "unconfirmedDate": "Aucun horodatage de confirmation"
   },
   "ordersEcotrackManager": {
+    "statusConflict": "Statuts contradictoires : la commande est {localStatus}, le transporteur indique {carrierStatus}. Vérifiez la commande avant de corriger son statut local.",
     "resultCount": "{count} expéditions",
     "searchPlaceholder": "Rechercher par tracking, client, telephone, adresse, commune, wilaya, produit ou statut",
     "filters": {
