@@ -19,6 +19,9 @@ export function serializeSnapshot(value: unknown): unknown {
   if (isRecord(value)) {
     return Object.fromEntries(
       Object.entries(value)
+        // Generated search columns follow the source fields on every write.
+        // They are neither operator decisions nor independently recoverable.
+        .filter(([key]) => key !== 'searchDocument' && key !== 'searchTitle')
         .map(([key, entry]) => [key, serializeSnapshot(entry)])
         .filter(([, entry]) => entry !== undefined),
     );

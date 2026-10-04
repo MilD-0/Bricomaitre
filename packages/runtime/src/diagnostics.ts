@@ -7,6 +7,14 @@ function stripUrlDetails(value: string) {
   try {
     const absolute = new URL(value, 'https://diagnostic.invalid');
     const path = absolute.pathname;
+    if (
+      absolute.origin === 'null' &&
+      ['app:', 'chrome-extension:', 'moz-extension:', 'safari-web-extension:'].includes(
+        absolute.protocol,
+      )
+    ) {
+      return `${absolute.protocol}//${absolute.host}${path}`;
+    }
     return absolute.origin === 'https://diagnostic.invalid' ? path : `${absolute.origin}${path}`;
   } catch {
     return value.split(/[?#]/, 1)[0];

@@ -50,6 +50,7 @@ describe('production Nginx renderer', () => {
       expect(rendered.match(/proxy_connect_timeout 2s;/g)).toHaveLength(4);
       expect(rendered.match(/client_max_body_size 1m;/g)).toHaveLength(2);
       expect(rendered).toContain('client_max_body_size 50m;');
+      expect(rendered).toContain('if ($bric_invalid_action) {\n    return 400;\n  }');
       expect(rendered.match(/if \(\$http_next_action != ''\)/g)).toHaveLength(2);
       expect(rendered.match(/proxy_set_header X-Request-ID \$request_id;/g)).toHaveLength(4);
       expect(rendered.match(/proxy_hide_header X-Request-ID;/g)).toHaveLength(4);
