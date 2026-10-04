@@ -1177,6 +1177,7 @@
     "unconfirmedDate": "No confirmation timestamp"
   },
   "ordersEcotrackManager": {
+    "statusConflict": "Status conflict: local order is {localStatus}; carrier reports {carrierStatus}. Review the order before correcting its local status.",
     "resultCount": "{count} shipments",
     "searchPlaceholder": "Search by tracking, client, phone, address, commune, wilaya, product, or status",
     "filters": {

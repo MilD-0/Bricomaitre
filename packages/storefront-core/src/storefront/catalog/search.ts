@@ -5,12 +5,6 @@ export type StorefrontProductTokenMatch = 'slug' | 'mongoId' | 'id';
 
 const ARABIC_DIACRITICS = /[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]/gu;
 
-const SEARCH_DOCUMENT_TRANSLATE_FROM =
-  'àáâäãåæçèéêëìíîïñòóôöõœùúûüýÿأإآٱؤئىيىةکگ٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹';
-
-const SEARCH_DOCUMENT_TRANSLATE_TO =
-  'aaaaaaaceeeeiiiinoooooouuuuyyااااوييييهكك01234567890123456789';
-
 export function normalizeCatalogSearch(value: string) {
   return value
     .normalize('NFKD')
@@ -63,28 +57,7 @@ export function buildCatalogSearchCondition(value: string) {
 }
 
 function buildCatalogSearchDocument() {
-  return sql<string>`translate(replace(replace(lower(regexp_replace(
-    coalesce(${products.title}, '') || ' ' ||
-    coalesce(${products.titleAr}, '') || ' ' ||
-    coalesce(${products.description}, '') || ' ' ||
-    coalesce(${products.descriptionAr}, '') || ' ' ||
-    coalesce(${products.sku}, '') || ' ' ||
-    coalesce(${products.barcode}, '') || ' ' ||
-    coalesce(${products.slug}, '') || ' ' ||
-    coalesce(${products.mongoId}, '') || ' ' ||
-    coalesce(${brands.name}, '') || ' ' ||
-    coalesce(${categories.name}, '') || ' ' ||
-    coalesce(${categories.nameAr}, ''),
-    '[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]', '', 'g'
-  )), 'œ', 'oe'), 'æ', 'ae'), ${SEARCH_DOCUMENT_TRANSLATE_FROM}, ${SEARCH_DOCUMENT_TRANSLATE_TO})`;
-}
-
-function buildCatalogSearchTitleDocument() {
-  return sql<string>`translate(replace(replace(lower(regexp_replace(
-    coalesce(${products.title}, '') || ' ' ||
-    coalesce(${products.titleAr}, ''),
-    '[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]', '', 'g'
-  )), 'œ', 'oe'), 'æ', 'ae'), ${SEARCH_DOCUMENT_TRANSLATE_FROM}, ${SEARCH_DOCUMENT_TRANSLATE_TO})`;
+  return sql<string>`${products.searchDocument} || ' ' || coalesce(${brands.searchDocument}, '') || ' ' || coalesce(${categories.searchDocument}, '')`;
 }
 
 export function buildCatalogSearchRelevance(value: string) {
@@ -92,7 +65,7 @@ export function buildCatalogSearchRelevance(value: string) {
   if (!normalized) return undefined;
 
   const document = buildCatalogSearchDocument();
-  const titleDocument = buildCatalogSearchTitleDocument();
+  const titleDocument = products.searchTitle;
   const exactMatch = sql<number>`case when position(${normalized} in ${document}) > 0 then 1 else 0 end`;
   const exactTitleMatch = sql<number>`case when position(${normalized} in ${titleDocument}) > 0 then 1 else 0 end`;
   const threshold = getCatalogSearchSimilarityThreshold(normalized);

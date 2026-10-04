@@ -12,6 +12,7 @@ import {
   type EcotrackMajEntry as UpstreamEcotrackMajEntry,
 } from '@bric/storefront-core/ecotrack-client';
 import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
+import { canTransitionOrderStatus } from '@bric/storefront-core/order-domain';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { ActionActor } from '../action-history';
 import {
@@ -126,6 +127,20 @@ export async function upsertShipmentState(
     )
       return false;
     const beforeShipmentState = buildEcotrackShipmentActionSnapshot(currentShipment);
+    const nextLocalStatus = statusItem
+      ? mapEcotrackStatusToOrderStatus(
+          statusItem.status,
+          deriveLatestUpstreamActivityAt(row, payload),
+        )
+      : null;
+    const currentLocalStatus = coerceOrderStatus(currentOrder.inHouseStatus);
+    const statusConflict =
+      nextLocalStatus !== null && !canTransitionOrderStatus(currentLocalStatus, nextLocalStatus)
+        ? { localStatus: currentLocalStatus, carrierStatus: nextLocalStatus }
+        : null;
+    // Carrier evidence must survive a conflict with a local terminal decision.
+    // Operators can review the discrepancy without losing subsequent updates.
+    if (statusItem) updates.statusConflict = statusConflict;
     const beforeMajState = payload.majEntries
       ? await loadMajSyncSummary(tx, row.order.id, row.trackingNumber)
       : null;
@@ -157,13 +172,6 @@ export async function upsertShipmentState(
       });
     }
 
-    const nextLocalStatus = statusItem
-      ? mapEcotrackStatusToOrderStatus(
-          statusItem.status,
-          deriveLatestUpstreamActivityAt(row, payload),
-        )
-      : null;
-    const currentLocalStatus = coerceOrderStatus(currentOrder.inHouseStatus);
     let savedOrder = currentOrder;
 
     if (statusItem) {
@@ -178,7 +186,7 @@ export async function upsertShipmentState(
         orderId: row.order.id,
         values: nextOrderValues,
         status:
-          nextLocalStatus !== null && nextLocalStatus !== currentLocalStatus
+          !statusConflict && nextLocalStatus !== null && nextLocalStatus !== currentLocalStatus
             ? { value: nextLocalStatus, noAnswerCount: 0 }
             : undefined,
         actor: { name: ECOTRACK_SYNC_ACTOR_NAME },

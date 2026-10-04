@@ -25,6 +25,7 @@ import {
   TRACKING_STALE_MS,
 } from './ecotrack-shipment-policy';
 import { sanitizeNullableText } from './ecotrack-shipment-status';
+import { canTransitionOrderStatus } from '@bric/storefront-core/order-domain';
 import type {
   EcotrackDatabase as Database,
   EcotrackShipmentRow as ShipmentRow,
@@ -87,9 +88,16 @@ export function getActionFlags(
   };
 }
 
-function buildStatusSummary(row: typeof ecotrackOrderStates.$inferSelect): EcotrackStatusSummary {
+function buildStatusSummary(row: ShipmentRow): EcotrackStatusSummary {
+  const localStatus = coerceOrderStatus(row.order.inHouseStatus);
+  const carrierStatus = row.statusConflict?.carrierStatus;
   return {
     currentStatus: row.currentStatus,
+    statusConflict:
+      carrierStatus !== undefined &&
+      !canTransitionOrderStatus(localStatus, coerceOrderStatus(carrierStatus))
+        ? { localStatus, carrierStatus }
+        : null,
     driverPhone: sanitizeNullableText(row.driverPhone),
     estimatedFee: row.estimatedFee === null ? null : parseNumericAmount(row.estimatedFee),
     deskPhone: sanitizeNullableText(row.deskPhone),

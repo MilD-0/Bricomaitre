@@ -8,7 +8,7 @@ import {
 import { getDb } from '@bric/db/client';
 import { aiProposals, aiRuns, brands, categories, products } from '@bric/db/schema';
 import { startOwnedJob } from '@bric/runtime/jobs';
-import { and, asc, count, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import {
   proposeProductCategoryAssignment,
   reviewProductCategoryProposal,
@@ -69,11 +69,10 @@ export type AiCategorizationDependencies = {
     >;
   };
   listCategories: () => Promise<CategorizationCategory[]>;
-  countProducts: (scope: AiCategorizationPayload['scope']) => Promise<number>;
-  listProductsAfter: (
+  listProductIds: (scope: AiCategorizationPayload['scope']) => Promise<number[]>;
+  listProductsByIds: (
     scope: AiCategorizationPayload['scope'],
-    lastId: number,
-    limit: number,
+    ids: number[],
   ) => Promise<CategorizationProduct[]>;
   listPendingProductIds: () => Promise<Set<number>>;
   proposeCategory: (input: {
@@ -150,19 +149,20 @@ function createAiCategorizationDependencies(actorId?: string | null): AiCategori
         parentName: row.parentId ? (names.get(row.parentId) ?? null) : null,
       }));
     },
-    async countProducts(scope) {
-      const [{ value }] = await db
-        .select({ value: count() })
+    async listProductIds(scope) {
+      const rows = await db
+        .select({ id: products.id })
         .from(products)
         .where(
           and(
             eq(products.active, true),
             scope === 'uncategorized' ? isNull(products.categoryId) : undefined,
           ),
-        );
-      return value;
+        )
+        .orderBy(asc(products.id));
+      return rows.map((row) => row.id);
     },
-    listProductsAfter: (scope, lastId, limit) =>
+    listProductsByIds: (scope, ids) =>
       db
         .select({
           id: products.id,
@@ -181,11 +181,10 @@ function createAiCategorizationDependencies(actorId?: string | null): AiCategori
           and(
             eq(products.active, true),
             scope === 'uncategorized' ? isNull(products.categoryId) : undefined,
-            gt(products.id, lastId),
+            inArray(products.id, ids),
           ),
         )
-        .orderBy(asc(products.id))
-        .limit(limit),
+        .orderBy(asc(products.id)),
     async listPendingProductIds() {
       const rows = await db
         .select({ entityId: aiProposals.entityId })
@@ -237,10 +236,12 @@ export async function runAiCategorizationJob(
   if (categories.length === 0)
     throw new Error('No active categories are available for catalog categorization.');
   const categoryIds = new Set(categories.map((category) => category.id));
-  const total = await dependencies.countProducts(payload.scope);
+  const selectedIds = await dependencies.listProductIds(payload.scope);
+  const total = selectedIds.length;
   const pendingProductIds = await dependencies.listPendingProductIds();
   const counters = {
     processed: 0,
+    skipped: 0,
     proposed: 0,
     applied: 0,
     autoApplyFailed: 0,
@@ -256,12 +257,16 @@ export async function runAiCategorizationJob(
   try {
     while (counters.processed < total) {
       await helpers.throwIfCancelled();
-      const page = await dependencies.listProductsAfter(payload.scope, lastId, payload.batchSize);
-      if (page.length === 0) break;
-      for (const product of page) {
+      const ids = selectedIds.slice(counters.processed, counters.processed + payload.batchSize);
+      const page = await dependencies.listProductsByIds(payload.scope, ids);
+      const byId = new Map(page.map((product) => [product.id, product]));
+      for (const id of ids) {
         await helpers.throwIfCancelled();
-        lastId = product.id;
-        if (pendingProductIds.has(product.id)) {
+        lastId = id;
+        const product = byId.get(id);
+        if (!product) {
+          counters.skipped += 1;
+        } else if (pendingProductIds.has(product.id)) {
           counters.alreadyProposed += 1;
         } else {
           try {
@@ -339,7 +344,8 @@ export async function runAiCategorizationJob(
     counters.unchanged +
     counters.ambiguous +
     counters.alreadyProposed +
-    counters.failed;
+    counters.failed +
+    counters.skipped;
   const summary = {
     ...counters,
     total,

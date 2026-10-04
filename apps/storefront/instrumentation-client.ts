@@ -5,11 +5,16 @@ import {
   sanitizeSentryEvent,
 } from './lib/sentry-config';
 import { filterInjectedScriptError } from './lib/sentry-browser-filter';
+import { readBrowserErrorSource } from './lib/sentry-browser-source';
 
 const dsn = normalizeSentryDsn(process.env.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT);
 
 type SentryClient = typeof import('@sentry/nextjs');
-type BufferedException = { error: unknown; mechanism: 'error' | 'unhandledrejection' };
+type BufferedException = {
+  error: unknown;
+  mechanism: 'error' | 'unhandledrejection';
+  source?: ReturnType<typeof readBrowserErrorSource>;
+};
 
 const bufferedExceptions: BufferedException[] = [];
 let sentryPromise: Promise<SentryClient> | null = null;
@@ -40,12 +45,18 @@ function initializeSentryClient() {
         }),
       ],
       beforeSend: (event) => filterInjectedScriptError(sanitizeSentryEvent(event)),
-      initialScope: { tags: { service: 'storefront' } },
+      initialScope: { tags: { service: 'storefront', capture_phase: 'sdk' } },
     });
     removeBootstrapListeners();
     sentryClient = Sentry;
-    bufferedExceptions.splice(0).forEach(({ error, mechanism }) => {
-      Sentry.captureException(error, { mechanism: { type: mechanism, handled: false } });
+    bufferedExceptions.splice(0).forEach(({ error, mechanism, source }) => {
+      Sentry.captureException(error, {
+        mechanism: { type: mechanism, handled: false },
+        captureContext: {
+          tags: { capture_phase: 'bootstrap' },
+          ...(source ? { contexts: { browser_error: source } } : {}),
+        },
+      });
     });
     return Sentry;
   });
@@ -60,7 +71,11 @@ if (dsn && typeof window !== 'undefined') {
       });
       return;
     }
-    bufferedExceptions.push({ error: event.error ?? event.message, mechanism: 'error' });
+    bufferedExceptions.push({
+      error: event.error ?? event.message,
+      mechanism: 'error',
+      source: readBrowserErrorSource(event),
+    });
     void initializeSentryClient();
   };
   const captureRejection = (event: PromiseRejectionEvent) => {

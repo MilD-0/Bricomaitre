@@ -17,6 +17,32 @@ import { CACHE_TAGS, revalidateServerTags } from '@/lib/server-cache';
 import { revalidateStorefrontProducts } from '@/lib/storefront-revalidate';
 
 type ProductListQuery = ReturnType<typeof productListQuerySchema.parse>;
+const productResponseColumns = {
+  id: products.id,
+  title: products.title,
+  slug: products.slug,
+  titleAr: products.titleAr,
+  description: products.description,
+  descriptionAr: products.descriptionAr,
+  mongoId: products.mongoId,
+  sku: products.sku,
+  barcode: products.barcode,
+  price: products.price,
+  oldPrice: products.oldPrice,
+  purchasePrice: products.purchasePrice,
+  weightKg: products.weightKg,
+  active: products.active,
+  inStock: products.inStock,
+  availabilityStatus: products.availabilityStatus,
+  unitsSold: products.unitsSold,
+  inventoryQuantity: products.inventoryQuantity,
+  brandId: products.brandId,
+  categoryId: products.categoryId,
+  images: products.images,
+  archivedAt: products.archivedAt,
+  createdAt: products.createdAt,
+  updatedAt: products.updatedAt,
+};
 type ProductMetricRow = {
   productId: number;
   orderPurchaseCount: number;
@@ -190,7 +216,7 @@ async function addOrderMetricsToProducts<T extends { id: number; mongoId?: strin
 
 async function loadAllProducts() {
   return getDb()
-    .select()
+    .select(productResponseColumns)
     .from(products)
     .where(isNull(products.archivedAt))
     .orderBy(desc(products.updatedAt));
@@ -243,7 +269,7 @@ async function loadPaginatedProducts(query: ProductListQuery) {
   });
 
   const rows = await db
-    .select()
+    .select(productResponseColumns)
     .from(products)
     .where(whereClause)
     .orderBy(...orderBy, desc(products.id))
