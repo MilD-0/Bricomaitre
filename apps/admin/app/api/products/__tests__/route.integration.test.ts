@@ -156,12 +156,14 @@ describe('app/api/products/route', () => {
     const fromMock = vi.fn(() => ({
       where: vi.fn(() => ({ orderBy: orderByMock })),
     }));
-    const selectMock = vi.fn(() => ({ from: fromMock }));
+    const selectMock = vi.fn((_fields?: unknown) => ({ from: fromMock }));
     getDbMock.mockReturnValue({ select: selectMock, execute: vi.fn() });
 
     const res = await GET(new NextRequest('http://localhost/api/products'));
 
     expect(orderByMock).toHaveBeenCalledOnce();
+    expect(selectMock.mock.calls[0]?.[0]).not.toHaveProperty('searchDocument');
+    expect(selectMock.mock.calls[0]?.[0]).not.toHaveProperty('searchTitle');
     await expect(res.json()).resolves.toEqual({
       items: [
         {
@@ -210,6 +212,8 @@ describe('app/api/products/route', () => {
 
     expect(whereCountMock).toHaveBeenCalledOnce();
     expect(whereRowsMock).toHaveBeenCalledOnce();
+    expect(selectMock.mock.calls[1]?.[0]).not.toHaveProperty('searchDocument');
+    expect(selectMock.mock.calls[1]?.[0]).not.toHaveProperty('searchTitle');
     await expect(res.json()).resolves.toEqual({
       items: [
         {

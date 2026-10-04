@@ -116,12 +116,13 @@ describe('app/api/products/[id]/route', () => {
       const allowed = permissions.flat();
       hasDbMock.mockReturnValue(true);
       authMock.mockResolvedValue({ user: { permissions: allowed } });
+      const findFirst = vi
+        .fn()
+        .mockResolvedValue({ id: 1, title: 'Visible product', purchasePrice: '700.00' });
       getDbMock.mockReturnValue({
         query: {
           products: {
-            findFirst: vi
-              .fn()
-              .mockResolvedValue({ id: 1, title: 'Visible product', purchasePrice: '700.00' }),
+            findFirst,
           },
         },
         select: () => ({ from: () => ({ where: async () => [] }) }),
@@ -132,6 +133,9 @@ describe('app/api/products/[id]/route', () => {
       const { item } = await response.json();
       expect(response.status).toBe(200);
       expect(item.title).toBe('Visible product');
+      expect(findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ columns: { searchDocument: false, searchTitle: false } }),
+      );
       if (allowed.length) expect(item.purchasePrice).toBe('700.00');
       else expect(item).not.toHaveProperty('purchasePrice');
     },
