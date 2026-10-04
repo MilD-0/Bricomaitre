@@ -81,10 +81,10 @@ Material distributed at runtime:
 | ------------------------------------ | ------------- | ------------------------------- | ------------------------------------------------------------------------------- |
 | Inter                                | 5.3.0 package | Storefront webfont              | third_party/licenses/OFL-1.1-Inter.txt                                          |
 | IBM Plex Sans Arabic                 | 5.3.0 package | Storefront webfont              | third_party/licenses/OFL-1.1-IBM-Plex-Sans-Arabic.txt                           |
-| Sharp and its Linux x64 native addon | 0.35.4        | Storefront image optimization   | third_party/licenses/Apache-2.0-Sharp.txt                                       |
-| sharp-libvips Linux x64 bundle       | 1.3.3         | Native image-processing runtime | LGPL-3.0-or-later and third_party/licenses/SHARP-LIBVIPS-THIRD-PARTY-NOTICES.md |
+| Sharp and its Linux x64 native addon | 0.35.5        | Storefront image optimization   | third_party/licenses/Apache-2.0-Sharp.txt                                       |
+| sharp-libvips Linux x64 bundle       | 1.3.4         | Native image-processing runtime | LGPL-3.0-or-later and third_party/licenses/SHARP-LIBVIPS-THIRD-PARTY-NOTICES.md |
 
-The Sharp runtime bundle contains libvips 8.18.6 and supporting shared
+The Sharp runtime bundle contains libvips 8.18.7 and supporting shared
 libraries. Exact bundled versions are recorded in
 third_party/licenses/SHARP-LIBVIPS-VERSIONS.json. The LGPL and incorporated GPL
 license texts are included at third_party/licenses/LGPL-3.0-or-later.txt and
@@ -93,8 +93,8 @@ third_party/licenses/GPL-3.0-only.txt.
 Corresponding source and reproducible packaging inputs for that unmodified
 bundle are available from:
 
-- sharp-libvips 1.3.3: https://github.com/lovell/sharp-libvips/tree/v1.3.3
-- libvips 8.18.6: https://github.com/libvips/libvips/tree/v8.18.6
+- sharp-libvips 1.3.4: https://github.com/lovell/sharp-libvips/tree/v1.3.4
+- libvips 8.18.7: https://github.com/libvips/libvips/tree/v8.18.7
 
 The Bricomaitre release images do not modify those native libraries. Anyone
 redistributing an image must preserve the notices and provide corresponding
