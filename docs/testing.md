@@ -72,7 +72,9 @@ route-contract suites remain sequential because they share assumptions that
 make concurrent execution misleading. Vitest is capped at two workers so
 parallel CI lanes do not each expand to the host CPU count. Browser and
 performance lanes run after setup in a loopback-only network namespace, while
-real-service fixtures use pinned local container images.
+real-service fixtures use pinned local container images. Their disposable
+PostgreSQL data uses a 1 GiB tmpfs so initialization does not compete with image
+builds for disk writes. Fixture cleanup removes container-owned anonymous volumes.
 
 Pull request CI verifies a change before merge. Merging creates a new `main`
 commit and runs CI again; only a successful push run for that `main` commit can

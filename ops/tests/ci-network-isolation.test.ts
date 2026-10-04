@@ -117,7 +117,8 @@ describe('CI network isolation', () => {
     );
     expect(result.dockerLog).not.toContain('pull ');
     expect(result.dockerLog.match(/run --detach --init --network host/g)).toHaveLength(2);
-    expect(result.dockerLog.match(/rm --force bricomaitre-ci-/g)).toHaveLength(2);
+    expect(result.dockerLog).toContain('--tmpfs /var/lib/postgresql/data:rw,nosuid,noexec,size=1g');
+    expect(result.dockerLog.match(/rm --force --volumes bricomaitre-ci-/g)).toHaveLength(2);
   });
 
   it('allocates a free host port when the requested port is already occupied', async () => {
@@ -143,7 +144,7 @@ describe('CI network isolation', () => {
 
     expect(result.status).toBe(17);
     expect(result.dockerLog.match(/^pull /gm)).toHaveLength(2);
-    expect(result.dockerLog.match(/rm --force bricomaitre-ci-/g)).toHaveLength(2);
+    expect(result.dockerLog.match(/rm --force --volumes bricomaitre-ci-/g)).toHaveLength(2);
   });
 
   it('reports a stopped service immediately and still removes its retained container', () => {
@@ -156,7 +157,7 @@ describe('CI network isolation', () => {
     );
     expect(result.stderr).toContain('synthetic service startup failure');
     expect(result.dockerLog.match(/run --detach --init --network host/g)).toHaveLength(1);
-    expect(result.dockerLog.match(/rm --force bricomaitre-ci-/g)).toHaveLength(1);
+    expect(result.dockerLog.match(/rm --force --volumes bricomaitre-ci-/g)).toHaveLength(1);
   });
 
   it('runs loopback-only commands in a private user and network namespace', () => {
