@@ -3,6 +3,15 @@ import { readBrowserErrorSource } from './sentry-browser-source';
 import { sanitizeSentryEvent } from './sentry-config';
 
 describe('bootstrap browser error source', () => {
+  it('removes credentials before bounding a long source URL', () => {
+    expect(
+      readBrowserErrorSource({
+        filename: `https://user:${'secret'.repeat(300)}@bricomaitre.com/chunk.js?token=secret`,
+        lineno: 1,
+        colno: 2,
+      }).sourceUrl,
+    ).toBe('https://bricomaitre.com/chunk.js');
+  });
   it('retains native wrapper locations without query strings or fragments', () => {
     const source = readBrowserErrorSource({
       filename: 'app://navigation_logger?token=secret#details',
