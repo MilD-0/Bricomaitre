@@ -296,12 +296,12 @@ describe('production packaging and release runtime', () => {
       'warning: accepting a retained legacy release for rollback compatibility',
     );
 
-    expect(lockfile).toContain("'@img/sharp-libvips-linux-x64@1.3.3'");
+    expect(lockfile).toContain("'@img/sharp-libvips-linux-x64@1.3.4'");
     expect(lockfile).toContain("'@fontsource-variable/inter@5.3.0'");
     expect(lockfile).toContain("'@fontsource/ibm-plex-sans-arabic@5.3.0'");
-    expect(libvipsVersions.vips).toBe('8.18.6');
-    expect(notice).toContain('sharp-libvips/tree/v1.3.3');
-    expect(notice).toContain('libvips/tree/v8.18.6');
+    expect(libvipsVersions.vips).toBe('8.18.7');
+    expect(notice).toContain('sharp-libvips/tree/v1.3.4');
+    expect(notice).toContain('libvips/tree/v8.18.7');
   });
 
   it('allows production releases only after successful trusted main CI and complete image builds', () => {

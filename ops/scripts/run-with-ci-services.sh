@@ -116,10 +116,10 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM HUP
   if [[ "$redis_started" == 'true' ]]; then
-    docker rm --force "$redis_container" >/dev/null 2>&1 || true
+    docker rm --force --volumes "$redis_container" >/dev/null 2>&1 || true
   fi
   if [[ "$postgres_started" == 'true' ]]; then
-    docker rm --force "$postgres_container" >/dev/null 2>&1 || true
+    docker rm --force --volumes "$postgres_container" >/dev/null 2>&1 || true
   fi
   exit "$status"
 }
@@ -191,12 +191,15 @@ docker run \
 redis_started='true'
 wait_for_redis
 
+# Test data is disposable. A bounded tmpfs avoids competing with image builds
+# for disk writes during PostgreSQL initialization and leaves no anonymous volume.
 docker run \
   --detach \
   --init \
   --network host \
   --name "$postgres_container" \
   --label com.bricomaitre.ci-service=postgres \
+  --tmpfs /var/lib/postgresql/data:rw,nosuid,noexec,size=1g \
   --env POSTGRES_DB="$database" \
   --env POSTGRES_USER=bricomaitre \
   --env POSTGRES_PASSWORD=bricomaitre \
