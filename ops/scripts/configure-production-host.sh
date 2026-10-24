@@ -91,7 +91,7 @@ if [[ "$(docker info --format '{{.LiveRestoreEnabled}}')" != "true" ]]; then
   exit 1
 fi
 if /usr/sbin/sshd -T | grep -Eq \
-  '^(allowagentforwarding yes|allowtcpforwarding yes|x11forwarding yes|disableforwarding no)$'; then
+  '^(allowagentforwarding yes|allowtcpforwarding yes|x11forwarding yes|disableforwarding no|compression yes)$'; then
   echo "SSH forwarding hardening was not applied" >&2
   exit 1
 fi
