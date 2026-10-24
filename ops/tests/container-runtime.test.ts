@@ -405,7 +405,7 @@ describe('production packaging and release runtime', () => {
       );
       expect(dockerfile).toContain('ENV COREPACK_HOME="/corepack"');
       expect(dockerfile).toContain(
-        '--mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared',
+        '--mount=type=cache,id=bricomaitre-corepack-pnpm-11.28.8,target=/corepack,sharing=shared',
       );
       expect(dockerfile).toContain('npm_config_store_dir=/pnpm/store');
       expect(dockerfile).toContain('npm_config_prefer_offline=true');
