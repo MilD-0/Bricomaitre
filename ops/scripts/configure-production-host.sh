@@ -24,7 +24,7 @@ if [[ ! "$operations_user" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] || ! id "$operations_use
 fi
 operations_group="$(id -gn "$operations_user")"
 
-/usr/sbin/dockerd --validate --config-file "$host_config_dir/docker-daemon.json"
+dockerd --validate --config-file "$host_config_dir/docker-daemon.json"
 sshd_validation_config="$(mktemp)"
 trap 'rm -f -- "$sshd_validation_config"' EXIT
 printf 'Include %s\n' "$host_config_dir/00-bricomaitre-hardening.conf" >"$sshd_validation_config"

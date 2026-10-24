@@ -22,7 +22,7 @@ mapped() {
 id() {
   case "$1" in -u) echo 0 ;; -gn) echo operators ;; operator) return 0 ;; *) return 1 ;; esac
 }
-function /usr/sbin/dockerd() {
+dockerd() {
   record "dockerd $*"
   [[ "$HOST_TEST_FAILURE" != validate ]] || return 42
 }

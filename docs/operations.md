@@ -96,6 +96,13 @@ checks, and only then retires the current slot.
 
 ## Runtime constraints
 
+The host uses Docker Engine, containerd, and runc from Docker's signed stable
+[Debian package repository](https://docs.docker.com/engine/install/debian/).
+Keep these packages current alongside Debian security updates. Before a major
+Engine upgrade, stop the containers and back up Docker and containerd state,
+their configuration, and the installed packages so rollback can restore matching
+runtime metadata. Keep the existing storage driver during the upgrade.
+
 Every service has a memory reservation, hard limit, process limit, bounded log
 rotation, health check, and deliberate OOM priority. The Customer-facing
 Storefront and API receive greater protection under host pressure than Admin
