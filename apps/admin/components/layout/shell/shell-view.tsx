@@ -197,7 +197,7 @@ export function AppShellView({
               )}
               aria-controls="sidebar-profile-drawer"
               aria-expanded={profileOpen}
-              aria-label={t('labels.userProfile')}
+              aria-label={`${getUserInitials(initialUserName, initialUserEmail)} ${displayName} ${displayEmail} · ${t('labels.userProfile')}`}
               onClick={() => setProfileOpen(true)}
             >
               <Avatar className="size-9">
@@ -242,7 +242,7 @@ export function AppShellView({
                     <button
                       key={l}
                       type="button"
-                      aria-label={localeLabels[l]}
+                      aria-label={`${l.toUpperCase()} · ${localeLabels[l]}`}
                       aria-pressed={l === locale}
                       className={cn(
                         'relative grid size-9 cursor-pointer place-items-center rounded-sm text-xs font-bold tracking-wide text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50',

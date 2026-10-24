@@ -176,19 +176,22 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    expect(screen.getByRole('button', { name: 'English' })).toHaveTextContent(/^EN$/);
-    expect(screen.getByRole('button', { name: 'English' })).toHaveClass(
+    expect(screen.getByRole('button', { name: 'EN · English' })).toHaveTextContent(/^EN$/);
+    expect(screen.getByRole('button', { name: 'EN · English' })).toHaveClass(
       'size-9',
       'cursor-pointer',
       'font-bold',
     );
-    expect(screen.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Français' })).toHaveTextContent(/^FR$/);
-    expect(screen.getByRole('button', { name: 'Français' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'EN · English' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'FR · Français' })).toHaveTextContent(/^FR$/);
+    expect(screen.getByRole('button', { name: 'FR · Français' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
-    expect(screen.getByRole('button', { name: 'العربية' })).toHaveTextContent(/^AR$/);
+    expect(screen.getByRole('button', { name: 'AR · العربية' })).toHaveTextContent(/^AR$/);
   });
 
   it('keeps report filters and the active section when changing locale', async () => {
@@ -203,7 +206,7 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: 'العربية' }));
+    await userEvent.click(screen.getByRole('button', { name: 'AR · العربية' }));
 
     expect(pushMock).toHaveBeenCalledWith(
       '/ar/stats/fulfillment?range=custom&startDate=2026-09-01&endDate=2026-09-06&grain=week#pipeline',
@@ -336,7 +339,7 @@ describe('AppShell', () => {
       '/en/ai-proposals',
     );
 
-    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+    await userEvent.click(screen.getByRole('button', { name: / · User profile$/ }));
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
@@ -432,13 +435,13 @@ describe('AppShell', () => {
     );
     const trigger = screen.getByRole('button', { name: 'Open sidebar' });
     await userEvent.click(trigger);
-    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+    await userEvent.click(screen.getByRole('button', { name: / · User profile$/ }));
     expect(screen.getAllByRole('dialog')).toHaveLength(2);
 
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
     expect(document.body.style.overflow).toBe('hidden');
-    expect(screen.getByRole('button', { name: 'User profile' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: / · User profile$/ })).toHaveFocus();
 
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
