@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-osv_version='2.5.1'
+osv_version='2.7.0'
 cache_root="${BRIC_CI_CACHE_DIR:-${XDG_CACHE_HOME:-/tmp}/bricomaitre-ci}"
 osv_cache_dir="$cache_root/osv-scanner/$osv_version"
 osv_bin="$osv_cache_dir/osv-scanner"
@@ -14,11 +14,11 @@ fi
 case "$(uname -m)" in
   x86_64|amd64)
     osv_arch='amd64'
-    binary_sha256='f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be'
+    binary_sha256='160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b'
     ;;
   aarch64|arm64)
     osv_arch='arm64'
-    binary_sha256='3d0f5aa5a6baa8eb32bcef247388e149ef6030a6634ccae6fa0d62681fb27a6d'
+    binary_sha256='4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7'
     ;;
   *)
     echo "Unsupported architecture for OSV-Scanner: $(uname -m)" >&2
