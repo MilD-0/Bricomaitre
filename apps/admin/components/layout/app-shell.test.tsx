@@ -339,7 +339,7 @@ describe('AppShell', () => {
       '/en/ai-proposals',
     );
 
-    await userEvent.click(screen.getByRole('button', { name: / · User profile$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^User profile:/ }));
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
@@ -435,13 +435,13 @@ describe('AppShell', () => {
     );
     const trigger = screen.getByRole('button', { name: 'Open sidebar' });
     await userEvent.click(trigger);
-    await userEvent.click(screen.getByRole('button', { name: / · User profile$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^User profile:/ }));
     expect(screen.getAllByRole('dialog')).toHaveLength(2);
 
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
     expect(document.body.style.overflow).toBe('hidden');
-    expect(screen.getByRole('button', { name: / · User profile$/ })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /^User profile:/ })).toHaveFocus();
 
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

@@ -197,9 +197,9 @@ export function AppShellView({
               )}
               aria-controls="sidebar-profile-drawer"
               aria-expanded={profileOpen}
-              aria-label={`${getUserInitials(initialUserName, initialUserEmail)} ${displayName} ${displayEmail} · ${t('labels.userProfile')}`}
               onClick={() => setProfileOpen(true)}
             >
+              <span className="sr-only">{t('labels.userProfile')}: </span>
               <Avatar className="size-9">
                 {initialUserImage ? (
                   <AvatarImage
