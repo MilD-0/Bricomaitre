@@ -22,7 +22,7 @@ mapped() {
 id() {
   case "$1" in -u) echo 0 ;; -gn) echo operators ;; operator) return 0 ;; *) return 1 ;; esac
 }
-function /usr/sbin/dockerd() {
+dockerd() {
   record "dockerd $*"
   [[ "$HOST_TEST_FAILURE" != validate ]] || return 42
 }
@@ -103,6 +103,9 @@ it('installs rendered host files with their modes and activates them after valid
     );
     expect(run.read('etc/ssh/sshd_config.d/00-bricomaitre-hardening.conf')).toContain(
       'DisableForwarding yes',
+    );
+    expect(run.read('etc/ssh/sshd_config.d/00-bricomaitre-hardening.conf')).toContain(
+      'Compression no',
     );
     for (const path of ['var/log/bric-postgres-backup.log', 'var/log/bric-postgres-restore.log']) {
       expect(statSync(join(run.directory, path)).mode & 0o777).toBe(0o640);

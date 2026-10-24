@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
     open-pull-requests-limit: 5
     groups:
       compatible-updates:
@@ -21,7 +21,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
     open-pull-requests-limit: 5
     groups:
       compatible-updates:
@@ -33,9 +33,13 @@ updates:
           - patch
 
   - package-ecosystem: docker
-    directory: /ops/docker
+    directories:
+      - /ops/docker
+      - /ops/demo
+      - /ops/demo/gateway
+      - /ops/demo/release
     schedule:
-      interval: monthly
+      interval: weekly
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: node

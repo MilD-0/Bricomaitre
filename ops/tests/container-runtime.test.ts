@@ -383,7 +383,7 @@ describe('production packaging and release runtime', () => {
 
     expect(dependabot).toContain('package-ecosystem: github-actions');
     expect(dependabot).toContain('package-ecosystem: docker');
-    expect(dependabot.match(/interval: monthly/g)).toHaveLength(3);
+    expect(dependabot.match(/interval: weekly/g)).toHaveLength(3);
     expect(dependabot).toContain('open-pull-requests-limit: 5');
   });
 
@@ -405,7 +405,7 @@ describe('production packaging and release runtime', () => {
       );
       expect(dockerfile).toContain('ENV COREPACK_HOME="/corepack"');
       expect(dockerfile).toContain(
-        '--mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared',
+        '--mount=type=cache,id=bricomaitre-corepack-pnpm-11.28.8,target=/corepack,sharing=shared',
       );
       expect(dockerfile).toContain('npm_config_store_dir=/pnpm/store');
       expect(dockerfile).toContain('npm_config_prefer_offline=true');

@@ -38,7 +38,7 @@ function createFakeGitleaks() {
     `#!/usr/bin/env bash
 set -euo pipefail
 if [[ "\${1:-}" == 'version' ]]; then
-  echo '8.18.4'
+  echo '8.30.1'
   exit 0
 fi
 source_path=''
@@ -116,20 +116,19 @@ describe('repository secret scanning', () => {
       'utf8',
     );
 
-    expect(config).toContain('minVersion = "8.18.4"');
-    expect(config).not.toContain('8.30.');
-    expect(installer).toContain("gitleaks_version='8.18.4'");
+    expect(config).toContain('minVersion = "8.30.1"');
+    expect(installer).toContain("gitleaks_version='8.30.1'");
     expect(installer).toContain(
-      "archive_sha256='ba6dbb656933921c775ee5a2d1c13a91046e7952e9d919f9bac4cec61d628e7d'",
+      "archive_sha256='551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'",
     );
     expect(installer).toContain(
-      "archive_sha256='bf5f7f466ebfade1296c8bd32cf7d3f592c2aa78836aa9980ffbe2cadca7a861'",
+      "archive_sha256='e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080'",
     );
     expect(installer).toContain(
-      "binary_sha256='46a05260e7cce527f132cb618de59d22262b8b5eb47f66c288447b95c7a98b7e'",
+      "binary_sha256='88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509'",
     );
     expect(installer).toContain(
-      "binary_sha256='fc286fab02c3a0ba80670fc9f8cb1b495a2f62eb953d26113cfa3562f76b340b'",
+      "binary_sha256='00e91bbe655bd7c47753e8cfe61cb76ea1a5d7e7702fe161ee40102b46b3823b'",
     );
     expect(installer).toContain('sha256sum -c --status');
   });

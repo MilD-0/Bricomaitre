@@ -138,7 +138,7 @@ describe('AppShell', () => {
     );
     expect(screen.queryByRole('link', { name: 'nav.orders' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'nav.administration' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+    await userEvent.click(screen.getByRole('button', { name: /^User profile:/ }));
     expect(within(screen.getByRole('dialog')).getByText('Campaign Manager')).toBeInTheDocument();
   });
 
@@ -188,7 +188,7 @@ describe('AppShell', () => {
     expect(screen.queryByRole('link', { name: 'nav.administration' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'nav.dashboard' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+    await userEvent.click(screen.getByRole('button', { name: /^User profile:/ }));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Employee')).toBeInTheDocument();
@@ -222,7 +222,7 @@ describe('AppShell', () => {
     );
     expect(screen.queryByRole('link', { name: 'nav.dashboard' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+    await userEvent.click(screen.getByRole('button', { name: /^User profile:/ }));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Campaign Manager')).toBeInTheDocument();

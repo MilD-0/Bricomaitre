@@ -254,7 +254,7 @@ x-storefront-blue: &storefront-blue
 
 services:
   postgres:
-    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    image: postgres:16-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
     restart: unless-stopped
     init: true
     oom_score_adj: ${BRIC_POSTGRES_OOM_SCORE_ADJ:--800}
@@ -281,7 +281,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-bookworm@sha256:71da9275c5f3fcb97d0fa0c8c5b36cc995327265420f17a04bfd544f458059f7
+    image: redis:7-bookworm@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
     restart: unless-stopped
     init: true
     oom_score_adj: ${BRIC_REDIS_OOM_SCORE_ADJ:--800}
@@ -398,7 +398,7 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx:stable-trixie@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823
+    image: nginx:stable-trixie@sha256:a7675fcee220f59b4a99f7098c06a0d5d999c2c0ee37c0211efb780536e5cb20
     restart: unless-stopped
     init: true
     # Keep the small public edge alive long enough to route or report failures.

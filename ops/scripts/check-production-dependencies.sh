@@ -24,7 +24,7 @@ cd "$workspace_root"
 
 # pnpm resolves the production graph from the installed workspace. Converting
 # that graph to CycloneDX keeps dev-only packages out of the advisory query.
-pnpm licenses list --prod --json >"$licenses_json"
+pnpm -r licenses list --prod --json >"$licenses_json"
 node ops/scripts/production-dependency-audit.mjs generate "$licenses_json" "$sbom_json"
 
 osv_bin="$(bash ops/scripts/install-osv-scanner.sh)"

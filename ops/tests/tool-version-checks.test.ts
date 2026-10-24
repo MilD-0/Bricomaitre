@@ -10,8 +10,8 @@ const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach((path) => rmSync(path, { recursive: true })));
 
 describe.each([
-  { name: 'osv-scanner', version: '2.5.1', output: 'osv-scanner version: 2.5.1' },
-  { name: 'cosign', version: 'v3.0.6', output: 'GitVersion: v3.0.6' },
+  { name: 'osv-scanner', version: '2.7.0', output: 'osv-scanner version: 2.7.0' },
+  { name: 'cosign', version: 'v3.1.4', output: 'GitVersion: v3.1.4' },
 ])('$name version verification', ({ name, version, output }) => {
   it.each([
     { kind: 'valid version with substantial trailing output', valid: true, exitCode: 0, status: 0 },

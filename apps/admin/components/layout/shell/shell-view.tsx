@@ -197,9 +197,9 @@ export function AppShellView({
               )}
               aria-controls="sidebar-profile-drawer"
               aria-expanded={profileOpen}
-              aria-label={t('labels.userProfile')}
               onClick={() => setProfileOpen(true)}
             >
+              <span className="sr-only">{t('labels.userProfile')}: </span>
               <Avatar className="size-9">
                 {initialUserImage ? (
                   <AvatarImage
@@ -242,7 +242,7 @@ export function AppShellView({
                     <button
                       key={l}
                       type="button"
-                      aria-label={localeLabels[l]}
+                      aria-label={`${l.toUpperCase()} · ${localeLabels[l]}`}
                       aria-pressed={l === locale}
                       className={cn(
                         'relative grid size-9 cursor-pointer place-items-center rounded-sm text-xs font-bold tracking-wide text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50',
@@ -307,9 +307,11 @@ export function AppShellView({
               <button
                 type="button"
                 className="rounded-full focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
-                aria-label={`${t('labels.userProfile')} · ${displayName}`}
                 onClick={() => setProfileOpen(true)}
               >
+                <span className="sr-only">
+                  {t('labels.userProfile')} · {displayName}
+                </span>
                 <Avatar className="size-9">
                   {initialUserImage ? (
                     <AvatarImage

@@ -24,7 +24,7 @@ if [[ ! "$operations_user" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] || ! id "$operations_use
 fi
 operations_group="$(id -gn "$operations_user")"
 
-/usr/sbin/dockerd --validate --config-file "$host_config_dir/docker-daemon.json"
+dockerd --validate --config-file "$host_config_dir/docker-daemon.json"
 sshd_validation_config="$(mktemp)"
 trap 'rm -f -- "$sshd_validation_config"' EXIT
 printf 'Include %s\n' "$host_config_dir/00-bricomaitre-hardening.conf" >"$sshd_validation_config"
@@ -91,7 +91,7 @@ if [[ "$(docker info --format '{{.LiveRestoreEnabled}}')" != "true" ]]; then
   exit 1
 fi
 if /usr/sbin/sshd -T | grep -Eq \
-  '^(allowagentforwarding yes|allowtcpforwarding yes|x11forwarding yes|disableforwarding no)$'; then
+  '^(allowagentforwarding yes|allowtcpforwarding yes|x11forwarding yes|disableforwarding no|compression yes)$'; then
   echo "SSH forwarding hardening was not applied" >&2
   exit 1
 fi

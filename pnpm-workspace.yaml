@@ -4,19 +4,21 @@ packages:
   - packages/*
 
 overrides:
+  '@opentelemetry/api': 1.9.1
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
   'brace-expansion@1': 1.1.21
   'brace-expansion@5': 5.0.12
-  'fast-uri@3': 3.1.8
+  'fast-uri@3': 3.1.9
   'esbuild@<=0.24.2': 0.25.12
-  'esbuild@>=0.27.3 <0.28.1': 0.28.1
+  'esbuild@>=0.27.3 <0.28.1': 0.28.2
   'nanoid@5': 5.1.16
+  postcss-selector-parser: 7.1.6
   typescript: 6.0.3
-  undici: 7.29.1
+  undici: 7.30.1
   'uuid@11': 11.1.1
-  vite: 8.0.16
-  zod: 4.6.5
+  vite: 8.3.5
+  zod: 4.6.7
 
 allowBuilds:
   '@parcel/watcher': false

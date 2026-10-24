@@ -154,7 +154,7 @@ describe('production dependency audit', () => {
       writeFileSync(
         join(bin, 'pnpm'),
         `#!/bin/bash
-[[ "$*" == 'licenses list --prod --json' ]] || exit 64
+[[ "$*" == '-r licenses list --prod --json' ]] || exit 64
 printf '%s\n' '{"MIT":[{"name":"dependency","versions":["1.0.0"]}]}'
 `,
         { mode: 0o755 },
