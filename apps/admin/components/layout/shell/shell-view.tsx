@@ -307,9 +307,11 @@ export function AppShellView({
               <button
                 type="button"
                 className="rounded-full focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
-                aria-label={`${t('labels.userProfile')} · ${displayName}`}
                 onClick={() => setProfileOpen(true)}
               >
+                <span className="sr-only">
+                  {t('labels.userProfile')} · {displayName}
+                </span>
                 <Avatar className="size-9">
                   {initialUserImage ? (
                     <AvatarImage
