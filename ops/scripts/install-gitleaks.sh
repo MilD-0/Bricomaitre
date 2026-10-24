@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-gitleaks_version='8.18.4'
+gitleaks_version='8.30.1'
 cache_root="${BRIC_CI_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/bricomaitre-ci}"
 gitleaks_cache_dir="$cache_root/gitleaks/$gitleaks_version"
 gitleaks_bin="$gitleaks_cache_dir/gitleaks"
@@ -14,13 +14,13 @@ fi
 case "$(uname -m)" in
   x86_64|amd64)
     gitleaks_arch='x64'
-    archive_sha256='ba6dbb656933921c775ee5a2d1c13a91046e7952e9d919f9bac4cec61d628e7d'
-    binary_sha256='46a05260e7cce527f132cb618de59d22262b8b5eb47f66c288447b95c7a98b7e'
+    archive_sha256='551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+    binary_sha256='88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509'
     ;;
   aarch64|arm64)
     gitleaks_arch='arm64'
-    archive_sha256='bf5f7f466ebfade1296c8bd32cf7d3f592c2aa78836aa9980ffbe2cadca7a861'
-    binary_sha256='fc286fab02c3a0ba80670fc9f8cb1b495a2f62eb953d26113cfa3562f76b340b'
+    archive_sha256='e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080'
+    binary_sha256='00e91bbe655bd7c47753e8cfe61cb76ea1a5d7e7702fe161ee40102b46b3823b'
     ;;
   *)
     echo "Unsupported architecture for Gitleaks: $(uname -m)" >&2

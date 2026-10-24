@@ -27,8 +27,8 @@ else
   gitleaks_bin="$(bash "$workspace_dir/ops/scripts/install-gitleaks.sh")"
 fi
 
-if [[ "$("$gitleaks_bin" version)" != '8.18.4' ]]; then
-  echo 'Secret scanning requires the checksum-pinned Gitleaks 8.18.4 binary.' >&2
+if [[ "$("$gitleaks_bin" version)" != '8.30.1' ]]; then
+  echo 'Secret scanning requires the checksum-pinned Gitleaks 8.30.1 binary.' >&2
   exit 1
 fi
 
@@ -38,11 +38,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# A passing process is not enough: affected Gitleaks releases have returned zero
-# while loading the default rules but matching nothing. Prove a default rule can
-# still fire before trusting either repository scan.
-canary_prefix='sk-proj-'
-canary_suffix='abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMN'
+# Prove the pinned scanner detects a synthetic key before trusting either scan.
+# Keep the sample aligned with the current default OpenAI rule's token format.
+canary_prefix='sk-'
+canary_suffix='AbcDEfgHIjkLMnoPQrSTT3BlbkFJUvWxYz0123456789ABcd'
 printf 'CANARY_OPENAI_API_KEY=%s%s\n' "$canary_prefix" "$canary_suffix" >"$scan_dir/canary.env"
 set +e
 "$gitleaks_bin" detect \
