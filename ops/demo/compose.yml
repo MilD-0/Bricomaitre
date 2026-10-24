@@ -56,7 +56,7 @@ x-storefront-api-build: &storefront-api-build
 services:
   gateway:
     <<: *app-security
-    image: nginx:stable-trixie@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823
+    image: nginx:stable-trixie@sha256:a7675fcee220f59b4a99f7098c06a0d5d999c2c0ee37c0211efb780536e5cb20
     user: '101:101'
     read_only: true
     cpus: 0.5
@@ -85,7 +85,7 @@ services:
     memswap_limit: 2g
     pids_limit: 256
     <<: *budget
-    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    image: postgres:16-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
     init: true
     shm_size: 512mb
     restart: unless-stopped
@@ -112,7 +112,7 @@ services:
     read_only: true
     tmpfs: [/tmp:size=16m]
     <<: *budget
-    image: redis:7-bookworm@sha256:71da9275c5f3fcb97d0fa0c8c5b36cc995327265420f17a04bfd544f458059f7
+    image: redis:7-bookworm@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
     init: true
     restart: unless-stopped
     command:
@@ -216,7 +216,7 @@ services:
 
   database-permissions:
     <<: *budget
-    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    image: postgres:16-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
     restart: 'no'
     environment:
       PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
@@ -240,7 +240,7 @@ services:
     memswap_limit: 2g
     pids_limit: 256
     <<: *budget
-    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    image: postgres:16-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
     restart: 'no'
     environment:
       PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
@@ -264,7 +264,7 @@ services:
     memswap_limit: 2g
     pids_limit: 256
     <<: *budget
-    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    image: postgres:16-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
     restart: 'no'
     environment:
       PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}

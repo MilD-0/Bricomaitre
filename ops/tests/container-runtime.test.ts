@@ -383,7 +383,7 @@ describe('production packaging and release runtime', () => {
 
     expect(dependabot).toContain('package-ecosystem: github-actions');
     expect(dependabot).toContain('package-ecosystem: docker');
-    expect(dependabot.match(/interval: monthly/g)).toHaveLength(3);
+    expect(dependabot.match(/interval: weekly/g)).toHaveLength(3);
     expect(dependabot).toContain('open-pull-requests-limit: 5');
   });
 
