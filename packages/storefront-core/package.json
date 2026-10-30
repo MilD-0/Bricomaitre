@@ -43,7 +43,7 @@
   "dependencies": {
     "@bric/db": "workspace:*",
     "drizzle-orm": "^0.45.4",
-    "next": "16.4.2",
+    "next": "16.4.3",
     "zod": "4.6.7"
   },
   "devDependencies": {

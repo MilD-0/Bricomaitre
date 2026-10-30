@@ -17,8 +17,8 @@
     "./pricing": "./src/pricing.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.101",
-    "ai": "^7.0.150",
+    "@ai-sdk/openai": "^4.0.104",
+    "ai": "^7.0.155",
     "zod": "4.6.7"
   },
   "devDependencies": {
