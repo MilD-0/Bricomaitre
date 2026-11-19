@@ -3,8 +3,8 @@
 The demo runs the real applications and workers against synthetic commerce data.
 Try ordering, confirmation, fulfilment, catalog editing, and reporting.
 
-[Storefront](https://bricomaitre.mildsauce.cloud) ·
-[Admin](https://bricomaitre-admin.mildsauce.cloud)
+[Storefront](https://bricomaitre.mildsauce.dev) ·
+[Admin](https://bricomaitre-admin.mildsauce.dev)
 
 The hosted instance runs on my own machine and may be slow or offline.
 [Email me](mailto:mayldsauce@gmail.com) to arrange access. Visitor data is shared
