@@ -18,6 +18,7 @@ max_backup_age_hours="${BACKUP_RESTORE_MAX_AGE_HOURS:-36}"
 minimum_products="${BACKUP_RESTORE_MIN_PRODUCTS:-1}"
 minimum_orders="${BACKUP_RESTORE_MIN_ORDERS:-1}"
 checkin_url="${BACKUP_RESTORE_CHECKIN_URL:-}"
+checkin_id="$(cat /proc/sys/kernel/random/uuid)"
 
 for numeric_setting in "$max_backup_age_hours" "$minimum_products" "$minimum_orders"; do
   if [[ ! "$numeric_setting" =~ ^[0-9]+$ ]]; then
@@ -35,13 +36,18 @@ if [[ "${BRIC_REQUIRE_RESTORE_CHECKIN:-false}" == true && -z "$checkin_url" ]]; 
 fi
 
 notify_checkin() {
-  local suffix="${1:-}"
+  local status="${1:?check-in status is required}"
+  local payload
   if [[ -n "$checkin_url" ]]; then
-    curl --fail --silent --show-error --max-time 15 "${checkin_url}${suffix}" >/dev/null
+    printf -v payload '{"check_in_id":"%s","status":"%s","monitor_config":{"schedule":{"type":"crontab","value":"45 4 * * 0"},"timezone":"Etc/UTC","checkin_margin":60,"max_runtime":30,"failure_issue_threshold":1,"recovery_threshold":1}}' \
+      "$checkin_id" "$status"
+    curl --fail --silent --show-error --max-time 15 \
+      --header 'Content-Type: application/json' \
+      --data "$payload" "$checkin_url" >/dev/null
   fi
 }
 
-notify_checkin '/start'
+notify_checkin in_progress
 
 cleanup() {
   local status=$?
@@ -52,9 +58,9 @@ cleanup() {
     rm -rf -- "$temporary_directory"
   fi
   if ((status == 0)); then
-    notify_checkin || status=1
+    notify_checkin ok || status=1
   else
-    notify_checkin '/fail' || true
+    notify_checkin error || true
   fi
   exit "$status"
 }
