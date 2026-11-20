@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreUnresolved": ["next"],
   "workspaces": {
     "ops": {
       "entry": [
@@ -53,8 +52,7 @@
         "instrumentation*.ts!",
         "app/**/{page,layout,route,loading,error,global-error,not-found,default,robots,sitemap,manifest}.{ts,tsx}!",
         "scripts/**/*.ts!",
-        "next.config.ts!",
-        "test/fixture-storefront-api.mjs"
+        "next.config.ts!"
       ],
       "ignoreDependencies": ["@fontsource-variable/inter", "@fontsource/ibm-plex-sans-arabic"],
       "project": [
