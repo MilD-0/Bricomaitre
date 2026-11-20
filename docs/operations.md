@@ -123,8 +123,19 @@ bucket are validated before upload. A separate weekly job downloads the latest
 remote backup and restores it into an isolated, networkless PostgreSQL
 container. The drill rejects artifacts older than the configured freshness
 window, verifies the migration ledger and minimum product/order row floors, and
-sends start, success, and failure check-ins to an external dead-man monitor
+sends start, success, and failure check-ins to a Sentry cron monitor
 before deleting the temporary container and volume.
+
+Database dumps retain object ownership and grants but do not contain cluster
+roles. The drill creates the configured Admin and Storefront roles without login
+credentials inside the disposable cluster before restoring the dump. Keep those
+role names aligned with the production environment.
+
+`BACKUP_RESTORE_CHECKIN_URL` is the Admin project's Sentry cron ingestion URL.
+Each run upserts the weekly UTC schedule with a one-hour check-in margin and a
+30-minute runtime limit, using one check-in ID for its start and final status.
+The scheduled job requires monitoring configuration; an unavailable check-in
+endpoint fails the drill. Verify alert routing in Sentry when configuring it.
 
 This proves that the remote artifact can be restored. Recovery still requires a
 deliberate decision about the target release and production database; it is not
