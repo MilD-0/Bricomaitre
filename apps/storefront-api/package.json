@@ -18,7 +18,7 @@
     "test:integration": "pnpm test:contract"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1170.0",
+    "@aws-sdk/client-s3": "^3.1171.0",
     "@bric/db": "workspace:*",
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",
