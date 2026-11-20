@@ -398,7 +398,7 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx:stable-trixie@sha256:a7675fcee220f59b4a99f7098c06a0d5d999c2c0ee37c0211efb780536e5cb20
+    image: nginx:stable-trixie@sha256:42c68eab6f7e22611786a9fe1d1c019e275c50185bd54b8f75dc2b9184322703
     restart: unless-stopped
     init: true
     # Keep the small public edge alive long enough to route or report failures.
