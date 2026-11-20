@@ -251,8 +251,7 @@ describe('real PostgreSQL and Redis contracts', () => {
       const utcDay = capturedAtIso.slice(0, 10);
       const reportingDay = dayInTimezone(capturedAt, ADMIN_REPORTING_TIMEZONE);
       const [startDate, endDate] = [utcDay, reportingDay].sort();
-      // Retained Storefront rollups preserve their recorded UTC day while live commerce uses the
-      // reporting day. Cover both when this test runs during Algiers' one-hour midnight boundary.
+      // Include both dates so the range also covers legacy UTC rollups at Algiers' midnight.
       const filters = { startDate, endDate };
       await expect(getLiveStorefrontAiStats(db, filters)).resolves.toMatchObject({
         opens: 1,
@@ -292,7 +291,7 @@ describe('real PostgreSQL and Redis contracts', () => {
 
       const afterRetention = new Date(capturedAt.getTime() + 8 * 24 * 60 * 60 * 1_000);
       await expect(rollUpNextExpiredAnalyticsDay(db, { now: afterRetention })).resolves.toBe(
-        capturedAtIso.slice(0, 10),
+        reportingDay,
       );
       const searchRollups = await db
         .select({ term: analyticsDailyRollups.dimensionKey })
