@@ -85,7 +85,7 @@ export async function runOrdersFulfillment({ scenario, ctx, requireAdmin }) {
       const dispatched = await request(`${base}/dispatch`, 'POST', { askCollection: false });
       const item = await detail(order);
       await save('dispatched.json', { shipment, dispatched, order: item });
-      assert.equal(dispatched.item.status.currentStatus, 'en_livraison');
+      assert.equal(dispatched.item.status.currentStatus, 'en_ramassage');
       assert.equal(dispatched.item.canDispatch, false);
       assert.ok(item.statusHistory.some((entry) => entry.status === 3 && entry.changedBy));
       assert.equal(item.totalAmount, 5100);
@@ -95,7 +95,16 @@ export async function runOrdersFulfillment({ scenario, ctx, requireAdmin }) {
   await scenario(
     'carrier-return',
     'Return request and refresh preserve tracking and remove return eligibility',
-    async ({ create, patch, request, detail, pollJob, save, prepareDispatch }) => {
+    async ({
+      create,
+      patch,
+      request,
+      detail,
+      pollJob,
+      save,
+      prepareDispatch,
+      setCarrierStatus,
+    }) => {
       const order = await create();
       await patch(order, { inHouseStatus: 2 });
       const started = await request(
@@ -108,12 +117,20 @@ export async function runOrdersFulfillment({ scenario, ctx, requireAdmin }) {
       await prepareDispatch(order);
       const base = `/api/orders/ecotrack/shipments/${order.id}`;
       const dispatched = (await request(`${base}/dispatch`, 'POST', { askCollection: false })).item;
-      assert.ok(dispatched.canAskReturn);
+      assert.equal(dispatched.canAskReturn, false);
+      const delivering = await setCarrierStatus(order, 'en_livraison');
+      assert.ok(delivering.canAskReturn);
       const returned = (await request(`${base}/return`, 'POST')).item;
       const refreshed = (await request(`${base}/refresh`, 'POST')).item;
       const item = await detail(order);
-      await save('return-refresh.json', { dispatched, returned, refreshed, order: item });
-      assert.equal(refreshed.status.currentStatus, 'retour_demande');
+      await save('return-refresh.json', {
+        dispatched,
+        delivering,
+        returned,
+        refreshed,
+        order: item,
+      });
+      assert.equal(refreshed.status.currentStatus, 'retour_en_traitement');
       assert.equal(refreshed.canAskReturn, false);
       assert.equal(refreshed.trackingNumber, dispatched.trackingNumber);
       assert.equal(item.ecotrackTrackingNumber, dispatched.trackingNumber);

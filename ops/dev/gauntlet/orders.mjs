@@ -115,7 +115,7 @@ export async function run(ctx) {
         await save(`job-${job.id}.json`, current);
         return current;
       };
-      const prepareDispatch = async (order) => {
+      const setCarrierStatus = async (order, status) => {
         const item = await detail(order);
         const stateResponse = await context.request.get(`${ctx.urls.mocks}/__demo/state`);
         assert.equal(stateResponse.status(), 200);
@@ -126,18 +126,19 @@ export async function run(ctx) {
         assert.ok(shipment, 'Worker-created shipment must exist in the provider simulator.');
         assert.equal(shipment.reference, String(order.id));
         assert.equal(shipment.provider, 'delivro');
-        const ready = { ...shipment, status: 'prete_a_expedier' };
+        const next = { ...shipment, status };
         const changed = await context.request.post(`${ctx.urls.mocks}/__demo/shipments`, {
-          data: { shipments: [ready] },
+          data: { shipments: [next] },
         });
         assert.equal(changed.status(), 200);
-        await save('simulated-carrier-ready.json', { before: shipment, after: ready });
+        await save(`simulated-carrier-${status}.json`, { before: shipment, after: next });
         log(
-          `Simulator moved only ${shipment.tracking} to ready for dispatch; subsequent actions use normal admin routes.`,
+          `Simulator moved only ${shipment.tracking} to ${status}; subsequent actions use normal admin routes.`,
         );
-        const refreshed = (
-          await request(`/api/orders/ecotrack/shipments/${order.id}/refresh`, 'POST')
-        ).item;
+        return (await request(`/api/orders/ecotrack/shipments/${order.id}/refresh`, 'POST')).item;
+      };
+      const prepareDispatch = async (order) => {
+        const refreshed = await setCarrierStatus(order, 'prete_a_expedier');
         assert.equal(refreshed.status.currentStatus, 'prete_a_expedier');
         assert.equal(refreshed.canDispatch, true);
       };
@@ -151,6 +152,7 @@ export async function run(ctx) {
         searchUi,
         pollJob,
         prepareDispatch,
+        setCarrierStatus,
       });
     });
   await runOrdersConfirmation({ scenario, productId });
