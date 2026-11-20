@@ -14,7 +14,17 @@ export BETTER_AUTH_SECRET='build-verification-secret-at-least-32-characters'
 export BETTER_AUTH_URL='http://127.0.0.1:3000'
 export GOOGLE_CLIENT_ID='build-verification-client'
 export GOOGLE_CLIENT_SECRET='build-verification-secret'
-fixture_origin='http://127.0.0.1:4311'
+fixture_origin="${BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN:-http://127.0.0.1:4311}"
+storefront_origin="${BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN:-http://127.0.0.1:3003}"
+fixture_port="$(node -e '
+  for (const origin of process.argv.slice(1)) {
+    const url = new URL(origin);
+    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port || url.origin !== origin) {
+      throw new Error("Build fixture origins must be HTTP 127.0.0.1 origins with explicit ports.");
+    }
+  }
+  console.log(new URL(process.argv[1]).port);
+' "$fixture_origin" "$storefront_origin")"
 fixture_log="$(mktemp -t bric-build-fixture.XXXXXX.log)"
 fixture_pid=''
 
@@ -27,9 +37,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-PORT='4311' \
+PORT="$fixture_port" \
   FIXTURE_API_ORIGIN="$fixture_origin" \
-  STOREFRONT_ORIGIN='http://127.0.0.1:3003' \
+  STOREFRONT_ORIGIN="$storefront_origin" \
   node apps/storefront/test/fixture-storefront-api.mjs >"$fixture_log" 2>&1 &
 fixture_pid=$!
 
@@ -52,9 +62,9 @@ fi
 
 export STOREFRONT_API_BASE_URL="$fixture_origin"
 export STOREFRONT_API_TIMEOUT_MS='1000'
-export NEXT_PUBLIC_SITE_URL='http://127.0.0.1:3003'
+export NEXT_PUBLIC_SITE_URL="$storefront_origin"
 export NEXT_PUBLIC_CLOUDFRONT_URL=''
-export NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS="http://127.0.0.1:3003,$fixture_origin"
+export NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS="$storefront_origin,$fixture_origin"
 export NEXT_PUBLIC_FACEBOOK_PIXEL_ID=''
 export NEXT_PUBLIC_GA_MEASUREMENT_ID=''
 export NEXT_PUBLIC_TIKTOK_PIXEL_ID=''
