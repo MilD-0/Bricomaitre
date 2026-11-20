@@ -126,6 +126,11 @@ window, verifies the migration ledger and minimum product/order row floors, and
 sends start, success, and failure check-ins to an external dead-man monitor
 before deleting the temporary container and volume.
 
+Database dumps retain object ownership and grants but do not contain cluster
+roles. The drill creates the configured Admin and Storefront roles without login
+credentials inside the disposable cluster before restoring the dump. Keep those
+role names aligned with the production environment.
+
 This proves that the remote artifact can be restored. Recovery still requires a
 deliberate decision about the target release and production database; it is not
 an automatic write into the live system.

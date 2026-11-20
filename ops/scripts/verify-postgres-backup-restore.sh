@@ -177,6 +177,19 @@ if [[ "$ready" != true ]]; then
   exit 1
 fi
 
+# pg_dump preserves ownership and ACLs but does not include cluster roles.
+# Recreate the configured application identities only in this disposable cluster.
+# They need no login credentials to own objects or receive restored grants.
+docker exec -i "$container_name" \
+  psql --set ON_ERROR_STOP=1 -U "$restore_user" -d "$restore_database" \
+  --set=admin_role="${POSTGRES_ADMIN_USER:-bricadmin_admin}" \
+  --set=storefront_role="${POSTGRES_STOREFRONT_USER:-bricadmin_storefront}" <<'SQL'
+SELECT format('CREATE ROLE %I NOLOGIN', role_name)
+FROM (SELECT DISTINCT role_name FROM (VALUES (:'admin_role'), (:'storefront_role')) AS roles(role_name)) AS required_roles
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = role_name)
+\gexec
+SQL
+
 gzip -dc "$backup_file" \
   | docker exec -i "$container_name" \
     psql --set ON_ERROR_STOP=1 -U "$restore_user" -d "$restore_database" >/dev/null

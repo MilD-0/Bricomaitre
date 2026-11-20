@@ -131,7 +131,10 @@ fi
     }
   });
 
-  it('restores a dump into an isolated disposable Postgres and checks core relations', () => {
+  it.each([
+    ['bricadmin_admin', 'bricadmin_storefront'],
+    ['custom-admin', "storefront's role"],
+  ])('restores ownership and grants for %s and %s in isolation', (adminRole, storefrontRole) => {
     const testDirectory = mkdtempSync(join(tmpdir(), 'bric-restore-proof-'));
     const fakeBin = mkdtempSync(join(tmpdir(), 'bric-restore-docker-'));
     const backup = join(testDirectory, 'postgres-20260826-031503.sql.gz');
@@ -150,6 +153,8 @@ fi
         'if [[ "$1" == "exec" && "$*" == *"psql"* ]]; then',
         '  payload="$(cat)"',
         '  printf \'%s\\n\' "$payload" >>"$DOCKER_INPUT"',
+        '  if [[ "$payload" == *"CREATE ROLE %I NOLOGIN"* ]]; then touch "$DOCKER_INPUT.roles"; fi',
+        '  if [[ "$payload" == *"CREATE TABLE restored_evidence"* && ! -f "$DOCKER_INPUT.roles" ]]; then exit 3; fi',
         '  if [[ "$payload" == *"pg_database_size"* ]]; then printf \'DO\\n7654321|1|1\\n\'; fi',
         'fi',
         'exit 0',
@@ -171,6 +176,8 @@ fi
           CHECKIN_LOG: checkinLog,
           DOCKER_INPUT: dockerInput,
           DOCKER_LOG: dockerLog,
+          POSTGRES_ADMIN_USER: adminRole,
+          POSTGRES_STOREFRONT_USER: storefrontRole,
           PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
         },
       });
@@ -181,6 +188,9 @@ fi
       expect(result.stdout).toContain('products=1 orders=1');
       expect(readFileSync(dockerLog, 'utf8')).toContain('--network none');
       expect(readFileSync(dockerLog, 'utf8')).toContain('volume rm');
+      expect(readFileSync(dockerLog, 'utf8')).toContain(`--set=admin_role=${adminRole}`);
+      expect(readFileSync(dockerLog, 'utf8')).toContain(`--set=storefront_role=${storefrontRole}`);
+      expect(readFileSync(dockerInput, 'utf8')).toContain('CREATE ROLE %I NOLOGIN');
       expect(readFileSync(dockerInput, 'utf8')).toContain('CREATE TABLE restored_evidence');
       expect(readFileSync(dockerInput, 'utf8')).toContain("to_regclass('public.products')");
       expect(readFileSync(checkinLog, 'utf8').trim().split('\n')).toEqual([
