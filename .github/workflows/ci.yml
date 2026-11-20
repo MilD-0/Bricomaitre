@@ -220,6 +220,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
     env:
+      BRIC_PLAYWRIGHT_SERVER: prebuilt
       BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN: http://127.0.0.1:4321
       BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN: http://127.0.0.1:3013
       BRIC_PLAYWRIGHT_UPSTREAM_ORIGIN: http://127.0.0.1:3014
@@ -231,6 +232,12 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Install Chromium
         run: bash ops/scripts/install-playwright-chromium.sh @bric/storefront
+      - name: Build Storefront for performance measurements
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+        run: >-
+          ops/scripts/run-loopback-isolated.sh
+          bash ops/scripts/build-public-apps.sh storefront
       - name: Run performance budgets
         run: >-
           ops/scripts/run-ci-check.sh "Storefront performance budgets"

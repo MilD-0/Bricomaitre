@@ -8,8 +8,8 @@ product, built and maintained by [Mild](https://github.com/MilD-0). The system
 also includes two grounded assistants: one helps customers navigate the live
 catalog, while the other helps staff investigate and prepare operational work.
 
-[Live storefront](https://bricomaitre.com) · [Demo](https://bricomaitre.mildsauce.cloud) ·
-[Demo admin](https://bricomaitre-admin.mildsauce.cloud) · [Source](https://github.com/MilD-0/Bricomaitre) ·
+[Live storefront](https://bricomaitre.com) · [Demo](https://bricomaitre.mildsauce.dev) ·
+[Demo admin](https://bricomaitre-admin.mildsauce.dev) · [Source](https://github.com/MilD-0/Bricomaitre) ·
 [Email Mild](mailto:mayldsauce@gmail.com)
 
 The demo runs on my own machine and may be slow or offline; AI availability varies.
