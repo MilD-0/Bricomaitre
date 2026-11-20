@@ -156,7 +156,9 @@ describe('app/api/products/route', () => {
     const fromMock = vi.fn(() => ({
       where: vi.fn(() => ({ orderBy: orderByMock })),
     }));
-    const selectMock = vi.fn((_fields?: unknown) => ({ from: fromMock }));
+    const selectMock = vi.fn<(_fields?: unknown) => { from: typeof fromMock }>(() => ({
+      from: fromMock,
+    }));
     getDbMock.mockReturnValue({ select: selectMock, execute: vi.fn() });
 
     const res = await GET(new NextRequest('http://localhost/api/products'));

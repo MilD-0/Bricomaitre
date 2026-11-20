@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "plugins": [{ "name": "next" }],
     "paths": {
       "@bric/db": ["../../packages/db/src/index.ts"],
       "@bric/db/*": ["../../packages/db/src/*"],
