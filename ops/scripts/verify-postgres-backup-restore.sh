@@ -18,6 +18,7 @@ max_backup_age_hours="${BACKUP_RESTORE_MAX_AGE_HOURS:-36}"
 minimum_products="${BACKUP_RESTORE_MIN_PRODUCTS:-1}"
 minimum_orders="${BACKUP_RESTORE_MIN_ORDERS:-1}"
 checkin_url="${BACKUP_RESTORE_CHECKIN_URL:-}"
+checkin_id="$(cat /proc/sys/kernel/random/uuid)"
 
 for numeric_setting in "$max_backup_age_hours" "$minimum_products" "$minimum_orders"; do
   if [[ ! "$numeric_setting" =~ ^[0-9]+$ ]]; then
@@ -35,13 +36,18 @@ if [[ "${BRIC_REQUIRE_RESTORE_CHECKIN:-false}" == true && -z "$checkin_url" ]]; 
 fi
 
 notify_checkin() {
-  local suffix="${1:-}"
+  local status="${1:?check-in status is required}"
+  local payload
   if [[ -n "$checkin_url" ]]; then
-    curl --fail --silent --show-error --max-time 15 "${checkin_url}${suffix}" >/dev/null
+    printf -v payload '{"check_in_id":"%s","status":"%s","monitor_config":{"schedule":{"type":"crontab","value":"45 4 * * 0"},"timezone":"Etc/UTC","checkin_margin":60,"max_runtime":30,"failure_issue_threshold":1,"recovery_threshold":1}}' \
+      "$checkin_id" "$status"
+    curl --fail --silent --show-error --max-time 15 \
+      --header 'Content-Type: application/json' \
+      --data "$payload" "$checkin_url" >/dev/null
   fi
 }
 
-notify_checkin '/start'
+notify_checkin in_progress
 
 cleanup() {
   local status=$?
@@ -52,9 +58,9 @@ cleanup() {
     rm -rf -- "$temporary_directory"
   fi
   if ((status == 0)); then
-    notify_checkin || status=1
+    notify_checkin ok || status=1
   else
-    notify_checkin '/fail' || true
+    notify_checkin error || true
   fi
   exit "$status"
 }
@@ -176,6 +182,19 @@ if [[ "$ready" != true ]]; then
   docker logs --tail 100 "$container_name" >&2 || true
   exit 1
 fi
+
+# pg_dump preserves ownership and ACLs but does not include cluster roles.
+# Recreate the configured application identities only in this disposable cluster.
+# They need no login credentials to own objects or receive restored grants.
+docker exec -i "$container_name" \
+  psql --set ON_ERROR_STOP=1 -U "$restore_user" -d "$restore_database" \
+  --set=admin_role="${POSTGRES_ADMIN_USER:-bricadmin_admin}" \
+  --set=storefront_role="${POSTGRES_STOREFRONT_USER:-bricadmin_storefront}" <<'SQL'
+SELECT format('CREATE ROLE %I NOLOGIN', role_name)
+FROM (SELECT DISTINCT role_name FROM (VALUES (:'admin_role'), (:'storefront_role')) AS roles(role_name)) AS required_roles
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = role_name)
+\gexec
+SQL
 
 gzip -dc "$backup_file" \
   | docker exec -i "$container_name" \
