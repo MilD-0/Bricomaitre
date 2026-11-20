@@ -9,7 +9,13 @@ const builder = resolve(workspaceRoot, 'ops/scripts/build-release-images.sh');
 const temporaryDirectories: string[] = [];
 
 function runBuilder(
-  mode: 'transient-once' | 'registry-upload-once' | 'always-transient' | 'build-error',
+  mode:
+    | 'transient-once'
+    | 'registry-upload-once'
+    | 'npm-socket-once'
+    | 'always-transient'
+    | 'build-error'
+    | 'fetch-error',
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'bric-release-build-'));
   temporaryDirectories.push(directory);
@@ -40,6 +46,17 @@ case "$FAKE_DOCKER_MODE" in
       echo 'unknown: blob upload unknown to registry' >&2
       exit 1
     fi
+    ;;
+  npm-socket-once)
+    if ((count == 1)); then
+      echo '[WARN] GET https://registry.npmjs.org/next error (UND_ERR_SOCKET)' >&2
+      echo 'TypeError: fetch failed' >&2
+      exit 1
+    fi
+    ;;
+  fetch-error)
+    echo 'TypeError: fetch failed' >&2
+    exit 1
     ;;
   always-transient)
     echo 'TLS handshake timeout' >&2
@@ -93,13 +110,16 @@ describe('release image build retries', () => {
     expect(result.log).not.toContain('i/o timeout');
   });
 
-  it('does not retry a deterministic build failure', () => {
-    const result = runBuilder('build-error');
+  it.each(['build-error', 'fetch-error'] as const)(
+    'does not retry %s without network evidence',
+    (mode) => {
+      const result = runBuilder(mode);
 
-    expect(result.status).toBe(1);
-    expect(result.calls).toBe(1);
-    expect(result.stderr).toContain('non-network error; not retrying');
-  });
+      expect(result.status).toBe(1);
+      expect(result.calls).toBe(1);
+      expect(result.stderr).toContain('non-network error; not retrying');
+    },
+  );
 
   it('retries a lost registry upload session', () => {
     const result = runBuilder('registry-upload-once');
@@ -108,6 +128,16 @@ describe('release image build retries', () => {
     expect(result.calls).toBe(2);
     expect(result.stderr).toContain('transient network error; retrying');
     expect(result.log).toContain('synthetic build succeeded');
+  });
+
+  it('retries an explicit npm registry socket failure', () => {
+    const result = runBuilder('npm-socket-once');
+
+    expect(result.status).toBe(0);
+    expect(result.calls).toBe(2);
+    expect(result.stderr).toContain('transient network error; retrying');
+    expect(result.log).toContain('synthetic build succeeded');
+    expect(result.log).not.toContain('UND_ERR_SOCKET');
   });
 
   it('bounds repeated transient failures', () => {
