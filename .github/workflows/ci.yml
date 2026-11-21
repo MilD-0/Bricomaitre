@@ -195,7 +195,9 @@ jobs:
         run: pnpm --filter @bric/admin build
       - name: Run Admin browser acceptance tests
         run: |
-          ops/scripts/run-with-ci-services.sh 55433 56380 bricomaitre_browser \
+          # Self-hosted runners share the Admin web server's loopback port.
+          flock --close --wait 480 "$BRIC_CI_CACHE_DIR/admin-browser-port-3020.lock" \
+            ops/scripts/run-with-ci-services.sh 55433 56380 bricomaitre_browser \
             bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts && ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser'
       - name: Upload Admin browser diagnostics
         if: ${{ !cancelled() }}
